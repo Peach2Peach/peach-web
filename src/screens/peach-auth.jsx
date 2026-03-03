@@ -106,21 +106,51 @@ const Step = ({ n, children }) => (
 );
 
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
-const NAV_ROUTES = { home:"/home", market:"/market", trades:"/trades", create:"/offer/new", settings:"/settings" };
+const NAV_ROUTES = { home:"/home", market:"/market", trades:"/trades", create:"/offer/new", "payment-methods":"/payment-methods", settings:"/settings" };
 
 export default function PeachAuth() {
   const navigate = useNavigate();
   const TOTAL = 180;
   const [phase,     setPhase]     = useState("waiting"); // waiting|scanning|success|expired
   const [secsLeft,  setSecsLeft]  = useState(TOTAL);
-  const [btcPrice,  setBtcPrice]  = useState(87432);
+  const [allPrices,           setAllPrices]           = useState({ EUR: 87432 });
+  const [availableCurrencies, setAvailableCurrencies] = useState(["EUR","CHF","GBP"]);
+  const [selectedCurrency,    setSelectedCurrency]    = useState("EUR");
+  const btcPrice = Math.round(allPrices[selectedCurrency] ?? 87432);
   const [isMobile,  setIsMobile]  = useState(false);
+
+  useEffect(() => {
+    async function fetchPrices() {
+      try {
+        const res = await fetch('https://api.peachbitcoin.com/v1/market/prices');
+        const data = await res.json();
+        if (data && typeof data === "object") {
+          setAllPrices(data);
+          setAvailableCurrencies(Object.keys(data).sort());
+        }
+      } catch {}
+    }
+    fetchPrices();
+    const iv = setInterval(fetchPrices, 30000);
+    return () => clearInterval(iv);
+  }, []);
+
   // Mobile paste flow
   const [pasteVal,  setPasteVal]  = useState("");
   const [pastePhase,setPastePhase]= useState("idle"); // idle|error|success
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState("qr"); // "qr" | "paste"
+  const [desktopShowCode, setDesktopShowCode] = useState(false);
+  const [desktopPasteVal, setDesktopPasteVal] = useState("");
+  const [desktopPastePhase, setDesktopPastePhase] = useState("idle"); // idle|error|validating|success
+  const MOCK_AUTH_CODE = "PEACH-A3F7-B2D9-4E1C-8K6M";
+  const [codeCopied, setCodeCopied] = useState(false);
+  function handleCopyCode() {
+    navigator.clipboard.writeText(MOCK_AUTH_CODE).catch(()=>{});
+    setCodeCopied(true);
+    setTimeout(() => setCodeCopied(false), 2000);
+  }
   const timerRef = useRef(null);
 
   // Detect mobile
@@ -144,14 +174,18 @@ export default function PeachAuth() {
     return () => clearInterval(timerRef.current);
   }, [phase, isMobile]);
 
-  // Price tick
-  useEffect(() => {
-    const iv = setInterval(() =>
-      setBtcPrice(p => p+Math.round((Math.random()-.5)*70)), 8000);
-    return () => clearInterval(iv);
-  }, []);
+  // Price is fetched via the API useEffect above
 
   function resetQR() { clearInterval(timerRef.current); setSecsLeft(TOTAL); setPhase("waiting"); }
+
+  function handleDesktopCodeSubmit() {
+    if (!desktopPasteVal.trim()) { setDesktopPastePhase("error"); return; }
+    setDesktopPastePhase("validating");
+    setTimeout(() => {
+      if (desktopPasteVal.trim().toUpperCase().startsWith("ERR")) setDesktopPastePhase("error");
+      else { setDesktopPastePhase("success"); setTimeout(() => navigate("/home"), 1500); }
+    }, 1200);
+  }
 
   // Demo: click QR cycles states
   function handleQRClick() {
@@ -201,13 +235,21 @@ export default function PeachAuth() {
         WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"
       }}>Peach</span>
       {!isMobile && (
-        <div style={{display:"flex",alignItems:"center",gap:10,
-          background:"#FEEDE5",borderRadius:999,padding:"4px 14px",fontSize:".78rem",fontWeight:600}}>
-          <span style={{color:"#7D675E",fontWeight:500}}>BTC/EUR</span>
-          <span style={{color:"#2B1911"}}>€{btcPrice.toLocaleString()}</span>
-          <span style={{color:"#C4B5AE"}}>·</span>
-          <span style={{color:"#7D675E",fontWeight:500}}>sats/€</span>
-          <span style={{color:"#2B1911"}}>{Math.round(100_000_000/btcPrice).toLocaleString()}</span>
+        <div style={{display:"flex",alignItems:"center",gap:8,background:"linear-gradient(90deg,#FFBFA8,#FFD5BF)",borderRadius:999,padding:"5px 6px 5px 10px",fontSize:".78rem",fontWeight:600,color:"#2B1911",flexShrink:0}}>
+          <svg width="18" height="18" viewBox="0 0 32 32" fill="none" style={{flexShrink:0}}>
+            <circle cx="16" cy="16" r="16" fill="#F7931A"/>
+            <path d="M22.2 13.8c.3-2-1.2-3.1-3.3-3.8l.7-2.7-1.6-.4-.7 2.6c-.4-.1-.9-.2-1.3-.3l.7-2.6-1.6-.4-.7 2.7c-.3-.1-.7-.2-1-.3l-2.1-.5-.4 1.7s1.2.3 1.2.3c.7.2.8.6.8.9l-.8 3.3c.1 0 .2 0 .3.1-.1 0-.2-.1-.3-.1L11.4 20c-.1.3-.4.7-1 .5 0 0-1.2-.3-1.2-.3l-.8 1.8 2 .5c.4.1.7.2 1.1.3l-.7 2.7 1.6.4.7-2.7c.4.1.9.2 1.4.3l-.7 2.7 1.6.4.7-2.7c2.8.5 4.9.3 5.8-2.2.7-2-.03-3.2-1.5-3.9 1.1-.25 1.9-1 2.1-2.5zm-3.8 5.3c-.5 2-3.9.9-5 .6l.9-3.5c1.1.3 4.6.8 4.1 2.9zm.5-5.3c-.45 1.8-3.3.9-4.2.7l.8-3.2c.9.2 3.8.6 3.4 2.5z" fill="white"/>
+          </svg>
+          <span style={{fontWeight:800,whiteSpace:"nowrap"}}>{btcPrice.toLocaleString("fr-FR")} {selectedCurrency}</span>
+          <span style={{fontWeight:500,color:"#7D675E",whiteSpace:"nowrap"}}>{Math.round(100_000_000/btcPrice).toLocaleString()} sats / {selectedCurrency.toLowerCase()}</span>
+          <div style={{position:"relative",display:"flex",alignItems:"center",background:"rgba(255,255,255,0.45)",borderRadius:999,padding:"2px 9px",cursor:"pointer",gap:4}}>
+            <span style={{fontSize:".76rem",fontWeight:800,color:"#2B1911",pointerEvents:"none"}}>{selectedCurrency}</span>
+            <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="#7D675E" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{pointerEvents:"none",flexShrink:0}}><polyline points="1,1 5,5 9,1"/></svg>
+            <select value={selectedCurrency} onChange={e => setSelectedCurrency(e.target.value)}
+              style={{position:"absolute",inset:0,opacity:0,cursor:"pointer",fontSize:".78rem",width:"100%"}}>
+              {availableCurrencies.map(cur => <option key={cur} value={cur}>{cur}</option>)}
+            </select>
+          </div>
         </div>
       )}
       <div style={{marginLeft:"auto"}}>
@@ -223,6 +265,7 @@ export default function PeachAuth() {
         <style>{`
           @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;500;600;700;800&display=swap');
           *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+          html{font-size:120%}
           body{font-family:'Baloo 2',cursive;background:#FFF9F6;color:#2B1911}
           @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
           @keyframes fadeIn{from{opacity:0}to{opacity:1}}
@@ -234,8 +277,55 @@ export default function PeachAuth() {
             0%,100%{transform:translateX(0)}
             20%{transform:translateX(-6px)}60%{transform:translateX(6px)}80%{transform:translateX(-3px)}
           }
+          .sidenav{
+            position:fixed;top:56px;left:0;bottom:0;
+            width:220px;background:#FFFFFF;border-right:1px solid #EAE3DF;
+            z-index:500;display:flex;flex-direction:column;align-items:flex-start;
+            padding:8px 0;gap:2px;
+            transform:translateX(-100%);
+            transition:transform .25s cubic-bezier(.4,0,.2,1);
+            box-shadow:none;
+          }
+          .sidenav.sidenav-mobile-open{transform:translateX(0);box-shadow:6px 0 28px rgba(43,25,17,.16)}
+          .sidenav-item{
+            width:calc(100% - 16px);display:flex;flex-direction:row;align-items:center;
+            justify-content:flex-start;gap:12px;padding:10px 14px;border-radius:10px;margin:0 8px;
+            border:none;background:transparent;cursor:pointer;color:#7D675E;
+            font-family:'Baloo 2',cursive;transition:all .14s;flex-shrink:0;
+          }
+          .sidenav-item:hover{background:#F4EEEB;color:#2B1911}
+          .sidenav-icon{display:flex;align-items:center;justify-content:center;height:22px;flex-shrink:0}
+          .sidenav-label{
+            font-size:.8rem;font-weight:600;letter-spacing:0;
+            white-space:nowrap;overflow:hidden;
+          }
+          .sidenav-backdrop{
+            display:none;position:fixed;inset:0;z-index:499;
+            background:rgba(43,25,17,.4);animation:fadeIn .2s ease;
+          }
+          .sidenav-backdrop.open{display:block}
+          .burger-btn{display:flex}
         `}</style>
         <Topbar/>
+
+        {/* Mobile sidebar */}
+        <div className={`sidenav-backdrop${sidebarMobileOpen?" open":""}`} onClick={() => setSidebarMobileOpen(false)}/>
+        <nav className={`sidenav${sidebarMobileOpen?" sidenav-mobile-open":""}`}>
+          {[
+            {id:"home",    label:"Home",    icon:<PeachIcon size={20}/>},
+            {id:"market",  label:"Market",  icon:<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="2,14 7,9 11,12 18,5"/><polyline points="13,5 18,5 18,10"/></svg>},
+            {id:"trades",  label:"Trades",  icon:<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M5 7h10M13 4l3 3-3 3"/><path d="M15 13H5M7 10l-3 3 3 3"/></svg>},
+            {id:"create",  label:"Create",  icon:<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="10" cy="10" r="8"/><line x1="10" y1="6.5" x2="10" y2="13.5"/><line x1="6.5" y1="10" x2="13.5" y2="10"/></svg>},
+            {id:"payment-methods",label:"Payments",icon:<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="18" height="13" rx="2"/><line x1="1" y1="9" x2="19" y2="9"/><line x1="5" y1="14" x2="8" y2="14"/></svg>},
+            {id:"settings",label:"Settings",icon:<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="10" cy="10" r="2.5"/><path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.2 4.2l1.4 1.4M14.4 14.4l1.4 1.4M4.2 15.8l1.4-1.4M14.4 5.6l1.4-1.4"/></svg>},
+          ].map(({id,label,icon})=>(
+            <button key={id} className="sidenav-item"
+              onClick={() => { setSidebarMobileOpen(false); const route = NAV_ROUTES[id]; if (route) navigate(route); }}>
+              <span className="sidenav-icon">{icon}</span>
+              <span className="sidenav-label">{label}</span>
+            </button>
+          ))}
+        </nav>
 
         <div style={{
           minHeight:"100vh",paddingTop:56,
@@ -264,7 +354,7 @@ export default function PeachAuth() {
 
                 {/* Tab toggle */}
                 <div style={{display:"flex",background:"#F4EEEB",borderRadius:10,padding:3,gap:2}}>
-                  {[["qr","📷 Scan QR"],["paste","🔑 Paste code"]].map(([id,label])=>(
+                  {[["qr","📷 Scan QR"],["paste","🔑 Auth code"]].map(([id,label])=>(
                     <button key={id} onClick={()=>setMobileTab(id)} style={{
                       flex:1,padding:"8px 0",borderRadius:8,border:"none",
                       fontFamily:"'Baloo 2',cursive",fontSize:".8rem",fontWeight:700,
@@ -321,59 +411,38 @@ export default function PeachAuth() {
                     <Step n="3"><strong style={{color:"#2B1911"}}>Scan</strong> this code to sign in instantly</Step>
                   </div>
                 </>) : (<>
-                  {/* Paste panel */}
+                  {/* Auth code panel */}
                   <div style={{display:"flex",flexDirection:"column",gap:12,
                     background:"#FFFFFF",borderRadius:14,border:"1px solid #EAE3DF",padding:"18px 16px"}}>
-                    <Step n="1"><strong style={{color:"#2B1911"}}>Open</strong> the Peach app on this phone</Step>
-                    <Step n="2">Go to <strong style={{color:"#2B1911"}}>Settings → Connect web browser</strong></Step>
-                    <Step n="3"><strong style={{color:"#2B1911"}}>Copy</strong> the one-time auth code shown</Step>
-                    <Step n="4"><strong style={{color:"#2B1911"}}>Paste</strong> it into the field below</Step>
+                    <Step n="1"><strong style={{color:"#2B1911"}}>Copy</strong> the auth code below</Step>
+                    <Step n="2"><strong style={{color:"#2B1911"}}>Open</strong> the Peach app on this phone</Step>
+                    <Step n="3">Go to <strong style={{color:"#2B1911"}}>Settings → Connect web browser</strong></Step>
+                    <Step n="4"><strong style={{color:"#2B1911"}}>Paste</strong> the code into the app to sign in</Step>
                   </div>
                   <div style={{display:"flex",flexDirection:"column",gap:8}}>
                     <label style={{fontSize:".78rem",fontWeight:700,color:"#624D44",
-                      letterSpacing:".02em",textTransform:"uppercase"}}>Auth code</label>
-                    <div style={{position:"relative"}}>
-                      <textarea
-                        value={pasteVal} onChange={handlePaste}
-                        placeholder="Paste your code here…" rows={3}
-                        style={{
-                          width:"100%",padding:"12px 14px",borderRadius:12,
-                          border:`1.5px solid ${pastePhase==="error"?"#DF321F":pasteVal?"#F56522":"#EAE3DF"}`,
-                          fontFamily:"'Baloo 2',cursive",fontSize:".85rem",fontWeight:600,
-                          color:"#2B1911",background:"#FFFFFF",resize:"none",outline:"none",
-                          transition:"border-color .2s",lineHeight:1.5,
-                          animation: pastePhase==="error" ? "shake .3s ease" : "none"
-                        }}
-                      />
-                      {pasteVal && pastePhase==="idle" && (
-                        <button onClick={()=>{setPasteVal("");setPastePhase("idle");}} style={{
-                          position:"absolute",top:10,right:10,background:"none",border:"none",
-                          cursor:"pointer",fontSize:"1rem",color:"#C4B5AE",lineHeight:1
-                        }}>✕</button>
-                      )}
+                      letterSpacing:".02em",textTransform:"uppercase"}}>Your auth code</label>
+                    <div style={{
+                      display:"flex",alignItems:"center",justifyContent:"space-between",
+                      padding:"14px 16px",borderRadius:12,
+                      background:"#F4EEEB",border:"1.5px solid #EAE3DF",gap:10
+                    }}>
+                      <span style={{
+                        fontFamily:"monospace",fontSize:".95rem",fontWeight:700,
+                        color:"#2B1911",letterSpacing:".08em",wordBreak:"break-all"
+                      }}>{MOCK_AUTH_CODE}</span>
+                      <button onClick={handleCopyCode} style={{
+                        flexShrink:0,padding:"8px 14px",borderRadius:999,
+                        background: codeCopied ? "#65A519" : "linear-gradient(90deg,#FF4D42,#FF7A50,#FFA24C)",
+                        color:"white",border:"none",cursor:"pointer",
+                        fontFamily:"'Baloo 2',cursive",fontSize:".78rem",fontWeight:800,
+                        letterSpacing:".02em",transition:"background .2s",
+                        display:"flex",alignItems:"center",gap:6
+                      }}>
+                        {codeCopied ? "✓ Copied" : "Copy"}
+                      </button>
                     </div>
-                    {pastePhase==="error" && (
-                      <span style={{fontSize:".73rem",color:"#DF321F",fontWeight:600,animation:"fadeIn .2s ease"}}>
-                        {pasteVal.trim() ? "This code is invalid or has expired. Get a new one from the app." : "Please paste your auth code first."}
-                      </span>
-                    )}
                   </div>
-                  <button onClick={handleSubmit} disabled={pastePhase==="validating"} style={{
-                    width:"100%",padding:"14px",borderRadius:999,
-                    background: pastePhase==="validating" ? "#EAE3DF" : "linear-gradient(90deg,#FF4D42,#FF7A50,#FFA24C)",
-                    color: pastePhase==="validating" ? "#C4B5AE" : "white",
-                    border:"none",cursor: pastePhase==="validating" ? "default" : "pointer",
-                    fontFamily:"'Baloo 2',cursive",fontSize:"1rem",fontWeight:800,
-                    letterSpacing:".02em",transition:"all .2s",
-                    display:"flex",alignItems:"center",justifyContent:"center",gap:10
-                  }}>
-                    {pastePhase==="validating" && (
-                      <div style={{width:16,height:16,borderRadius:"50%",
-                        border:"2px solid #C4B5AE",borderTopColor:"#7D675E",
-                        animation:"spin .7s linear infinite"}}/>
-                    )}
-                    {pastePhase==="validating" ? "Verifying…" : "Sign In"}
-                  </button>
                 </>)}
 
                 {/* Security note */}
@@ -383,8 +452,43 @@ export default function PeachAuth() {
                   <span style={{fontSize:".72rem",color:"#7D675E",fontWeight:500,lineHeight:1.5}}>
                     {mobileTab==="qr"
                       ? <><strong style={{color:"#2B1911"}}>QR codes</strong> are single-use and expire after <strong style={{color:"#2B1911"}}>3 minutes</strong>. Your keys never leave your device.</>
-                      : <><strong style={{color:"#2B1911"}}>Auth codes</strong> are single-use and expire after <strong style={{color:"#2B1911"}}>3 minutes</strong>. Your keys never leave your device.</>}
+                      : <><strong style={{color:"#2B1911"}}>Auth codes</strong> are single-use and expire after <strong style={{color:"#2B1911"}}>3 minutes</strong>. Copy it and paste it into your Peach app to sign in.</>}
                   </span>
+                </div>
+
+                {/* New to Peach — mobile */}
+                <div style={{borderTop:"1px solid #EAE3DF",paddingTop:18}}>
+                  <div style={{fontSize:"1.1rem",fontWeight:800,color:"#2B1911",
+                    letterSpacing:"-.02em",marginBottom:8}}>New to Peach?</div>
+                  <p style={{fontSize:".78rem",color:"#7D675E",fontWeight:500,lineHeight:1.55,marginBottom:12}}>
+                    Peach accounts are created on the mobile app — your Bitcoin keys are generated and stored securely on your phone. Download it first, then come back here to sign in.
+                  </p>
+                  <div style={{display:"flex",gap:8}}>
+                    <a href="https://testflight.apple.com/join/wfSPFEWG" target="_blank" rel="noreferrer"
+                      style={{
+                        flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7,
+                        padding:"10px 12px",borderRadius:10,textDecoration:"none",
+                        border:"1.5px solid #EAE3DF",background:"#FFFFFF",
+                        fontSize:".75rem",fontWeight:700,color:"#2B1911"
+                      }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="#2B1911">
+                        <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+                      </svg>
+                      App Store
+                    </a>
+                    <a href="https://play.google.com/store/apps/details?id=com.peachbitcoin.peach.mainnet" target="_blank" rel="noreferrer"
+                      style={{
+                        flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7,
+                        padding:"10px 12px",borderRadius:10,textDecoration:"none",
+                        border:"1.5px solid #EAE3DF",background:"#FFFFFF",
+                        fontSize:".75rem",fontWeight:700,color:"#2B1911"
+                      }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="#2B1911">
+                        <path d="M3 20.5v-17c0-.83.94-1.3 1.6-.8l14 8.5c.6.36.6 1.24 0 1.6l-14 8.5c-.66.5-1.6.03-1.6-.8z"/>
+                      </svg>
+                      Google Play
+                    </a>
+                  </div>
                 </div>
               </>
             ) : (
@@ -431,6 +535,10 @@ export default function PeachAuth() {
           0%,100%{box-shadow:0 0 0 0 rgba(245,101,34,.35)}
           60%{box-shadow:0 0 0 10px rgba(245,101,34,0)}
         }
+        @keyframes shake{
+          0%,100%{transform:translateX(0)}
+          20%{transform:translateX(-6px)}60%{transform:translateX(6px)}80%{transform:translateX(-3px)}
+        }
         .sidenav{
           position:fixed;top:56px;left:0;bottom:0;
           width:68px;background:#FFFFFF;border-right:1px solid #EAE3DF;
@@ -471,7 +579,7 @@ export default function PeachAuth() {
           flex-shrink:0;transition:background .14s;
         }
         .burger-btn:hover{background:#F4EEEB}
-        @media(max-width:480px){
+        @media(max-width:767px){
           .sidenav{
             width:220px;transform:translateX(-100%);
             transition:transform .25s cubic-bezier(.4,0,.2,1);
@@ -498,15 +606,15 @@ export default function PeachAuth() {
           }
         </button>
         {[
-          {label:"Home",    icon:<PeachIcon size={20}/>},
-          {label:"Market",  icon:<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="2,14 7,9 11,12 18,5"/><polyline points="13,5 18,5 18,10"/></svg>},
-          {label:"Trades",  icon:<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M5 7h10M13 4l3 3-3 3"/><path d="M15 13H5M7 10l-3 3 3 3"/></svg>},
-          {label:"Create",  icon:<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="10" cy="10" r="8"/><line x1="10" y1="6.5" x2="10" y2="13.5"/><line x1="6.5" y1="10" x2="13.5" y2="10"/></svg>},
-          {label:"Settings",icon:<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="10" cy="10" r="2.5"/><path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.2 4.2l1.4 1.4M14.4 14.4l1.4 1.4M4.2 15.8l1.4-1.4M14.4 5.6l1.4-1.4"/></svg>},
-          {label:"News",    icon:<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="16" height="13" rx="2"/><line x1="6" y1="8" x2="14" y2="8"/><line x1="6" y1="11" x2="14" y2="11"/><line x1="6" y1="14" x2="10" y2="14"/></svg>},
-        ].map(({label,icon})=>(
-          <button key={label} className="sidenav-item"
-            onClick={() => { const route = NAV_ROUTES[label.toLowerCase()]; if (route) navigate(route); }}>
+          {id:"home",    label:"Home",    icon:<PeachIcon size={20}/>},
+          {id:"market",  label:"Market",  icon:<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="2,14 7,9 11,12 18,5"/><polyline points="13,5 18,5 18,10"/></svg>},
+          {id:"trades",  label:"Trades",  icon:<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M5 7h10M13 4l3 3-3 3"/><path d="M15 13H5M7 10l-3 3 3 3"/></svg>},
+          {id:"create",  label:"Create",  icon:<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="10" cy="10" r="8"/><line x1="10" y1="6.5" x2="10" y2="13.5"/><line x1="6.5" y1="10" x2="13.5" y2="10"/></svg>},
+          {id:"payment-methods",label:"Payments",icon:<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="18" height="13" rx="2"/><line x1="1" y1="9" x2="19" y2="9"/><line x1="5" y1="14" x2="8" y2="14"/></svg>},
+          {id:"settings",label:"Settings",icon:<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="10" cy="10" r="2.5"/><path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.2 4.2l1.4 1.4M14.4 14.4l1.4 1.4M4.2 15.8l1.4-1.4M14.4 5.6l1.4-1.4"/></svg>},
+        ].map(({id,label,icon})=>(
+          <button key={id} className="sidenav-item"
+            onClick={() => { const route = NAV_ROUTES[id]; if (route) navigate(route); }}>
             <span className="sidenav-icon">{icon}</span>
             <span className="sidenav-label">{label}</span>
           </button>
@@ -589,6 +697,47 @@ export default function PeachAuth() {
               <span style={{fontSize:".73rem",color:"#7D675E",fontWeight:500,lineHeight:1.5}}>
                 Session tokens expire after <strong style={{color:"#2B1911"}}>60 minutes</strong>. Your keypair never leaves your device.
               </span>
+            </div>
+
+            {/* New to Peach */}
+            <div style={{borderTop:"1px solid #EAE3DF",paddingTop:18}}>
+              <div style={{fontSize:"1.1rem",fontWeight:800,color:"#2B1911",
+                letterSpacing:"-.02em",marginBottom:8}}>New to Peach?</div>
+              <p style={{fontSize:".78rem",color:"#7D675E",fontWeight:500,lineHeight:1.55,marginBottom:12}}>
+                Peach accounts are created on the mobile app — your Bitcoin keys are generated and stored securely on your phone. Download it first, then come back here to sign in.
+              </p>
+              <div style={{display:"flex",gap:8}}>
+                <a href="https://testflight.apple.com/join/wfSPFEWG" target="_blank" rel="noreferrer"
+                  style={{
+                    flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7,
+                    padding:"9px 12px",borderRadius:10,textDecoration:"none",
+                    border:"1.5px solid #EAE3DF",background:"#F4EEEB",
+                    fontSize:".75rem",fontWeight:700,color:"#2B1911",transition:"border-color .15s"
+                  }}
+                  onMouseEnter={e=>e.currentTarget.style.borderColor="#F56522"}
+                  onMouseLeave={e=>e.currentTarget.style.borderColor="#EAE3DF"}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="#2B1911">
+                    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+                  </svg>
+                  App Store
+                </a>
+                <a href="https://play.google.com/store/apps/details?id=com.peachbitcoin.peach.mainnet" target="_blank" rel="noreferrer"
+                  style={{
+                    flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7,
+                    padding:"9px 12px",borderRadius:10,textDecoration:"none",
+                    border:"1.5px solid #EAE3DF",background:"#F4EEEB",
+                    fontSize:".75rem",fontWeight:700,color:"#2B1911",transition:"border-color .15s"
+                  }}
+                  onMouseEnter={e=>e.currentTarget.style.borderColor="#F56522"}
+                  onMouseLeave={e=>e.currentTarget.style.borderColor="#EAE3DF"}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="#2B1911">
+                    <path d="M3 20.5v-17c0-.83.94-1.3 1.6-.8l14 8.5c.6.36.6 1.24 0 1.6l-14 8.5c-.66.5-1.6.03-1.6-.8z"/>
+                  </svg>
+                  Google Play
+                </a>
+              </div>
             </div>
           </div>
 
@@ -678,6 +827,56 @@ export default function PeachAuth() {
                 </div>
                 <span style={{fontSize:".7rem",color:"#C4B5AE",cursor:"pointer"}}
                       onClick={resetQR}>(click to reset demo)</span>
+              </div>
+            )}
+
+            {/* Auth code fallback — always shown except on success */}
+            {phase !== "success" && (
+              <div style={{width:"100%",borderTop:"1px solid #EAE3DF",paddingTop:14}}>
+                <button onClick={() => setDesktopShowCode(c => !c)} style={{
+                  background:"none",border:"none",cursor:"pointer",
+                  display:"flex",alignItems:"center",gap:5,
+                  fontFamily:"'Baloo 2',cursive",fontSize:".73rem",fontWeight:700,
+                  color:"#C4B5AE",padding:0,transition:"color .15s"
+                }}
+                  onMouseEnter={e=>e.currentTarget.style.color="#7D675E"}
+                  onMouseLeave={e=>e.currentTarget.style.color="#C4B5AE"}
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                    style={{transform:desktopShowCode?"rotate(90deg)":"rotate(0deg)",transition:"transform .2s"}}>
+                    <polyline points="4,2 8,6 4,10"/>
+                  </svg>
+                  Can't scan? Use auth code instead
+                </button>
+
+                {desktopShowCode && (
+                  <div style={{marginTop:12,display:"flex",flexDirection:"column",gap:8,
+                    animation:"fadeIn .2s ease both"}}>
+                    <div style={{fontSize:".7rem",color:"#7D675E",fontWeight:500,lineHeight:1.5}}>
+                      Copy this code and paste it into your Peach app under <strong style={{color:"#2B1911"}}>Settings → Connect web browser</strong>.
+                    </div>
+                    <div style={{
+                      display:"flex",alignItems:"center",justifyContent:"space-between",
+                      padding:"12px 14px",borderRadius:10,
+                      background:"#F4EEEB",border:"1.5px solid #EAE3DF",gap:10
+                    }}>
+                      <span style={{
+                        fontFamily:"monospace",fontSize:".88rem",fontWeight:700,
+                        color:"#2B1911",letterSpacing:".08em",wordBreak:"break-all"
+                      }}>{MOCK_AUTH_CODE}</span>
+                      <button onClick={handleCopyCode} style={{
+                        flexShrink:0,padding:"7px 14px",borderRadius:999,
+                        background: codeCopied ? "#65A519" : "linear-gradient(90deg,#FF4D42,#FF7A50,#FFA24C)",
+                        color:"white",border:"none",cursor:"pointer",
+                        fontFamily:"'Baloo 2',cursive",fontSize:".78rem",fontWeight:800,
+                        letterSpacing:".02em",transition:"background .2s",
+                        display:"flex",alignItems:"center",gap:6
+                      }}>
+                        {codeCopied ? "✓ Copied" : "Copy"}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

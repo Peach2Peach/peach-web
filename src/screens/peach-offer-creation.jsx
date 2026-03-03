@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 // ⚠️ react-router-dom removed for Claude.ai preview. Restore import for local dev.
 import { useNavigate } from "react-router-dom";
 
@@ -68,45 +68,6 @@ const PeachIcon = ({size=28}) => (
   </svg>
 );
 
-function copyToClipboard(text) {
-  if (navigator.clipboard && window.isSecureContext) {
-    return navigator.clipboard.writeText(text);
-  }
-  // Fallback for restricted contexts (iframes, HTTP)
-  const el = document.createElement("textarea");
-  el.value = text;
-  el.style.cssText = "position:fixed;top:-9999px;left:-9999px;opacity:0";
-  document.body.appendChild(el);
-  el.focus();
-  el.select();
-  document.execCommand("copy");
-  document.body.removeChild(el);
-  return Promise.resolve();
-}
-const IcoBtc = ({ size = 15 }) => (
-  <svg width={size} height={size} viewBox="0 0 32 32" fill="none" style={{ display:"inline-block", verticalAlign:"middle", flexShrink:0 }}>
-    <circle cx="16" cy="16" r="16" fill="#F7931A"/>
-    <path d="M22.2 13.8c.3-2-1.2-3.1-3.3-3.8l.7-2.7-1.6-.4-.7 2.6c-.4-.1-.9-.2-1.3-.3l.7-2.6-1.6-.4-.7 2.7c-.3-.1-.7-.2-1-.3l-2.1-.5-.4 1.7s1.2.3 1.2.3c.7.2.8.6.8.9l-.8 3.3c.1 0 .2 0 .3.1-.1 0-.2-.1-.3-.1L11.4 20c-.1.3-.4.7-1 .5 0 0-1.2-.3-1.2-.3l-.8 1.8 2 .5c.4.1.7.2 1.1.3l-.7 2.7 1.6.4.7-2.7c.4.1.9.2 1.4.3l-.7 2.7 1.6.4.7-2.7c2.8.5 4.9.3 5.8-2.2.7-2-.03-3.2-1.5-3.9 1.1-.25 1.9-1 2.1-2.5zm-3.8 5.3c-.5 2-3.9.9-5 .6l.9-3.5c1.1.3 4.6.8 4.1 2.9zm.5-5.3c-.45 1.8-3.3.9-4.2.7l.8-3.2c.9.2 3.8.6 3.4 2.5z" fill="white"/>
-  </svg>
-);
-
-// Standardized sats display: ₿ icon · grey BTC prefix · black sats amount
-// size: "sm"=.82rem | "md"=.95rem (default) | "lg"=1.05rem | "display"=1.4rem
-function SatsAmount({ sats, size = "md" }) {
-  const btcInt  = Math.floor(sats / 100_000_000);
-  const btcGrey = btcInt === 0 ? "0.00" : btcInt.toFixed(2);
-  const satsStr = sats.toLocaleString("fr-FR");
-  const fs = size === "sm" ? ".82rem" : size === "lg" ? "1.05rem" : size === "display" ? "1.4rem" : ".95rem";
-  const ico = size === "sm" ? 13 : size === "lg" ? 17 : size === "display" ? 22 : 15;
-  return (
-    <span style={{ display:"inline-flex", alignItems:"center", gap:5 }}>
-      <IcoBtc size={ico}/>
-      <span style={{ color:"#C4B5AE", fontWeight:700, fontSize:fs }}>{btcGrey}</span>
-      <span style={{ color:"var(--black)", fontWeight:800, fontSize:fs }}>{satsStr} Sats</span>
-    </span>
-  );
-}
-
 // ─── SIDENAV ─────────────────────────────────────────────────────────────────
 const IconMarket   = () => <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="2,14 7,9 11,12 18,5"/><polyline points="13,5 18,5 18,10"/></svg>;
 const IconTrades   = () => <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M5 7h10M13 4l3 3-3 3"/><path d="M15 13H5M7 10l-3 3 3 3"/></svg>;
@@ -123,13 +84,13 @@ const NAV_ITEMS = [
   { id:"market",   label:"Market",   icon:()=><IconMarket/> },
   { id:"trades",   label:"Trades",   icon:()=><IconTrades/> },
   { id:"create",   label:"Create",   icon:()=><IconCreate/> },
-  { id:"settings", label:"Settings", icon:()=><IconSettings/> },
   { id:"payment-methods", label:"Payments", icon:()=><IconCreditCard/> },
+  { id:"settings", label:"Settings", icon:()=><IconSettings/> },
 ];
 
 const NAV_ROUTES = { home:"/home", market:"/market", trades:"/trades", create:"/offer/new", settings:"/settings", "payment-methods":"/payment-methods" };
 
-function SideNav({ active, collapsed, onToggle, mobileOpen, onClose, onNavigate }) {
+function SideNav({ active, collapsed, onToggle, mobileOpen, onClose, onNavigate, mobilePriceSlot }) {
   return (
     <>
       <div className={`sidenav-backdrop${mobileOpen?" open":""}`} onClick={onClose}/>
@@ -144,6 +105,9 @@ function SideNav({ active, collapsed, onToggle, mobileOpen, onClose, onNavigate 
             <span className="sidenav-label">{label}</span>
           </button>
         ))}
+        {mobilePriceSlot && (
+          <div className="sidenav-price-slot">{mobilePriceSlot}</div>
+        )}
       </nav>
     </>
   );
@@ -160,6 +124,7 @@ const CSS = `
     --black-25:#C4B5AE;--black-10:#EAE3DF;--black-5:#F4EEEB;
     --surface:#fff;--bg:#FFF9F6;--font:'Baloo 2',cursive;--topbar:56px;
   }
+  html{font-size:120%}
   body{font-family:var(--font);background:var(--bg);color:var(--black);min-height:100vh}
 
   /* Topbar */
@@ -169,8 +134,19 @@ const CSS = `
   .logo-text{font-size:1.22rem;font-weight:800;letter-spacing:-.02em;
     background:var(--grad);-webkit-background-clip:text;
     -webkit-text-fill-color:transparent;background-clip:text}
-  .price-pill{display:flex;align-items:center;gap:8px;background:var(--primary-mild);
-    border-radius:999px;padding:4px 14px;font-size:.78rem;font-weight:600}
+  .price-pill,.topbar-price{display:flex;align-items:center;gap:8px;background:linear-gradient(90deg,#FFBFA8,#FFD5BF);border-radius:999px;padding:5px 6px 5px 10px;font-size:.78rem;font-weight:600;color:var(--black);flex-shrink:0}
+  .topbar-price-main{font-weight:800;color:var(--black);white-space:nowrap}
+  .topbar-price-sats{font-weight:500;color:var(--black-65);white-space:nowrap}
+  .topbar-cur-select{position:relative;display:flex;align-items:center;gap:4px;background:rgba(255,255,255,0.45);border-radius:999px;padding:2px 9px;cursor:pointer}
+  .cur-select-inner{position:absolute;inset:0;opacity:0;cursor:pointer;font-size:.78rem;width:100%}
+  .cur-select-arrow{display:flex;align-items:center;pointer-events:none;color:var(--black-65);flex-shrink:0}
+  .cur-select-label{font-size:.76rem;font-weight:800;color:var(--black);pointer-events:none}
+  .sidenav-price-slot{display:none;margin-top:auto;padding:12px 8px 8px;width:100%;border-top:1px solid var(--black-10)}
+  .mobile-price-pill{display:flex;align-items:center;gap:8px;background:linear-gradient(90deg,#FFBFA8,#FFD5BF);border-radius:12px;padding:10px 10px 10px 12px}
+  .mobile-price-text{display:flex;flex-direction:column;gap:1px;flex:1;min-width:0}
+  .mobile-price-main{font-size:.82rem;font-weight:800;color:var(--black);white-space:nowrap}
+  .mobile-price-sats{font-size:.68rem;font-weight:500;color:var(--black-65);white-space:nowrap}
+  .mobile-cur-select{flex-shrink:0}
 
   /* Creating offer badge — the prominent label */
   .creating-badge{
@@ -372,7 +348,7 @@ const CSS = `
     border-radius:12px;font-size:.8rem;font-weight:700;cursor:pointer;
     border:2px solid var(--black-10);background:var(--surface);
     color:var(--black-65);transition:all .12s;font-family:var(--font);
-    text-align:left}
+    text-align:left;width:100%}
   .pm-chip:hover{border-color:var(--primary);color:var(--primary-dark)}
   .pm-chip.sel{border-color:var(--primary);background:var(--primary-mild);color:var(--primary-dark)}
   .pm-chip-type{font-size:.65rem;font-weight:800;text-transform:uppercase;
@@ -573,9 +549,6 @@ const CSS = `
   .placeholder{display:flex;flex-direction:column;align-items:center;gap:8px;
     padding:24px 16px;text-align:center;border:2px dashed var(--black-10);
     border-radius:14px;color:var(--black-25)}
-  .own-label{font-size:.62rem;font-weight:800;color:var(--primary-dark);
-    background:var(--primary-mild);border:1px solid rgba(245,101,34,.25);
-    padding:1px 7px;border-radius:999px;white-space:nowrap;letter-spacing:.03em}
 
   /* Success */
   @keyframes stepFwd{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
@@ -594,7 +567,7 @@ const CSS = `
     .preview-panel{display:none}
     .wizard{padding:20px 16px}
   }
-  @media(max-width:480px){
+  @media(max-width:767px){
     .sidenav{
       width:220px;left:0;
       transform:translateX(-100%);
@@ -619,53 +592,14 @@ const CSS = `
     }
     .sidenav-toggle{display:none}
     .burger-btn{display:flex}
+    .topbar-price{display:none}
+    .price-pill{display:none}
+    .sidenav-price-slot{display:block}
     .layout{margin-left:0!important}
   }
 `;
 
 const MOCK_ESCROW = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh";
-
-// ─── QR CODE (client-side via qrcodejs from cdnjs) ──────────────────────────
-function QRCodeDisplay({ data, size = 200 }) {
-  const ref = useRef(null);
-
-  useEffect(() => {
-    if (!ref.current) return;
-    ref.current.innerHTML = "";
-
-    const render = () => {
-      new window.QRCode(ref.current, {
-        text: data,
-        width: size,
-        height: size,
-        colorDark: "#2B1911",
-        colorLight: "#ffffff",
-        correctLevel: window.QRCode.CorrectLevel.M,
-      });
-    };
-
-    if (window.QRCode) {
-      render();
-    } else {
-      const script = document.createElement("script");
-      script.src = "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js";
-      script.onload = render;
-      document.head.appendChild(script);
-    }
-  }, [data, size]);
-
-  return (
-    <div ref={ref} style={{
-      borderRadius: 12,
-      border: "1px solid var(--black-10)",
-      overflow: "hidden",
-      display: "inline-block",
-      lineHeight: 0,
-    }}/>
-  );
-}
-
-
 
 // Steps: 0 = Configure, 1 = Review, 2 = Escrow (sell only)
 function getSteps(type) {
@@ -682,6 +616,11 @@ function LivePreview({ type, form, btcPrice, offerMethods, offerCurrencies }) {
   const hasPrem = form.premium!=="";
   const empty   = !hasAmt&&!hasPay&&!hasPrem;
 
+  let satStr="—", fiatStr="—";
+  if(hasAmt){
+    satStr=`${fmt(form.amtFixed)} sats`;
+    fiatStr=`≈ €${fmtEur(satsToFiat(form.amtFixed,effP))}`;
+  }
   let premCls="pt-n";
   const p=parseFloat(form.premium)||0;
   if(p!==0) premCls=isBuy?(p<0?"pt-g":"pt-r"):(p>0?"pt-g":"pt-r");
@@ -696,57 +635,40 @@ function LivePreview({ type, form, btcPrice, offerMethods, offerCurrencies }) {
         </div>
       ):(
         <div className={`prev-card ${isBuy?"buy-top":"sell-top"}`}>
-          {/* Row 1: avatar + rep | action button */}
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-            <div className="prev-avatar">PW<div className="prev-dot"/></div>
-            <div style={{flex:1,display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
-              <span style={{fontSize:".8rem",fontWeight:700,color:"var(--black-65)"}}>
-                <span style={{color:"#F7931A"}}>★</span>4.7
-              </span>
-              <span style={{fontSize:".75rem",color:"var(--black-65)",fontWeight:500}}>(23)</span>
-              <span className="own-label">Your offer</span>
-              {form.instantMatch&&<span style={{display:"inline-flex",alignItems:"center",gap:3,padding:"2px 7px",
-                borderRadius:999,background:"var(--grad)",color:"white",fontSize:".62rem",fontWeight:800}}>⚡ Instant</span>}
+          <div className="prev-top">
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <div className="prev-avatar">PW<div className="prev-dot"/></div>
+              <div>
+                <div style={{fontSize:".76rem",fontWeight:700,display:"flex",alignItems:"center",gap:3}}>
+                  <span style={{color:"#F7931A"}}>★</span>4.7
+                  <span style={{fontSize:".65rem",color:"var(--black-65)",fontWeight:500,marginLeft:2}}>(23)</span>
+                </div>
+                <div style={{fontSize:".58rem",fontWeight:800,color:"var(--primary-dark)",
+                  background:"var(--primary-mild)",borderRadius:999,padding:"1px 6px",
+                  marginTop:2,display:"inline-block"}}>Your offer</div>
+              </div>
             </div>
-            <button style={{padding:"6px 18px",borderRadius:999,fontFamily:"var(--font)",
-              fontSize:".8rem",fontWeight:800,border:"none",cursor:"default",flexShrink:0,
+            <div style={{textAlign:"right"}}>
+              <div style={{fontSize:".9rem",fontWeight:800,color:"var(--black)"}}>{satStr}</div>
+              <div style={{fontSize:".68rem",color:"var(--black-65)",fontWeight:500}}>{fiatStr}</div>
+            </div>
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:3,marginTop:6}}>
+            {hasPrem&&<span className={`pt ${premCls}`}>{p===0?"0%":(p>0?"+":"")+p.toFixed(2)+"%"}</span>}
+            {offerMethods.slice(0,3).map(m=><span key={m} className="pt pt-m">{m}</span>)}
+            {offerCurrencies.slice(0,3).map(c=><span key={c} className="pt pt-c">{c}</span>)}
+            {form.instantMatch&&<span style={{
+              padding:"2px 7px",borderRadius:999,fontSize:".6rem",fontWeight:800,
+              background:"var(--grad)",color:"white",border:"none"}}>⚡ Instant Match</span>}
+          </div>
+          <div style={{display:"flex",justifyContent:"flex-end",marginTop:10}}>
+            <button style={{padding:"5px 16px",borderRadius:999,border:"none",
+              fontFamily:"var(--font)",fontSize:".76rem",fontWeight:800,cursor:"default",
               background:isBuy?"var(--error-bg)":"var(--success-bg)",
               color:isBuy?"var(--error)":"var(--success)"}}>
               {isBuy?"Sell":"Buy"}
             </button>
           </div>
-          {/* Row 2: rate € (left) | sats (right) */}
-          <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:4}}>
-            <span style={{fontSize:".9rem",fontWeight:800,color:"var(--black)"}}>
-              {hasAmt ? Math.round(effP).toLocaleString("fr-FR")+" €" : "—"}
-            </span>
-            {hasAmt ? <SatsAmount sats={form.amtFixed} size="sm"/> : <span style={{fontSize:".82rem",fontWeight:800}}>—</span>}
-          </div>
-          {/* Row 3: premium % (left) | EUR fiat (right) */}
-          <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:10}}>
-            <span style={{fontSize:".9rem",fontWeight:700,
-              color:p===0?"var(--black-65)":isBuy?(p<0?"var(--success)":"var(--error)"):(p>0?"var(--success)":"var(--error)")}}>
-              {hasPrem?(p>0?"+":"")+p.toFixed(2)+"%":"—%"}
-            </span>
-            <span style={{fontSize:".9rem",fontWeight:700,color:"var(--black)"}}>
-              {hasAmt ? "€"+fmtEur(satsToFiat(form.amtFixed,effP)) : "—"}
-            </span>
-          </div>
-          {/* Row 4: method + currency chips */}
-          {(offerMethods.length>0||offerCurrencies.length>0)&&(
-            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-              {offerMethods.map(m=>(
-                <span key={m} style={{padding:"2px 7px",borderRadius:999,fontSize:".69rem",
-                  fontWeight:600,background:"var(--black-5)",color:"var(--black-65)",
-                  border:"1px solid var(--black-10)"}}>{m}</span>
-              ))}
-              {offerCurrencies.map(c=>(
-                <span key={c} style={{padding:"2px 7px",borderRadius:4,fontSize:".69rem",
-                  fontWeight:700,background:"var(--primary-mild)",color:"var(--primary-dark)",
-                  letterSpacing:".04em"}}>{c}</span>
-              ))}
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -774,8 +696,8 @@ function BuyAmountSlider({ form, setF, btcPrice }) {
     <>
       {/* Display */}
       <div className="amt-display">
-        <SatsAmount sats={val} size="display"/>
-        <span className="amt-sep">·</span>
+        <span className="amt-display-val">{fmt(val)}</span>
+        <span style={{fontSize:".72rem",color:"var(--black-65)",fontWeight:500}}>sats</span>
         <span className="amt-display-fiat">≈ €{fmtEur(currentFiat)}</span>
       </div>
 
@@ -791,9 +713,9 @@ function BuyAmountSlider({ form, setF, btcPrice }) {
 
       {/* Labels */}
       <div className="amt-labels">
-        <SatsAmount sats={MIN_SATS} size="sm"/>
+        <span>{fmt(MIN_SATS)} sats</span>
         <span style={{color:"var(--black-25)"}}>≤ 1 000 CHF limit</span>
-        <SatsAmount sats={maxSats} size="sm"/>
+        <span>{fmt(maxSats)} sats</span>
       </div>
 
       {/* Limit bar */}
@@ -849,8 +771,8 @@ function SellAmountSlider({ form, setF, btcPrice }) {
     <>
       {/* Display */}
       <div className="amt-display">
-        <SatsAmount sats={val} size="display"/>
-        <span className="amt-sep">·</span>
+        <span className="amt-display-val">{fmt(val)}</span>
+        <span style={{fontSize:".72rem",color:"var(--black-65)",fontWeight:500}}>sats</span>
         <span className="amt-display-fiat">≈ €{fmtEur(currentFiat)}</span>
       </div>
 
@@ -866,9 +788,9 @@ function SellAmountSlider({ form, setF, btcPrice }) {
 
       {/* Labels */}
       <div className="amt-labels">
-        <SatsAmount sats={MIN_SATS} size="sm"/>
+        <span>{fmt(MIN_SATS)} sats</span>
         <span style={{color:"var(--black-25)"}}>≤ 1 000 CHF limit</span>
-        <SatsAmount sats={maxSats} size="sm"/>
+        <span>{fmt(maxSats)} sats</span>
       </div>
 
       {/* Limit bar */}
@@ -1086,18 +1008,25 @@ function PMModal({ onSave, onClose, initialData }) {
   );
 }
 
+const IcoBtc = ({ size = 15 }) => (
+  <svg width={size} height={size} viewBox="0 0 32 32" fill="none" style={{ display:"inline-block", verticalAlign:"middle", flexShrink:0 }}>
+    <circle cx="16" cy="16" r="16" fill="#F7931A"/>
+    <path d="M22.2 13.8c.3-2-1.2-3.1-3.3-3.8l.7-2.7-1.6-.4-.7 2.6c-.4-.1-.9-.2-1.3-.3l.7-2.6-1.6-.4-.7 2.7c-.3-.1-.7-.2-1-.3l-2.1-.5-.4 1.7s1.2.3 1.2.3c.7.2.8.6.8.9l-.8 3.3c.1 0 .2 0 .3.1-.1 0-.2-.1-.3-.1L11.4 20c-.1.3-.4.7-1 .5 0 0-1.2-.3-1.2-.3l-.8 1.8 2 .5c.4.1.7.2 1.1.3l-.7 2.7 1.6.4.7-2.7c.4.1.9.2 1.4.3l-.7 2.7 1.6.4.7-2.7c2.8.5 4.9.3 5.8-2.2.7-2-.03-3.2-1.5-3.9 1.1-.25 1.9-1 2.1-2.5zm-3.8 5.3c-.5 2-3.9.9-5 .6l.9-3.5c1.1.3 4.6.8 4.1 2.9zm.5-5.3c-.45 1.8-3.3.9-4.2.7l.8-3.2c.9.2 3.8.6 3.4 2.5z" fill="white"/>
+  </svg>
+);
+
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 export default function OfferCreation({ initialType="buy" }) {
   const navigate = useNavigate();
   const [type,         setType]         = useState(initialType);
   const [step,         setStep]         = useState(0);
-  const [btcPrice,     setBtcPrice]     = useState(BTC_PRICE_INIT);
+  const [allPrices,           setAllPrices]           = useState({ EUR: BTC_PRICE_INIT });
+  const [availableCurrencies, setAvailableCurrencies] = useState(["EUR","CHF","GBP"]);
+  const [selectedCurrency,    setSelectedCurrency]    = useState("EUR");
+  const btcPrice = Math.round(allPrices[selectedCurrency] ?? BTC_PRICE_INIT);
   const [done,         setDone]         = useState(false);
   const [copiedAddr,   setCopiedAddr]   = useState(false);
-  const [copiedAmt,    setCopiedAmt]    = useState(false);
-  const [copyAmtMode,  setCopyAmtMode]  = useState("sats"); // "sats" | "btc"
   const [escrowFunded, setEscrowFunded] = useState(false);
-  const [qrMode,       setQrMode]       = useState("address"); // "address" | "bip21"
   const [savedMethods, setSavedMethods] = useState(MOCK_SAVED);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPM,    setEditingPM]    = useState(null); // PM object being edited
@@ -1118,10 +1047,21 @@ export default function OfferCreation({ initialType="buy" }) {
   const offerMethods     = [...new Set(selectedSaved.map(m=>m.type))];
   const offerCurrencies  = [...new Set(selectedSaved.flatMap(m=>m.currencies||[]))];
 
-  useEffect(()=>{
-    const iv=setInterval(()=>setBtcPrice(p=>p+Math.round((Math.random()-.5)*70)),8000);
-    return()=>clearInterval(iv);
-  },[]);
+  useEffect(() => {
+    async function fetchPrices() {
+      try {
+        const res = await fetch('https://api.peachbitcoin.com/v1/market/prices');
+        const data = await res.json();
+        if (data && typeof data === "object") {
+          setAllPrices(data);
+          setAvailableCurrencies(Object.keys(data).sort());
+        }
+      } catch {}
+    }
+    fetchPrices();
+    const iv = setInterval(fetchPrices, 30000);
+    return () => clearInterval(iv);
+  }, []);
 
   function setF(k,v){ setForm(f=>({...f,[k]:v})); }
   function reset(){
@@ -1192,6 +1132,22 @@ export default function OfferCreation({ initialType="buy" }) {
         mobileOpen={sidebarMobileOpen}
         onClose={() => setSidebarMobileOpen(false)}
         onNavigate={navigate}
+        mobilePriceSlot={
+          <div className="mobile-price-pill">
+            <IcoBtc size={16}/>
+            <div className="mobile-price-text">
+              <span className="mobile-price-main">{btcPrice.toLocaleString("fr-FR")} {selectedCurrency}</span>
+              <span className="mobile-price-sats">{Math.round(SAT/btcPrice).toLocaleString()} sats / {selectedCurrency.toLowerCase()}</span>
+            </div>
+            <div className="topbar-cur-select mobile-cur-select">
+              <span className="cur-select-label">{selectedCurrency}</span>
+              <svg className="cur-select-arrow" width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{pointerEvents:"none",flexShrink:0}}><polyline points="1,1 5,5 9,1"/></svg>
+              <select value={selectedCurrency} onChange={e => setSelectedCurrency(e.target.value)} className="cur-select-inner">
+                {availableCurrencies.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+        }
       />
       <div style={{display:"flex",flexDirection:"column",alignItems:"center",
         justifyContent:"center",minHeight:"100vh",gap:22,padding:40,
@@ -1200,7 +1156,9 @@ export default function OfferCreation({ initialType="buy" }) {
         <div className="success-icon">✓</div>
         <div style={{fontSize:"1.45rem",fontWeight:800,color:"var(--success)"}}>Offer published!</div>
         <p style={{fontSize:".88rem",color:"var(--black-65)",lineHeight:1.65,maxWidth:360}}>
-          Your buy offer for <SatsAmount sats={form.amtFixed}/> is live in the market. You'll be notified when a seller matches.
+          Your buy offer for <strong style={{color:"var(--black)"}}>
+            {fmt(form.amtFixed)} sats
+          </strong> is live in the market. You'll be notified when a seller matches.
         </p>
         <div style={{display:"flex",gap:12}}>
           <button onClick={() => navigate("/market")} style={{padding:"10px 28px",borderRadius:999,
@@ -1233,12 +1191,17 @@ export default function OfferCreation({ initialType="buy" }) {
         <button className="burger-btn" onClick={() => setSidebarMobileOpen(o => !o)}><IconBurger/></button>
         <PeachIcon size={28}/>
         <span className="logo-text">Peach</span>
-        <div className="price-pill">
-          <span style={{color:"var(--black-65)",fontWeight:500}}>BTC/EUR</span>
-          <span>€{btcPrice.toLocaleString()}</span>
-          <span style={{color:"var(--black-25)"}}>·</span>
-          <span style={{color:"var(--black-65)",fontWeight:500}}>sats/€</span>
-          <span>{Math.round(SAT/btcPrice).toLocaleString()}</span>
+        <div className="topbar-price">
+          <IcoBtc size={18}/>
+          <span className="topbar-price-main">{btcPrice.toLocaleString("fr-FR")} {selectedCurrency}</span>
+          <span className="topbar-price-sats">{Math.round(SAT/btcPrice).toLocaleString()} sats / {selectedCurrency.toLowerCase()}</span>
+          <div className="topbar-cur-select">
+            <span className="cur-select-label">{selectedCurrency}</span>
+            <svg className="cur-select-arrow" width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{pointerEvents:"none",flexShrink:0}}><polyline points="1,1 5,5 9,1"/></svg>
+            <select value={selectedCurrency} onChange={e => setSelectedCurrency(e.target.value)} className="cur-select-inner">
+              {availableCurrencies.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
         </div>
         {/* ← THE "CREATING OFFER" BADGE IN THE TOPBAR */}
         <div className={`creating-badge ${isSell?"sell-badge":"buy-badge"}`}>
@@ -1257,6 +1220,22 @@ export default function OfferCreation({ initialType="buy" }) {
         mobileOpen={sidebarMobileOpen}
         onClose={() => setSidebarMobileOpen(false)}
         onNavigate={navigate}
+        mobilePriceSlot={
+          <div className="mobile-price-pill">
+            <IcoBtc size={16}/>
+            <div className="mobile-price-text">
+              <span className="mobile-price-main">{btcPrice.toLocaleString("fr-FR")} {selectedCurrency}</span>
+              <span className="mobile-price-sats">{Math.round(SAT/btcPrice).toLocaleString()} sats / {selectedCurrency.toLowerCase()}</span>
+            </div>
+            <div className="topbar-cur-select mobile-cur-select">
+              <span className="cur-select-label">{selectedCurrency}</span>
+              <svg className="cur-select-arrow" width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{pointerEvents:"none",flexShrink:0}}><polyline points="1,1 5,5 9,1"/></svg>
+              <select value={selectedCurrency} onChange={e => setSelectedCurrency(e.target.value)} className="cur-select-inner">
+                {availableCurrencies.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+        }
       />
 
       <div className="layout" style={{marginLeft: sidebarCollapsed ? 44 : 68}}>
@@ -1273,7 +1252,7 @@ export default function OfferCreation({ initialType="buy" }) {
                 New offer
               </div>
               <div className="wizard-title">
-                {step===0?`Create ${type==="buy"?"Buy":"Sell"} offer`:step===1?"Review & publish":"Fund escrow"}
+                {step===0?"Configure your offer":step===1?"Review & publish":"Fund escrow"}
               </div>
             </div>
             <div className="type-toggle" style={step===1?{opacity:0.45,pointerEvents:"none"}:{}}>
@@ -1354,6 +1333,7 @@ export default function OfferCreation({ initialType="buy" }) {
                       return (
                         <div key={pm.id} style={{display:"flex",alignItems:"center",gap:6}}>
                           <button className={`pm-chip${sel?" sel":""}`}
+                            style={{flex:1}}
                             onClick={()=>toggleMethod(pm.id)}>
                             <span className="pm-chip-type">{pm.type}</span>
                             <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",
@@ -1480,31 +1460,29 @@ export default function OfferCreation({ initialType="buy" }) {
                   )}
                 </div>
 
-                {/* Instant Match — shown for both buy and sell */}
-                <div className="check-row" style={{marginTop:12}}
-                  onClick={()=>setForm(f=>{
-                    const next=!f.instantMatch;
-                    return {...f,instantMatch:next,noNewUsers:next?f.noNewUsers:false};
-                  })}>
-                  <div className="check-box" style={{
-                    border:`2px solid ${form.instantMatch?"var(--primary)":"var(--black-10)"}`,
-                    background:form.instantMatch?"var(--primary-mild)":"var(--surface)"}}>
-                    {form.instantMatch&&"✓"}
-                  </div>
-                  <div>
-                    <div style={{fontSize:".8rem",fontWeight:700}}>⚡ Enable Instant Match</div>
-                    <div style={{fontSize:".7rem",color:"var(--black-65)",fontWeight:500}}>
-                      {isSell?"Auto-accept any qualifying buy offer":"Auto-accept any qualifying sell offer"}
+                {!isSell&&(
+                  <div className="check-row" style={{marginTop:12}}
+                    onClick={()=>setF("instantMatch",!form.instantMatch)}>
+                    <div className="check-box" style={{
+                      border:`2px solid ${form.instantMatch?"var(--primary)":"var(--black-10)"}`,
+                      background:form.instantMatch?"var(--primary-mild)":"var(--surface)"}}>
+                      {form.instantMatch&&"✓"}
+                    </div>
+                    <div>
+                      <div style={{fontSize:".8rem",fontWeight:700}}>⚡ Enable Instant Match</div>
+                      <div style={{fontSize:".7rem",color:"var(--black-65)",fontWeight:500}}>
+                        Auto-accept any qualifying sell offer
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
-                {/* No new users — requires Instant Match on for both buy and sell */}
+                {/* No new users — visible for both buy and sell; buy: requires Instant Match on */}
                 <div className="check-row" style={{
                     marginTop:10,
-                    opacity: !form.instantMatch ? 0.4 : 1,
-                    pointerEvents: !form.instantMatch ? "none" : "auto",
-                    cursor: !form.instantMatch ? "not-allowed" : "pointer",
+                    opacity: (!isSell && !form.instantMatch) ? 0.4 : 1,
+                    pointerEvents: (!isSell && !form.instantMatch) ? "none" : "auto",
+                    cursor: (!isSell && !form.instantMatch) ? "not-allowed" : "pointer",
                   }}
                   onClick={()=>setF("noNewUsers",!form.noNewUsers)}>
                   <div className="check-box" style={{
@@ -1537,10 +1515,9 @@ export default function OfferCreation({ initialType="buy" }) {
                     <span style={{color:isSell?"var(--error)":"var(--success)",fontWeight:800}}>
                       {isSell?"Sell BTC":"Buy BTC"}
                     </span>],
-                  ["Amount", <span style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:2}}>
-                    <SatsAmount sats={form.amtFixed} size="sm"/>
-                    <span style={{fontSize:".72rem",color:"var(--black-65)",fontWeight:500}}>≈ €{fmtEur(satsToFiat(form.amtFixed,effP))}</span>
-                  </span>],
+                  ["Amount", isSell
+                    ? `${fmt(form.amtFixed)} sats ≈ €${fmtEur(satsToFiat(form.amtFixed,effP))}`
+                    : `${fmt(form.amtFixed)} sats ≈ €${fmtEur(satsToFiat(form.amtFixed,effP))}`],
                   ["Premium",
                     <span style={{fontWeight:800,color:prem===0?"var(--black-65)":
                       isSell?(prem>0?"var(--success)":"var(--error)"):(prem<0?"var(--success)":"var(--error)")}}>
@@ -1549,7 +1526,7 @@ export default function OfferCreation({ initialType="buy" }) {
                   ["Effective price", `€${Math.round(effP).toLocaleString()}/BTC`],
                   ["Methods", offerMethods.join(", ")||"—"],
                   ["Currencies", offerCurrencies.join(", ")||"—"],
-                  ["Instant Match", form.instantMatch?"⚡ Enabled":"Off"],
+                  ...(!isSell?[["Instant Match", form.instantMatch?"⚡ Enabled":"Off"]]:[] ),
                   ...(form.noNewUsers?[["No new users", "On"]]:[] ),
                 ].map(([k,v])=>(
                   <div key={k} className="review-row">
@@ -1561,7 +1538,8 @@ export default function OfferCreation({ initialType="buy" }) {
               {isSell&&(
                 <div className="callout callout-orange" style={{marginTop:14}}>
                   <span style={{fontSize:"1rem",flexShrink:0}}>🔒</span>
-                  <span>After publishing you'll receive an escrow address. Fund it with <strong><SatsAmount sats={form.amtFixed} size="sm"/></strong> to activate your offer. If the funded amount is different than anticipated, you may chose to either refund the escrow or to publish the offer anyways, as long as the amount does not go over your limits.</span>
+                  <span>After publishing you'll receive an escrow address. Fund it with exactly <strong>
+                    {fmt(form.amtFixed)} sats</strong> to activate your offer.</span>
                 </div>
               )}
             </div>
@@ -1574,85 +1552,22 @@ export default function OfferCreation({ initialType="buy" }) {
                 <>
                   <div style={{fontSize:".84rem",color:"var(--black-65)",fontWeight:500,
                     lineHeight:1.6,marginBottom:20}}>
-                    Send the amount below to activate your offer. It goes live on confirmation. If the funded amount is different than anticipated, you may chose to either refund the escrow or to publish the offer anyways, as long as the amount does not go over your limits.
+                    Send exactly the amount below to activate your offer. It goes live on confirmation.
                   </div>
-
-                  {/* QR code — centered */}
-                  {(()=>{
-                    const btcAmt = (form.amtFixed / 100_000_000).toFixed(8);
-                    const qrData = qrMode === "bip21"
-                      ? `bitcoin:${MOCK_ESCROW}?amount=${btcAmt}`
-                      : `bitcoin:${MOCK_ESCROW}`;
-                    return (
-                      <div style={{display:"flex",flexDirection:"column",alignItems:"center",
-                        marginBottom:24}}>
-                        <QRCodeDisplay data={qrData} size={200}/>
-                        {/* Toggle */}
-                        <div style={{display:"flex",gap:0,marginTop:12,
-                          background:"var(--black-5)",borderRadius:999,padding:3}}>
-                          {[["address","Address only"],["bip21","Address + amount"]].map(([mode,label])=>(
-                            <button key={mode}
-                              onClick={()=>setQrMode(mode)}
-                              style={{padding:"5px 14px",borderRadius:999,border:"none",
-                                fontFamily:"var(--font)",fontSize:".72rem",fontWeight:700,
-                                cursor:"pointer",transition:"all .12s",
-                                background:qrMode===mode?"var(--surface)":"transparent",
-                                color:qrMode===mode?"var(--black)":"var(--black-65)",
-                                boxShadow:qrMode===mode?"0 1px 4px rgba(0,0,0,.08)":"none"}}>
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })()}
-
                   <label className="field-label" style={{marginBottom:6}}>Escrow address</label>
                   <div className="escrow-addr"
-                    onClick={()=>{
-                      copyToClipboard(MOCK_ESCROW);
-                      setCopiedAddr(true);
-                      setTimeout(()=>setCopiedAddr(false),2000);
-                    }}>
+                    onClick={()=>{setCopiedAddr(true);setTimeout(()=>setCopiedAddr(false),2000);}}>
                     {MOCK_ESCROW}
                   </div>
                   <div style={{fontSize:".7rem",fontWeight:700,color:"var(--success)",
                     minHeight:18,marginTop:4,marginBottom:20}}>
                     {copiedAddr?"✓ Copied to clipboard":"Click to copy"}
                   </div>
-                  <label className="field-label" style={{marginBottom:6}}>Amount to send</label>
-                  <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:6,
-                    cursor:"pointer"}}
-                    onClick={()=>{
-                      const btcAmt=(form.amtFixed/100_000_000).toFixed(8);
-                      copyToClipboard(copyAmtMode==="sats"?String(form.amtFixed):btcAmt);
-                      setCopiedAmt(true);
-                      setTimeout(()=>setCopiedAmt(false),2000);
-                    }}>
-                    <SatsAmount sats={form.amtFixed} size="display"/>
+                  <label className="field-label" style={{marginBottom:6}}>Exact amount to send</label>
+                  <div style={{display:"flex",alignItems:"baseline",gap:12,marginBottom:22}}>
+                    <span className="escrow-amt">{fmt(form.amtFixed)} sats</span>
                     <span style={{fontSize:".88rem",color:"var(--black-65)",fontWeight:600}}>
                       ≈ €{fmtEur(satsToFiat(form.amtFixed,effP))}
-                    </span>
-                  </div>
-                  {/* Copy mode toggle + feedback */}
-                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:22}}>
-                    <div style={{display:"flex",gap:0,background:"var(--black-5)",
-                      borderRadius:999,padding:3}}>
-                      {[["sats","Sats"],["btc","BTC"]].map(([mode,label])=>(
-                        <button key={mode}
-                          onClick={()=>setCopyAmtMode(mode)}
-                          style={{padding:"3px 12px",borderRadius:999,border:"none",
-                            fontFamily:"var(--font)",fontSize:".68rem",fontWeight:700,
-                            cursor:"pointer",transition:"all .12s",
-                            background:copyAmtMode===mode?"var(--surface)":"transparent",
-                            color:copyAmtMode===mode?"var(--black)":"var(--black-65)",
-                            boxShadow:copyAmtMode===mode?"0 1px 4px rgba(0,0,0,.08)":"none"}}>
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                    <span style={{fontSize:".7rem",fontWeight:700,color:"var(--success)",minHeight:18}}>
-                      {copiedAmt?"✓ Copied":"Click amount to copy"}
                     </span>
                   </div>
                   <div style={{background:"var(--black-5)",borderRadius:12,
@@ -1686,7 +1601,9 @@ export default function OfferCreation({ initialType="buy" }) {
                     Offer is live!
                   </div>
                   <p style={{fontSize:".88rem",color:"var(--black-65)",lineHeight:1.65,maxWidth:340}}>
-                    Your sell offer for <SatsAmount sats={form.amtFixed}/> is now visible in the market. We'll notify you when a buyer matches.
+                    Your sell offer for <strong style={{color:"var(--black)"}}>
+                      {fmt(form.amtFixed)} sats
+                    </strong> is now visible in the market. We'll notify you when a buyer matches.
                   </p>
                   <div style={{display:"flex",gap:12}}>
                     <button onClick={() => navigate("/market")} style={{padding:"10px 28px",borderRadius:999,
@@ -1713,16 +1630,9 @@ export default function OfferCreation({ initialType="buy" }) {
                 ? <button className="btn-back-nav" onClick={handleBack}>← Back</button>
                 : <div/>}
               {step===0&&(
-                <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}>
-                  {!payOk&&(
-                    <span style={{fontSize:".7rem",fontWeight:700,color:"var(--error)"}}>
-                      Select a payment method
-                    </span>
-                  )}
-                  <button className="btn-next" onClick={handleNext} disabled={!configOk}>
-                    Review offer →
-                  </button>
-                </div>
+                <button className="btn-next" onClick={handleNext} disabled={!configOk}>
+                  Review offer →
+                </button>
               )}
               {step===1&&(
                 <button className={`btn-next btn-publish-${type}`} onClick={handleNext}>
@@ -1776,7 +1686,7 @@ export default function OfferCreation({ initialType="buy" }) {
             {step===0&&!isSell&&"💡 Set all three sections, then tap Review."}
             {step===0&&isSell&&"💡 The fixed amount locks in escrow after publishing. Ensure your wallet is ready."}
             {step===1&&"✅ Amount and payment methods can't be changed after publishing."}
-            {step===2&&"🔒 Send the amount shown. Over/underfunding can be resolved before your offer goes live."}
+            {step===2&&"🔒 Send the exact amount. Over/underfunding delays activation."}
           </div>
         </div>
       </div>

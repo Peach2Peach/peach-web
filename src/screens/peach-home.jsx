@@ -34,13 +34,13 @@ const NAV_ITEMS = [
   { id:"market",   label:"Market",   icon:()=><IconMarket/> },
   { id:"trades",   label:"Trades",   icon:()=><IconTrades/> },
   { id:"create",   label:"Create",   icon:()=><IconCreate/> },
-  { id:"settings", label:"Settings", icon:()=><IconSettings/> },
   { id:"payment-methods", label:"Payments", icon:()=><IconCreditCard/> },
+  { id:"settings", label:"Settings", icon:()=><IconSettings/> },
 ];
 
 const NAV_ROUTES = { home:"/home", market:"/market", trades:"/trades", create:"/offer/new", settings:"/settings", "payment-methods":"/payment-methods" };
 
-function SideNav({ active, collapsed, onToggle, mobileOpen, onClose, onNavigate }) {
+function SideNav({ active, collapsed, onToggle, mobileOpen, onClose, onNavigate, mobilePriceSlot }) {
   return (
     <>
       <div className={`sidenav-backdrop${mobileOpen?" open":""}`} onClick={onClose}/>
@@ -55,11 +55,21 @@ function SideNav({ active, collapsed, onToggle, mobileOpen, onClose, onNavigate 
             <span className="sidenav-label">{label}</span>
           </button>
         ))}
+        {mobilePriceSlot && (
+          <div className="sidenav-price-slot">{mobilePriceSlot}</div>
+        )}
       </nav>
     </>
   );
 }
 
+
+const IcoBtc = ({ size = 15 }) => (
+  <svg width={size} height={size} viewBox="0 0 32 32" fill="none" style={{ display:"inline-block", verticalAlign:"middle", flexShrink:0 }}>
+    <circle cx="16" cy="16" r="16" fill="#F7931A"/>
+    <path d="M22.2 13.8c.3-2-1.2-3.1-3.3-3.8l.7-2.7-1.6-.4-.7 2.6c-.4-.1-.9-.2-1.3-.3l.7-2.6-1.6-.4-.7 2.7c-.3-.1-.7-.2-1-.3l-2.1-.5-.4 1.7s1.2.3 1.2.3c.7.2.8.6.8.9l-.8 3.3c.1 0 .2 0 .3.1-.1 0-.2-.1-.3-.1L11.4 20c-.1.3-.4.7-1 .5 0 0-1.2-.3-1.2-.3l-.8 1.8 2 .5c.4.1.7.2 1.1.3l-.7 2.7 1.6.4.7-2.7c.4.1.9.2 1.4.3l-.7 2.7 1.6.4.7-2.7c2.8.5 4.9.3 5.8-2.2.7-2-.03-3.2-1.5-3.9 1.1-.25 1.9-1 2.1-2.5zm-3.8 5.3c-.5 2-3.9.9-5 .6l.9-3.5c1.1.3 4.6.8 4.1 2.9zm.5-5.3c-.45 1.8-3.3.9-4.2.7l.8-3.2c.9.2 3.8.6 3.4 2.5z" fill="white"/>
+  </svg>
+);
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
 const BTC_PRICE = 87432;
 
@@ -124,6 +134,7 @@ const css = `
     --surface:#FFFFFF;--font:'Baloo 2',cursive;--topbar:56px;
     --btc:#F7931A;
   }
+  html{font-size:120%}
   body{font-family:var(--font);background:var(--primary-bg);color:var(--black)}
   .app{display:flex;flex-direction:column;min-height:100vh}
 
@@ -133,15 +144,37 @@ const css = `
     padding:0 20px;gap:12px;z-index:200}
   .logo-wordmark{font-size:1.22rem;font-weight:800;letter-spacing:-0.02em;
     background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-  .topbar-price{display:flex;align-items:center;gap:10px;background:var(--primary-mild);
-    border-radius:999px;padding:4px 14px;font-size:0.78rem;font-weight:600}
-  .price-val{color:var(--black)}.price-label{color:var(--black-65);font-weight:500}.price-sep{color:var(--black-25)}
+  /* ── PRICE PILL (gradient) ── */
+  .topbar-price{
+    display:flex;align-items:center;gap:8px;
+    background:linear-gradient(90deg,#FFBFA8,#FFD5BF);border-radius:999px;
+    padding:5px 6px 5px 10px;
+    font-size:0.78rem;font-weight:600;color:var(--black);
+    flex-shrink:0;
+  }
+  .topbar-price-main{font-weight:800;color:var(--black);white-space:nowrap}
+  .topbar-price-sats{font-weight:500;color:var(--black-65);white-space:nowrap}
+  .topbar-cur-select{
+    position:relative;display:flex;align-items:center;gap:4px;
+    background:rgba(255,255,255,0.45);border-radius:999px;
+    padding:2px 9px;cursor:pointer;
+  }
+  .cur-select-inner{
+    position:absolute;inset:0;opacity:0;cursor:pointer;
+    font-size:.78rem;width:100%;
+  }
+  .cur-select-arrow{display:flex;align-items:center;pointer-events:none;color:var(--black-65);flex-shrink:0}
+  .cur-select-label{font-size:.76rem;font-weight:800;color:var(--black);pointer-events:none}
   .topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
-  .updated-pill{font-size:0.7rem;color:var(--black-65);font-weight:500;display:flex;align-items:center;gap:5px}
-  .updated-dot{width:6px;height:6px;border-radius:50%;background:var(--success);animation:pulse 2s infinite}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
   .avatar-peachid{display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 10px;border-radius:999px;transition:background .14s}
   .avatar-peachid:hover{background:var(--black-5)}
+  .sidenav-price-slot{display:none;margin-top:auto;padding:12px 8px 8px;width:100%;border-top:1px solid var(--black-10)}
+  .mobile-price-pill{display:flex;align-items:center;gap:8px;background:linear-gradient(90deg,#FFBFA8,#FFD5BF);border-radius:12px;padding:10px 10px 10px 12px;}
+  .mobile-price-text{display:flex;flex-direction:column;gap:1px;flex:1;min-width:0}
+  .mobile-price-main{font-size:.82rem;font-weight:800;color:var(--black);white-space:nowrap}
+  .mobile-price-sats{font-size:.68rem;font-weight:500;color:var(--black-65);white-space:nowrap}
+  .mobile-cur-select{flex-shrink:0}
   .avatar{width:34px;height:34px;border-radius:50%;background:var(--grad);display:flex;
     align-items:center;justify-content:center;font-size:.72rem;font-weight:800;color:white;
     cursor:pointer;position:relative;flex-shrink:0}
@@ -349,10 +382,22 @@ const css = `
   .content > *:nth-child(5){animation-delay:.19s}
 
   /* ── RESPONSIVE ── */
-  @media(max-width:700px){
+  @media(max-width:767px){
     .burger-btn{display:flex}
-    .sidenav{transform:translateX(-100%);transition:transform .22s,width .2s}
-    .sidenav-mobile-open{transform:translateX(0);width:68px!important}
+    .topbar-price{display:none}
+    .sidenav-price-slot{display:block}
+    .sidenav{
+      width:220px;transform:translateX(-100%);
+      transition:transform .25s cubic-bezier(.4,0,.2,1);
+      z-index:500;align-items:flex-start;box-shadow:none;
+    }
+    .sidenav-collapsed{width:220px}
+    .sidenav.sidenav-mobile-open{transform:translateX(0);box-shadow:6px 0 28px rgba(43,25,17,.16)}
+    .sidenav-item{width:calc(100% - 16px);flex-direction:row;justify-content:flex-start;gap:12px;padding:10px 14px}
+    .sidenav-collapsed .sidenav-item{width:calc(100% - 16px)}
+    .sidenav-label,.sidenav-collapsed .sidenav-label{opacity:1!important;max-height:none!important;font-size:.8rem;text-transform:none;font-weight:600;letter-spacing:0}
+    .sidenav-toggle{display:none}
+    .sidenav-backdrop.open{display:block}
     .dashboard-grid{grid-template-columns:1fr}
     .dashboard-grid .card{width:100%!important;max-width:100%!important}
     .offerbook-cols{grid-template-columns:1fr}
@@ -369,30 +414,37 @@ const css = `
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function PeachHome() {
   const navigate = useNavigate();
-  const [btcPrice,          setBtcPrice]          = useState(BTC_PRICE);
-  const [secondsAgo,        setSecondsAgo]        = useState(0);
+  const [allPrices,           setAllPrices]           = useState({ EUR: BTC_PRICE });
+  const [availableCurrencies, setAvailableCurrencies] = useState(["EUR","CHF","GBP"]);
+  const [selectedCurrency,    setSelectedCurrency]    = useState("EUR");
+  const btcPrice = Math.round(allPrices[selectedCurrency] ?? BTC_PRICE);
   const [sidebarCollapsed,  setSidebarCollapsed]  = useState(false);
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 700);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
 
   useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth <= 700);
+    const onResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
   useEffect(() => {
-    const iv = setInterval(() => {
-      setSecondsAgo(s => {
-        if (s >= 30) { setBtcPrice(p => p + Math.round((Math.random()-0.5)*90)); return 0; }
-        return s + 1;
-      });
-    }, 1000);
+    async function fetchPrices() {
+      try {
+        const res = await fetch('https://api.peachbitcoin.com/v1/market/prices');
+        const data = await res.json();
+        if (data && typeof data === "object") {
+          setAllPrices(data);
+          setAvailableCurrencies(Object.keys(data).sort());
+        }
+      } catch {}
+    }
+    fetchPrices();
+    const iv = setInterval(fetchPrices, 30000);
     return () => clearInterval(iv);
   }, []);
 
-  const satsPerEur  = Math.round(100_000_000 / btcPrice);
-  const updatedText = secondsAgo === 0 ? "Just now" : `${secondsAgo}s ago`;
+  const satsPerCur  = Math.round(100_000_000 / btcPrice);
 
   const navWidth = isMobile ? 0 : (sidebarCollapsed ? 44 : 68);
 
@@ -407,17 +459,18 @@ export default function PeachHome() {
           <PeachIcon size={28}/>
           <span className="logo-wordmark">Peach</span>
           <div className="topbar-price">
-            <span className="price-label">BTC/EUR</span>
-            <span className="price-val">€{btcPrice.toLocaleString()}</span>
-            <span className="price-sep">·</span>
-            <span className="price-label">sats/€</span>
-            <span className="price-val">{satsPerEur.toLocaleString()}</span>
+            <IcoBtc size={18}/>
+            <span className="topbar-price-main">{btcPrice.toLocaleString("fr-FR")} {selectedCurrency}</span>
+            <span className="topbar-price-sats">{satsPerCur.toLocaleString()} sats / {selectedCurrency.toLowerCase()}</span>
+            <div className="topbar-cur-select">
+              <span className="cur-select-label">{selectedCurrency}</span>
+              <svg className="cur-select-arrow" width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{pointerEvents:"none",flexShrink:0}}><polyline points="1,1 5,5 9,1"/></svg>
+              <select value={selectedCurrency} onChange={e => setSelectedCurrency(e.target.value)} className="cur-select-inner">
+                {availableCurrencies.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
           </div>
           <div className="topbar-right">
-            <div className="updated-pill">
-              <span className="updated-dot"/>
-              {updatedText}
-            </div>
             <div className="avatar-peachid">
               <span className="peach-id">{MOCK_USER.peachId}</span>
               <div className="avatar">PW<div className="avatar-badge">2</div></div>
@@ -432,6 +485,22 @@ export default function PeachHome() {
           mobileOpen={sidebarMobileOpen}
           onClose={() => setSidebarMobileOpen(false)}
           onNavigate={navigate}
+          mobilePriceSlot={
+            <div className="mobile-price-pill">
+              <IcoBtc size={16}/>
+              <div className="mobile-price-text">
+                <span className="mobile-price-main">{btcPrice.toLocaleString("fr-FR")} {selectedCurrency}</span>
+                <span className="mobile-price-sats">{satsPerCur.toLocaleString()} sats / {selectedCurrency.toLowerCase()}</span>
+              </div>
+              <div className="topbar-cur-select mobile-cur-select">
+                <span className="cur-select-label">{selectedCurrency}</span>
+                <svg className="cur-select-arrow" width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{pointerEvents:"none",flexShrink:0}}><polyline points="1,1 5,5 9,1"/></svg>
+                <select value={selectedCurrency} onChange={e => setSelectedCurrency(e.target.value)} className="cur-select-inner">
+                  {availableCurrencies.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            </div>
+          }
         />
 
         <div className="page-wrap" style={{ marginTop:"var(--topbar)", marginLeft: navWidth, flex:1 }}>
@@ -464,7 +533,7 @@ export default function PeachHome() {
             <div className="card" style={{width:"100%",marginBottom:4}}>
               <div className="card-header">
                 <span className="card-title">Latest from Peach</span>
-                <span className="card-link">See all →</span>
+                <span className="card-link" style={{color:"var(--black-25)",cursor:"default"}} title="Coming soon">See all →</span>
               </div>
               <div style={{display:"flex",flexDirection:"column",gap:0}}>
                 {[
@@ -479,7 +548,7 @@ export default function PeachHome() {
                   }}>
                     <span style={{fontSize:".7rem",fontWeight:600,color:"#C4B5AE",whiteSpace:"nowrap",minWidth:80}}>{item.date}</span>
                     <span style={{fontSize:".85rem",fontWeight:600,color:"#2B1911",flex:1}}>{item.headline}</span>
-                    <span style={{fontSize:".78rem",fontWeight:700,color:"#F56522",cursor:"pointer",whiteSpace:"nowrap",paddingLeft:42}}>Read →</span>
+                    <span style={{fontSize:".78rem",fontWeight:700,color:"#C4B5AE",whiteSpace:"nowrap",paddingLeft:42}} title="Coming soon">Read →</span>
                   </div>
                 ))}
               </div>
@@ -492,7 +561,7 @@ export default function PeachHome() {
               <div className="card" style={{flexShrink:0,minWidth:260}}>
                 <div className="card-header">
                   <span className="card-title">My Profile</span>
-                  <span className="card-link">Edit →</span>
+                  <span className="card-link" onClick={() => navigate("/settings")}>Edit →</span>
                 </div>
 
                 {/* Avatar + name */}
@@ -557,7 +626,7 @@ export default function PeachHome() {
                 <div className="card" style={{flex:"1 1 280px",minWidth:260,width:"auto"}}>
                   <div className="card-header">
                     <span className="card-title">Top Payment Methods</span>
-                    <span className="card-link">See all →</span>
+                    <span className="card-link" onClick={() => navigate("/payment-methods")}>See all →</span>
                   </div>
                   <div className="methods-list">
                     {MOCK_STATS.topMethods.map(m => (

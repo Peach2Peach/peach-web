@@ -60,13 +60,13 @@ const NAV_ITEMS = [
   { id:"market",   label:"Market",   icon:()=><IconMarket/> },
   { id:"trades",   label:"Trades",   icon:()=><IconTrades/> },
   { id:"create",   label:"Create",   icon:()=><IconCreate/> },
-  { id:"settings", label:"Settings", icon:()=><IconSettings/> },
   { id:"payment-methods", label:"Payments", icon:()=><IconCreditCard/> },
+  { id:"settings", label:"Settings", icon:()=><IconSettings/> },
 ];
 
 const NAV_ROUTES = { home:"/home", market:"/market", trades:"/trades", create:"/offer/new", settings:"/settings", "payment-methods":"/payment-methods" };
 
-function SideNav({ active, collapsed, onToggle, mobileOpen, onClose, onNavigate }) {
+function SideNav({ active, collapsed, onToggle, mobileOpen, onClose, onNavigate, mobilePriceSlot }) {
   return (
     <>
       <div className={`sidenav-backdrop${mobileOpen ? " open" : ""}`} onClick={onClose}/>
@@ -79,6 +79,9 @@ function SideNav({ active, collapsed, onToggle, mobileOpen, onClose, onNavigate 
             <span className="sidenav-label">{label}</span>
           </button>
         ))}
+        {mobilePriceSlot && (
+          <div className="sidenav-price-slot">{mobilePriceSlot}</div>
+        )}
       </nav>
     </>
   );
@@ -744,6 +747,7 @@ const CSS = `
     --black-25:#C4B5AE;--black-10:#EAE3DF;--black-5:#F4EEEB;
     --surface:#FFFFFF;--bg:#FFF9F6;--font:'Baloo 2',cursive;--topbar:56px;
   }
+  html{font-size:120%}
   body{font-family:var(--font);background:var(--bg);color:var(--black)}
 
   /* Topbar */
@@ -752,16 +756,21 @@ const CSS = `
     padding:0 20px;gap:12px;z-index:200}
   .logo-wordmark{font-size:1.22rem;font-weight:800;letter-spacing:-.02em;
     background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-  .topbar-price{display:flex;align-items:center;gap:6px;background:var(--primary-mild);
-    border-radius:999px;padding:4px 14px;font-size:.78rem;font-weight:600;margin-left:4px}
-  .price-label{color:var(--black-65)}
-  .price-val{color:var(--black)}
-  .price-sep{color:var(--black-25)}
+  .topbar-price{display:flex;align-items:center;gap:8px;background:linear-gradient(90deg,#FFBFA8,#FFD5BF);border-radius:999px;padding:5px 6px 5px 10px;font-size:.78rem;font-weight:600;color:var(--black);flex-shrink:0;margin-left:4px}
+  .topbar-price-main{font-weight:800;color:var(--black);white-space:nowrap}
+  .topbar-price-sats{font-weight:500;color:var(--black-65);white-space:nowrap}
+  .topbar-cur-select{position:relative;display:flex;align-items:center;gap:4px;background:rgba(255,255,255,0.45);border-radius:999px;padding:2px 9px;cursor:pointer}
+  .cur-select-inner{position:absolute;inset:0;opacity:0;cursor:pointer;font-size:.78rem;width:100%}
+  .cur-select-arrow{display:flex;align-items:center;pointer-events:none;color:var(--black-65);flex-shrink:0}
+  .cur-select-label{font-size:.76rem;font-weight:800;color:var(--black);pointer-events:none}
   .topbar-right{margin-left:auto;display:flex;align-items:center;gap:12px}
-  .updated-pill{display:flex;align-items:center;gap:5px;font-size:.73rem;font-weight:600;color:var(--black-65);
-    background:var(--black-5);border-radius:999px;padding:3px 10px}
-  .updated-dot{width:6px;height:6px;border-radius:50%;background:#65A519;flex-shrink:0}
   .avatar-peachid{display:flex;align-items:center;gap:8px}
+  .sidenav-price-slot{display:none;margin-top:auto;padding:12px 8px 8px;width:100%;border-top:1px solid var(--black-10)}
+  .mobile-price-pill{display:flex;align-items:center;gap:8px;background:linear-gradient(90deg,#FFBFA8,#FFD5BF);border-radius:12px;padding:10px 10px 10px 12px}
+  .mobile-price-text{display:flex;flex-direction:column;gap:1px;flex:1;min-width:0}
+  .mobile-price-main{font-size:.82rem;font-weight:800;color:var(--black);white-space:nowrap}
+  .mobile-price-sats{font-size:.68rem;font-weight:500;color:var(--black-65);white-space:nowrap}
+  .mobile-cur-select{flex-shrink:0}
   .peach-id{font-size:.68rem;font-weight:600;color:var(--black-65);font-family:monospace;
     background:var(--black-5);border-radius:999px;padding:3px 10px;display:none}
   @media(min-width:900px){.peach-id{display:block}}
@@ -776,7 +785,7 @@ const CSS = `
     background:transparent;cursor:pointer;color:var(--black-65);
     flex-shrink:0;transition:background .14s}
   .burger-btn:hover{background:var(--black-5)}
-  @media(max-width:480px){.burger-btn{display:flex}}
+  @media(max-width:767px){.burger-btn{display:flex}.topbar-price{display:none}.sidenav-price-slot{display:block}}
 
   /* Sidenav */
   .sidenav{
@@ -807,7 +816,7 @@ const CSS = `
   .sidenav-backdrop{display:none;position:fixed;inset:0;z-index:149;
     background:rgba(43,25,17,.4);animation:fadeIn .2s ease}
   .sidenav-backdrop.open{display:block}
-  @media(max-width:480px){
+  @media(max-width:767px){
     .sidenav{transform:translateX(-100%);width:220px;transition:transform .2s}
     .sidenav-mobile-open{transform:translateX(0)}
     .sidenav-backdrop.open{display:block}
@@ -817,7 +826,7 @@ const CSS = `
 
   /* Page layout */
   .page-wrap{margin-top:var(--topbar);margin-left:68px;padding:32px 28px;min-height:calc(100vh - 56px)}
-  @media(max-width:480px){.page-wrap{margin-left:0;padding:20px 16px}}
+  @media(max-width:767px){.page-wrap{margin-left:0;padding:20px 16px}}
 
   /* Page header */
   .page-header{display:flex;align-items:flex-start;gap:16px;margin-bottom:28px;flex-wrap:wrap}
@@ -1041,22 +1050,28 @@ export default function TradesDashboard() {
 
   const [collapsed, setCollapsed]       = useState(false);
   const [mobileOpen, setMobileOpen]     = useState(false);
-  const [btcPrice, setBtcPrice]         = useState(BTC_PRICE);
-  const [secondsAgo, setSecondsAgo]     = useState(0);
+  const [allPrices,           setAllPrices]           = useState({ EUR: BTC_PRICE });
+  const [availableCurrencies, setAvailableCurrencies] = useState(["EUR","CHF","GBP"]);
+  const [selectedCurrency,    setSelectedCurrency]    = useState("EUR");
+  const btcPrice = Math.round(allPrices[selectedCurrency] ?? BTC_PRICE);
 
-  // BTC price tick
   useEffect(() => {
-    const iv = setInterval(() => {
-      setSecondsAgo(s => {
-        if (s >= 15) { setBtcPrice(p => p + Math.round((Math.random() - .5) * 90)); return 0; }
-        return s + 1;
-      });
-    }, 1000);
+    async function fetchPrices() {
+      try {
+        const res = await fetch('https://api.peachbitcoin.com/v1/market/prices');
+        const data = await res.json();
+        if (data && typeof data === "object") {
+          setAllPrices(data);
+          setAvailableCurrencies(Object.keys(data).sort());
+        }
+      } catch {}
+    }
+    fetchPrices();
+    const iv = setInterval(fetchPrices, 30000);
     return () => clearInterval(iv);
   }, []);
 
-  const satsPerEur  = Math.round(SAT / btcPrice);
-  const updatedText = secondsAgo === 0 ? "Just now" : `${secondsAgo}s ago`;
+  const satsPerCur  = Math.round(SAT / btcPrice);
 
   // Daily limit mock: 340 EUR used out of 1000 EUR
   const LIMIT_TOTAL = 1000;
@@ -1128,14 +1143,18 @@ export default function TradesDashboard() {
         <PeachIcon size={28}/>
         <span className="logo-wordmark">Peach</span>
         <div className="topbar-price">
-          <span className="price-label">BTC/EUR</span>
-          <span className="price-val">€{btcPrice.toLocaleString()}</span>
-          <span className="price-sep">·</span>
-          <span className="price-label">sats/€</span>
-          <span className="price-val">{satsPerEur.toLocaleString()}</span>
+          <IcoBtc size={18}/>
+          <span className="topbar-price-main">{btcPrice.toLocaleString("fr-FR")} {selectedCurrency}</span>
+          <span className="topbar-price-sats">{satsPerCur.toLocaleString()} sats / {selectedCurrency.toLowerCase()}</span>
+          <div className="topbar-cur-select">
+            <span className="cur-select-label">{selectedCurrency}</span>
+            <svg className="cur-select-arrow" width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{pointerEvents:"none",flexShrink:0}}><polyline points="1,1 5,5 9,1"/></svg>
+            <select value={selectedCurrency} onChange={e => setSelectedCurrency(e.target.value)} className="cur-select-inner">
+              {availableCurrencies.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
         </div>
         <div className="topbar-right">
-          <div className="updated-pill"><span className="updated-dot"/>{updatedText}</div>
           <div className="avatar-peachid">
             <span className="peach-id">PEACH08476D23</span>
             <div className="avatar">PW<div className="avatar-badge">2</div></div>
@@ -1150,6 +1169,22 @@ export default function TradesDashboard() {
         mobileOpen={mobileOpen}
         onClose={() => setMobileOpen(false)}
         onNavigate={navigate}
+        mobilePriceSlot={
+          <div className="mobile-price-pill">
+            <IcoBtc size={16}/>
+            <div className="mobile-price-text">
+              <span className="mobile-price-main">{btcPrice.toLocaleString("fr-FR")} {selectedCurrency}</span>
+              <span className="mobile-price-sats">{satsPerCur.toLocaleString()} sats / {selectedCurrency.toLowerCase()}</span>
+            </div>
+            <div className="topbar-cur-select mobile-cur-select">
+              <span className="cur-select-label">{selectedCurrency}</span>
+              <svg className="cur-select-arrow" width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{pointerEvents:"none",flexShrink:0}}><polyline points="1,1 5,5 9,1"/></svg>
+              <select value={selectedCurrency} onChange={e => setSelectedCurrency(e.target.value)} className="cur-select-inner">
+                {availableCurrencies.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+        }
       />
 
       {/* ── PAGE ── */}
