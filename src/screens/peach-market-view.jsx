@@ -1,6 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-// ⚠️ react-router-dom removed for Claude.ai preview. Restore import for local dev.
 import { useNavigate } from "react-router-dom";
+
+// ─── TOPBAR PEACH ID (3 states: logged out / mock / regtest) ─────────────────
+function getTopbarPeachId() {
+  const auth = window.__PEACH_AUTH__;
+  if (auth?.token) {
+    const pub = auth.peachId || auth.profile?.publicKey || "";
+    return "Regtest: PEACH" + pub.slice(0, 8).toUpperCase();
+  }
+  return "MOCK: PEACH08476D23";
+}
 
 // ─── LOGO ─────────────────────────────────────────────────────────────────────
 const PeachIcon = ({ size = 28 }) => (
@@ -880,8 +889,8 @@ export default function PeachMarket() {
     try { return localStorage.getItem("peach_logged_in") !== "false"; } catch { return true; }
   });
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
-  const handleLogout = () => { window.__PEACH_AUTH__ = null; setIsLoggedIn(false); setShowAvatarMenu(false); navigate("/"); };
-  const handleLogin  = () => { navigate("/auth"); };
+  const handleLogout = () => { window.__PEACH_AUTH__ = null; setIsLoggedIn(false); setShowAvatarMenu(false); try { localStorage.setItem("peach_logged_in", "false"); } catch {} };
+  const handleLogin  = () => { setIsLoggedIn(true); try { localStorage.setItem("peach_logged_in", "true"); } catch {} };
   useEffect(() => {
     if (!showAvatarMenu) return;
     const close = (e) => { if (!e.target.closest(".avatar-menu-wrap")) setShowAvatarMenu(false); };
@@ -1386,7 +1395,7 @@ export default function PeachMarket() {
             {isLoggedIn ? (
               <div className="avatar-menu-wrap">
                 <div className="avatar-peachid" onClick={(e) => { e.stopPropagation(); setShowAvatarMenu(v => !v); }}>
-                  <span className="peach-id">PEACH08476D23</span>
+                  <span className="peach-id">{getTopbarPeachId()}</span>
                   <div className="avatar">PW<div className="avatar-badge">2</div></div>
                 </div>
                 {showAvatarMenu && (

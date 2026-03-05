@@ -1,6 +1,15 @@
 import { useState, useEffect, useRef } from "react";
-// ⚠️ react-router-dom removed for Claude.ai preview. Restore import for local dev.
 import { useNavigate } from "react-router-dom";
+
+// ─── TOPBAR PEACH ID (3 states: logged out / mock / regtest) ─────────────────
+function getTopbarPeachId() {
+  const auth = window.__PEACH_AUTH__;
+  if (auth?.token) {
+    const pub = auth.peachId || auth.profile?.publicKey || "";
+    return "Regtest: PEACH" + pub.slice(0, 8).toUpperCase();
+  }
+  return "MOCK: PEACH08476D23";
+}
 
 // ─── INPUT VALIDATORS (inline for Claude.ai preview; import from peach-validators.js for GitHub build) ──
 const IBAN_RE = /^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/;
@@ -233,7 +242,8 @@ function methodLabel(pm) {
   return "—";
 }
 
-// Mock saved PMs (would come from GET /user/me/paymentMethods)
+// Mock saved PMs — used as fallback when not regtest-authenticated.
+// When window.__PEACH_AUTH__ is set, replaced by GET /user/me/paymentMethods on mount.
 const MOCK_SAVED = [
   { id:"pm1", methodId:"sepa",    name:"SEPA",    currencies:["EUR","CHF"], details:{ holder:"Peter Weber", iban:"DE89 3704 0044 0532 0130 00" }},
   { id:"pm2", methodId:"revolut", name:"Revolut",  currencies:["EUR","GBP"], details:{ username:"@peterweber" }},
@@ -693,10 +703,11 @@ export default function PeachPaymentMethods() {
 
   // ── AUTH STATE (persisted via localStorage) ──
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    if (window.__PEACH_AUTH__) return true;
     try { return localStorage.getItem("peach_logged_in") !== "false"; } catch { return true; }
   });
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
-  const handleLogout = () => { setIsLoggedIn(false); setShowAvatarMenu(false); try { localStorage.setItem("peach_logged_in", "false"); } catch {} };
+  const handleLogout = () => { window.__PEACH_AUTH__ = null; setIsLoggedIn(false); setShowAvatarMenu(false); try { localStorage.setItem("peach_logged_in", "false"); } catch {} };
   const handleLogin = () => { setIsLoggedIn(true); try { localStorage.setItem("peach_logged_in", "true"); } catch {} };
   useEffect(() => {
     if (!showAvatarMenu) return;
@@ -718,6 +729,7 @@ export default function PeachPaymentMethods() {
 
   // User's saved PMs
   const [savedMethods, setSavedMethods] = useState(MOCK_SAVED);
+  const [savedLoading, setSavedLoading] = useState(false);
 
   // Modal states
   const [showAddFlow, setShowAddFlow]   = useState(false);
@@ -761,6 +773,55 @@ export default function PeachPaymentMethods() {
       }
     }
     fetchMethods();
+  }, []);
+
+  // Fetch user's saved payment methods (authenticated)
+  useEffect(() => {
+    const auth = window.__PEACH_AUTH__;
+    if (!auth?.token) return; // not regtest-authenticated — keep mock data
+
+    setSavedLoading(true);
+    const baseUrl = auth.baseUrl || "https://api-regtest.peachbitcoin.com/v1";
+
+    (async () => {
+      try {
+        const res = await fetch(`${baseUrl}/user/me/paymentMethods`, {
+          headers: { "Authorization": `Bearer ${auth.token}` },
+        });
+        if (!res.ok) throw new Error(`${res.status}`);
+        const data = await res.json();
+
+        // Normalise API response into our internal shape:
+        //   { id, methodId, name, currencies, details }
+        // The exact API shape isn't documented — adapt once confirmed.
+        if (Array.isArray(data)) {
+          const normalised = data.map((pm, i) => ({
+            id:         pm.id        || `api-pm-${i}`,
+            methodId:   pm.methodId  || pm.type || pm.id || "unknown",
+            name:       pm.name      || pm.label || pm.type || "Payment Method",
+            currencies: pm.currencies || [],
+            details:    pm.details   || pm.data || {},
+          }));
+          setSavedMethods(normalised);
+        } else if (data && typeof data === "object") {
+          // API may return { [methodId]: details } map — flatten
+          const normalised = Object.entries(data).map(([key, val], i) => ({
+            id:         val?.id || `api-pm-${i}`,
+            methodId:   key,
+            name:       val?.name || val?.label || key,
+            currencies: val?.currencies || [],
+            details:    val?.details || val?.data || val || {},
+          }));
+          setSavedMethods(normalised);
+        }
+        // else: unexpected shape — keep MOCK_SAVED
+      } catch (err) {
+        console.warn("[PaymentMethods] Failed to fetch saved PMs:", err.message);
+        // Keep mock data as fallback
+      } finally {
+        setSavedLoading(false);
+      }
+    })();
   }, []);
 
   // Save handler (add or edit)
@@ -819,7 +880,7 @@ export default function PeachPaymentMethods() {
           {isLoggedIn ? (
             <div className="avatar-menu-wrap">
               <div className="avatar-peachid" onClick={(e) => { e.stopPropagation(); setShowAvatarMenu(v => !v); }}>
-                <span className="peach-id">PEACH08476D23</span>
+                <span className="peach-id">{getTopbarPeachId()}</span>
                 <div className="avatar">PW<div className="avatar-badge">2</div></div>
               </div>
               {showAvatarMenu && (
@@ -885,7 +946,11 @@ export default function PeachPaymentMethods() {
         </div>
 
         {/* Saved methods list */}
-        {savedMethods.length === 0 ? (
+        {savedLoading ? (
+          <div className="pm-empty-state">
+            <div style={{ fontSize:"1.1rem", color:"var(--black-65)", fontWeight:600 }}>Loading your payment methods…</div>
+          </div>
+        ) : savedMethods.length === 0 ? (
           <div className="pm-empty-state">
             <div className="pm-empty-icon">💳</div>
             <div className="pm-empty-title">No payment methods yet</div>
@@ -974,7 +1039,7 @@ export default function PeachPaymentMethods() {
             </div>
             <div className="auth-popup-title">Authentication required</div>
             <div className="auth-popup-sub">Please authenticate to manage your payment methods</div>
-            <button className="auth-popup-btn" onClick={() => navigate("/auth")}>Log in</button>
+            <button className="auth-popup-btn" onClick={handleLogin}>Log in</button>
           </div>
         </div>
       )}

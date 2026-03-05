@@ -1,6 +1,15 @@
 import { useState, useEffect } from "react";
-// ⚠️ react-router-dom removed for Claude.ai preview. Restore import for local dev.
 import { useNavigate } from "react-router-dom";
+
+// ─── TOPBAR PEACH ID (3 states: logged out / mock / regtest) ─────────────────
+function getTopbarPeachId() {
+  const auth = window.__PEACH_AUTH__;
+  if (auth?.token) {
+    const pub = auth.peachId || auth.profile?.publicKey || "";
+    return "Regtest: PEACH" + pub.slice(0, 8).toUpperCase();
+  }
+  return "MOCK: PEACH08476D23";
+}
 
 // ─── INPUT VALIDATORS (inline for Claude.ai preview; import from peach-validators.js for GitHub build) ──
 
@@ -1296,7 +1305,7 @@ export default function SettingsScreen() {
     try { return localStorage.getItem("peach_logged_in") !== "false"; } catch { return true; }
   });
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
-  const handleLogout = () => { setIsLoggedIn(false); setShowAvatarMenu(false); try { localStorage.setItem("peach_logged_in", "false"); } catch {} };
+  const handleLogout = () => { window.__PEACH_AUTH__ = null; setIsLoggedIn(false); setShowAvatarMenu(false); try { localStorage.setItem("peach_logged_in", "false"); } catch {} };
   const handleLogin = () => { setIsLoggedIn(true); try { localStorage.setItem("peach_logged_in", "true"); } catch {} };
   useEffect(() => {
     if (!showAvatarMenu) return;
@@ -1451,7 +1460,7 @@ export default function SettingsScreen() {
             {isLoggedIn ? (
               <div className="avatar-menu-wrap">
                 <div className="avatar-peachid" onClick={(e) => { e.stopPropagation(); setShowAvatarMenu(v => !v); }}>
-                  <span className="peach-id">PEACH08476D23</span>
+                  <span className="peach-id">{getTopbarPeachId()}</span>
                   <div className="avatar">PW<div className="avatar-badge">2</div></div>
                 </div>
                 {showAvatarMenu && (
@@ -1512,7 +1521,7 @@ export default function SettingsScreen() {
               </div>
               <div className="auth-popup-title">Authentication required</div>
               <div className="auth-popup-sub">Please authenticate to access your settings and preferences</div>
-              <button className="auth-popup-btn" onClick={() => navigate("/auth")}>Log in</button>
+              <button className="auth-popup-btn" onClick={handleLogin}>Log in</button>
             </div>
           </div>
         )}

@@ -1,5 +1,16 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+const useParams = () => ({});
+
+// ─── TOPBAR PEACH ID (3 states: logged out / mock / regtest) ─────────────────
+function getTopbarPeachId() {
+  const auth = window.__PEACH_AUTH__;
+  if (auth?.token) {
+    const pub = auth.peachId || auth.profile?.publicKey || "";
+    return "Regtest: PEACH" + pub.slice(0, 8).toUpperCase();
+  }
+  return "MOCK: PEACH08476D23";
+}
 
 // ─── LOGO ─────────────────────────────────────────────────────────────────────
 const PeachIcon = ({ size = 28 }) => (
@@ -1597,7 +1608,7 @@ const CSS = `
     border-right:1px solid var(--black-10);
   }
   .split-left-full{width:100%;border-right:none;max-width:600px;margin:0 auto}
-  .split-right{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+  .split-right{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;padding-bottom:var(--stepper-h)}
 
   /* ── Mobile tabs ── */
   .mobile-tabs{display:none}
@@ -1742,6 +1753,21 @@ export default function TradeExecution() {
   const [selectedCurrency,    setSelectedCurrency]    = useState("EUR");
   const btcPrice = Math.round(allPrices[selectedCurrency] ?? BTC_PRICE);
 
+  // ── AUTH STATE ──
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    if (window.__PEACH_AUTH__) return true;
+    try { return localStorage.getItem("peach_logged_in") !== "false"; } catch { return true; }
+  });
+  const [showAvatarMenu, setShowAvatarMenu] = useState(false);
+  const handleLogout = () => { window.__PEACH_AUTH__ = null; setIsLoggedIn(false); setShowAvatarMenu(false); try { localStorage.setItem("peach_logged_in", "false"); } catch {} };
+  const handleLogin  = () => { setIsLoggedIn(true); try { localStorage.setItem("peach_logged_in", "true"); } catch {} };
+  useEffect(() => {
+    if (!showAvatarMenu) return;
+    const close = (e) => { if (!e.target.closest(".avatar-menu-wrap")) setShowAvatarMenu(false); };
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [showAvatarMenu]);
+
   // ── LIVE CONTRACT DATA ──
   const [liveContract, setLiveContract] = useState(null);
   const [liveMessages, setLiveMessages] = useState(null);
@@ -1872,13 +1898,29 @@ export default function TradeExecution() {
           </div>
         </div>
         <div className="topbar-right">
-          <div className="avatar-peachid">
-            <span className="peach-id">PEACH08476D23</span>
-            <div className="avatar">
-              N
-              <div className="avatar-badge">{unreadCount}</div>
+          {isLoggedIn ? (
+            <div className="avatar-menu-wrap" style={{position:"relative"}}>
+              <div className="avatar-peachid" onClick={(e) => { e.stopPropagation(); setShowAvatarMenu(v => !v); }} style={{cursor:"pointer"}}>
+                <span className="peach-id">{getTopbarPeachId()}</span>
+                <div className="avatar">
+                  N
+                  <div className="avatar-badge">{unreadCount}</div>
+                </div>
+              </div>
+              {showAvatarMenu && (
+                <div style={{position:"absolute",top:"110%",right:0,background:"white",borderRadius:12,boxShadow:"0 4px 20px rgba(0,0,0,.12)",padding:6,minWidth:140,zIndex:300}}>
+                  <button className="avatar-menu-item danger" onClick={handleLogout}
+                    style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"10px 14px",border:"none",background:"none",borderRadius:8,cursor:"pointer",fontSize:".82rem",fontWeight:700,color:"#DF321F",fontFamily:"Baloo 2, cursive"}}>
+                    Log out
+                  </button>
+                </div>
+              )}
             </div>
-          </div>
+          ) : (
+            <div className="avatar-login-btn" onClick={handleLogin} style={{cursor:"pointer",display:"flex",alignItems:"center",gap:6,padding:"6px 14px",borderRadius:999,background:"linear-gradient(135deg,#F56522,#F5A522)",color:"white",fontWeight:800,fontSize:".78rem",fontFamily:"Baloo 2, cursive"}}>
+              <span>Log in</span>
+            </div>
+          )}
         </div>
       </header>
 

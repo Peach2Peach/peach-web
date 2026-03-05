@@ -1,6 +1,15 @@
 import { useState, useEffect } from "react";
-// ⚠️ react-router-dom removed for Claude.ai preview. Restore import for local dev.
 import { useNavigate } from "react-router-dom";
+
+// ─── TOPBAR PEACH ID (3 states: logged out / mock / regtest) ─────────────────
+function getTopbarPeachId() {
+  const auth = window.__PEACH_AUTH__;
+  if (auth?.token) {
+    const pub = auth.peachId || auth.profile?.publicKey || "";
+    return "Regtest: PEACH" + pub.slice(0, 8).toUpperCase();
+  }
+  return "MOCK: PEACH08476D23";
+}
 
 const BTC_PRICE_INIT = 87432;
 const SAT = 100_000_000;
@@ -1141,8 +1150,8 @@ export default function OfferCreation({ initialType="buy" }) {
     try { return localStorage.getItem("peach_logged_in") !== "false"; } catch { return true; }
   });
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
-  const handleLogout = () => { window.__PEACH_AUTH__ = null; setIsLoggedIn(false); setShowAvatarMenu(false); navigate("/"); };
-  const handleLogin  = () => { navigate("/auth"); };
+  const handleLogout = () => { window.__PEACH_AUTH__ = null; setIsLoggedIn(false); setShowAvatarMenu(false); try { localStorage.setItem("peach_logged_in", "false"); } catch {} };
+  const handleLogin  = () => { setIsLoggedIn(true); try { localStorage.setItem("peach_logged_in", "true"); } catch {} };
   useEffect(() => {
     if (!showAvatarMenu) return;
     const close = (e) => { if (!e.target.closest(".avatar-menu-wrap")) setShowAvatarMenu(false); };
@@ -1242,7 +1251,7 @@ export default function OfferCreation({ initialType="buy" }) {
           {isLoggedIn ? (
             <div className="avatar-menu-wrap">
               <div className="avatar-peachid" onClick={(e) => { e.stopPropagation(); setShowAvatarMenu(v => !v); }}>
-                <span className="peach-id">PEACH08476D23</span>
+                <span className="peach-id">{getTopbarPeachId()}</span>
                 <div className="avatar">PW<div className="avatar-badge">2</div></div>
               </div>
               {showAvatarMenu && (
@@ -1351,7 +1360,7 @@ export default function OfferCreation({ initialType="buy" }) {
           {isLoggedIn ? (
             <div className="avatar-menu-wrap">
               <div className="avatar-peachid" onClick={(e) => { e.stopPropagation(); setShowAvatarMenu(v => !v); }}>
-                <span className="peach-id">PEACH08476D23</span>
+                <span className="peach-id">{getTopbarPeachId()}</span>
                 <div className="avatar">PW<div className="avatar-badge">2</div></div>
               </div>
               {showAvatarMenu && (
@@ -1958,7 +1967,7 @@ export default function OfferCreation({ initialType="buy" }) {
             </div>
             <div className="auth-popup-title">Authentication required</div>
             <div className="auth-popup-sub">Please authenticate to create offers and start trading</div>
-            <button className="auth-popup-btn" onClick={() => navigate("/auth")}>Log in</button>
+            <button className="auth-popup-btn" onClick={handleLogin}>Log in</button>
           </div>
         </div>
       )}

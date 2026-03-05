@@ -1,6 +1,15 @@
 import { useState, useEffect } from "react";
-// ⚠️ react-router-dom removed for Claude.ai preview. Restore import for local dev.
 import { useNavigate } from "react-router-dom";
+
+// ─── TOPBAR PEACH ID (3 states: logged out / mock / regtest) ─────────────────
+function getTopbarPeachId() {
+  const auth = window.__PEACH_AUTH__;
+  if (auth?.token) {
+    const pub = auth.peachId || auth.profile?.publicKey || "";
+    return "Regtest: PEACH" + pub.slice(0, 8).toUpperCase();
+  }
+  return "MOCK: PEACH08476D23";
+}
 
 // ─── LOGO ─────────────────────────────────────────────────────────────────────
 const PeachIcon = ({ size = 28 }) => (
@@ -525,11 +534,11 @@ export default function PeachHome() {
     window.__PEACH_AUTH__ = null;
     setIsLoggedIn(false);
     setShowAvatarMenu(false);
-    navigate("/");
+    try { localStorage.setItem("peach_logged_in", "false"); } catch {}
   };
   const handleLogin = () => {
     setIsLoggedIn(true);
-    navigate("/auth");
+    try { localStorage.setItem("peach_logged_in", "true"); } catch {}
   };
 
   // Close avatar menu on outside click
@@ -595,7 +604,7 @@ export default function PeachHome() {
             {isLoggedIn ? (
               <div className="avatar-menu-wrap">
                 <div className="avatar-peachid" onClick={(e) => { e.stopPropagation(); setShowAvatarMenu(v => !v); }}>
-                  <span className="peach-id">{user.peachId}</span>
+                  <span className="peach-id">{getTopbarPeachId()}</span>
                   <div className="avatar">PW<div className="avatar-badge">2</div></div>
                 </div>
                 {showAvatarMenu && (
@@ -670,7 +679,7 @@ export default function PeachHome() {
                     <p>Buy and sell Bitcoin peer-to-peer, without KYC</p>
                   </div>
                   <div className="welcome-actions">
-                    <button className="btn-grad" onClick={() => navigate("/auth")}>Log in</button>
+                    <button className="btn-grad" onClick={handleLogin}>Log in</button>
                   </div>
                 </>
               )}
@@ -820,7 +829,7 @@ export default function PeachHome() {
                   <div className="auth-overlay">
                     <svg width="32" height="32" viewBox="0 0 32 32" fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round"><circle cx="16" cy="12" r="5"/><path d="M6 28c0-5.5 4.5-10 10-10s10 4.5 10 10"/></svg>
                     <span className="auth-overlay-text">Please authenticate<br/>to view your profile</span>
-                    <button className="auth-overlay-btn" onClick={() => navigate("/auth")}>Log in</button>
+                    <button className="auth-overlay-btn" onClick={handleLogin}>Log in</button>
                   </div>
                 </div>
               )}

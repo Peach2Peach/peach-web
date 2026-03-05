@@ -1,6 +1,15 @@
 import { useState, useEffect, useRef } from "react";
-// ⚠️ react-router-dom removed for Claude.ai preview. Restore import for local dev.
 import { useNavigate } from "react-router-dom";
+
+// ─── TOPBAR PEACH ID (3 states: logged out / mock / regtest) ─────────────────
+function getTopbarPeachId() {
+  const auth = window.__PEACH_AUTH__;
+  if (auth?.token) {
+    const pub = auth.peachId || auth.profile?.publicKey || "";
+    return "Regtest: PEACH" + pub.slice(0, 8).toUpperCase();
+  }
+  return "MOCK: PEACH08476D23";
+}
 
 // ─── LOGO ─────────────────────────────────────────────────────────────────────
 const PeachIcon = ({ size = 28 }) => (
@@ -437,7 +446,7 @@ function Badge({ label, icon }) {
 }
 
 // ─── TRADE CARD — Variant C ───────────────────────────────────────────────────
-function TradeCard({ trade, onSelect }) {
+function TradeCard({ trade, onSelect, layout = "grid" }) {
   const statusKey = trade.kind === "contract" ? trade.tradeStatus : trade.kind;
   const pill = PILL_CONFIG[statusKey] || PILL_CONFIG.open_offer;
   const isBuy = trade.direction === "buy";
@@ -462,6 +471,47 @@ function TradeCard({ trade, onSelect }) {
   }
   const isUrgentTime = trade.paymentExpectedBy && (trade.paymentExpectedBy - Date.now()) < 2 * 3600_000;
 
+  // ── LIST LAYOUT ──
+  if (layout === "list") {
+    return (
+      <div className="trade-row" onClick={() => onSelect && onSelect(trade.id)}>
+        <span className={`direction-badge direction-${isBuy ? "buy" : "sell"}`}>
+          {isBuy ? "BUY" : "SELL"}
+        </span>
+        <span className="trade-row-id">{trade.id.toUpperCase()}</span>
+        <span className="trade-row-peer">
+          {trade.counterparty ? trade.counterparty.name : "—"}
+        </span>
+        <span className="trade-row-amount">
+          {hasSatsRange ? (
+            <span style={{ display:"inline-flex", alignItems:"center", gap:3 }}>
+              <IcoBtc size={12}/>
+              <span>{trade.amount[0].toLocaleString("fr-FR")}–{trade.amount[1].toLocaleString("fr-FR")}</span>
+            </span>
+          ) : (
+            <SatsAmount sats={trade.amount}/>
+          )}
+        </span>
+        <span className="trade-row-fiat">{fiatStr()}</span>
+        <span className={`trade-row-time${isUrgentTime ? " urgent" : ""}`}>
+          <IconClock/> {timeStr()}
+        </span>
+        {trade.unread > 0 ? (
+          <div className="unread-badge">
+            <span style={{ lineHeight:1 }}>{trade.unread}</span>
+            <IconMsg/>
+          </div>
+        ) : (
+          <span></span>
+        )}
+        <span className="trade-row-pill" style={{ background: pill.bg, color: pill.color }}>
+          {pill.label}
+        </span>
+      </div>
+    );
+  }
+
+  // ── GRID LAYOUT (default) ──
   return (
     <div className="trade-card-v3" onClick={() => onSelect && onSelect(trade.id)}>
 
@@ -1017,6 +1067,53 @@ const CSS = `
     font-weight:600;font-size:.82rem;
   }
 
+  /* ── View mode toggle ── */
+  .view-toggle{display:flex;gap:2px;background:var(--bg);border-radius:10px;padding:3px;margin-bottom:12px;align-self:flex-end;width:fit-content;margin-left:auto}
+  .view-toggle-btn{
+    width:32px;height:32px;border:none;border-radius:8px;background:none;
+    cursor:pointer;display:flex;align-items:center;justify-content:center;
+    color:var(--black-65);transition:all .15s;
+  }
+  .view-toggle-btn:hover{color:var(--black)}
+  .view-toggle-btn.active{background:var(--surface);color:var(--primary);box-shadow:0 1px 4px rgba(0,0,0,.08)}
+
+  /* ── List layout ── */
+  .cards-list{display:flex;flex-direction:column;gap:0;border:1.5px solid var(--black-10);border-radius:14px;overflow:hidden;background:var(--surface)}
+  .list-header{
+    display:grid;grid-template-columns:54px 90px 1fr 160px 110px 130px 40px 120px;
+    align-items:center;gap:10px;padding:10px 15px;
+    font-size:.68rem;font-weight:700;color:var(--black-65);text-transform:uppercase;letter-spacing:.04em;
+    background:var(--bg);border-bottom:1px solid var(--black-10);
+  }
+  .trade-row{
+    display:grid;grid-template-columns:54px 90px 1fr 160px 110px 130px 40px 120px;
+    align-items:center;gap:10px;padding:11px 15px;
+    cursor:pointer;transition:background .12s;border-bottom:1px solid var(--black-5);
+  }
+  .trade-row:last-child{border-bottom:none}
+  .trade-row:hover{background:var(--bg)}
+  .trade-row-id{font-size:.72rem;font-weight:700;color:var(--black-65);font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .trade-row-peer{font-size:.82rem;font-weight:600;color:var(--black);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .trade-row-amount{font-size:.82rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .trade-row-fiat{font-size:.78rem;font-weight:600;color:var(--black-75);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .trade-row-time{font-size:.7rem;color:var(--black-65);display:flex;align-items:center;gap:3px;white-space:nowrap}
+  .trade-row-time.urgent{color:var(--error)}
+  .trade-row-pill{
+    font-size:.7rem;font-weight:800;font-family:var(--font);
+    padding:5px 10px;border-radius:999px;text-align:center;white-space:nowrap;
+  }
+  @media(max-width:900px){
+    .list-header{display:none}
+    .trade-row{
+      grid-template-columns:50px 1fr auto;gap:6px;padding:12px 14px;
+    }
+    .trade-row-id,.trade-row-fiat,.trade-row-time{display:none}
+    .trade-row-peer{font-size:.78rem}
+  }
+  @media(max-width:640px){
+    .view-toggle{margin-bottom:8px}
+  }
+
   /* History export button */
   .hist-export-btn{
     background:var(--surface);border:1.5px solid var(--black-10);border-radius:999px;
@@ -1114,6 +1211,7 @@ export default function TradesDashboard() {
   const [filterMethods, setFilterMethods]     = useState([]);
   const [filterCurrencies, setFilterCurrencies] = useState([]);
   const [filterStatuses, setFilterStatuses]   = useState([]);
+  const [viewMode, setViewMode]               = useState("grid"); // "grid" | "list"
 
   const [collapsed, setCollapsed]       = useState(false);
   const [mobileOpen, setMobileOpen]     = useState(false);
@@ -1128,8 +1226,8 @@ export default function TradesDashboard() {
     try { return localStorage.getItem("peach_logged_in") !== "false"; } catch { return true; }
   });
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
-  const handleLogout = () => { window.__PEACH_AUTH__ = null; setIsLoggedIn(false); setShowAvatarMenu(false); navigate("/"); };
-  const handleLogin  = () => { navigate("/auth"); };
+  const handleLogout = () => { window.__PEACH_AUTH__ = null; setIsLoggedIn(false); setShowAvatarMenu(false); try { localStorage.setItem("peach_logged_in", "false"); } catch {} };
+  const handleLogin  = () => { setIsLoggedIn(true); try { localStorage.setItem("peach_logged_in", "true"); } catch {} };
   useEffect(() => {
     if (!showAvatarMenu) return;
     const close = (e) => { if (!e.target.closest(".avatar-menu-wrap")) setShowAvatarMenu(false); };
@@ -1312,7 +1410,7 @@ export default function TradesDashboard() {
           {isLoggedIn ? (
             <div className="avatar-menu-wrap">
               <div className="avatar-peachid" onClick={(e) => { e.stopPropagation(); setShowAvatarMenu(v => !v); }}>
-                <span className="peach-id">PEACH08476D23</span>
+                <span className="peach-id">{getTopbarPeachId()}</span>
                 <div className="avatar">PW<div className="avatar-badge">2</div></div>
               </div>
               {showAvatarMenu && (
@@ -1469,6 +1567,18 @@ export default function TradesDashboard() {
               )}
             </div>
 
+            {/* View mode toggle */}
+            <div className="view-toggle">
+              <button className={`view-toggle-btn${viewMode === "grid" ? " active" : ""}`}
+                onClick={() => setViewMode("grid")} title="Grid view">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>
+              </button>
+              <button className={`view-toggle-btn${viewMode === "list" ? " active" : ""}`}
+                onClick={() => setViewMode("list")} title="List view">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><line x1="1" y1="3" x2="15" y2="3"/><line x1="1" y1="8" x2="15" y2="8"/><line x1="1" y1="13" x2="15" y2="13"/></svg>
+              </button>
+            </div>
+
             {/* Cards */}
             {sortedFiltered.length === 0 ? (
               <div className="empty-state">
@@ -1481,9 +1591,23 @@ export default function TradesDashboard() {
                   }
                 </div>
               </div>
+            ) : viewMode === "list" ? (
+              <div className="cards-list">
+                <div className="list-header">
+                  <span></span>
+                  <span>ID</span>
+                  <span>Counterparty</span>
+                  <span>Amount</span>
+                  <span>Fiat</span>
+                  <span>Time</span>
+                  <span>Chat</span>
+                  <span>Status</span>
+                </div>
+                {sortedFiltered.map(t => <TradeCard key={t.id} trade={t} layout="list" onSelect={(id) => navigate(`/trade/${id}`)}/>)}
+              </div>
             ) : (
               <div className="cards-grid">
-                {sortedFiltered.map(t => <TradeCard key={t.id} trade={t} onSelect={(id) => navigate(`/trade/${id}`)}/>)}
+                {sortedFiltered.map(t => <TradeCard key={t.id} trade={t} layout="grid" onSelect={(id) => navigate(`/trade/${id}`)}/>)}
               </div>
             )}
           </>
@@ -1504,7 +1628,7 @@ export default function TradesDashboard() {
             </div>
             <div className="auth-popup-title">Authentication required</div>
             <div className="auth-popup-sub">Please authenticate to view your trades and manage active orders</div>
-            <button className="auth-popup-btn" onClick={() => navigate("/auth")}>Log in</button>
+            <button className="auth-popup-btn" onClick={handleLogin}>Log in</button>
           </div>
         </div>
       )}
