@@ -22,3 +22,6 @@ Thumbs.db
 .env.*.local
 
 src/peach-api-config.js
+
+# Claude instructions (local only)
+CLAUDE.md
