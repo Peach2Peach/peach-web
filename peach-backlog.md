@@ -31,8 +31,16 @@ When an offer has incoming trade requests, the user sees a list of requesters an
 
 - Seller sees list of requesters with: rep · badges · trade count
 - Can view each requester's full profile before deciding
-- Accept one → moves to `matched` state (trade execution begins)
+- Accept one → creates a Contract (trade execution begins on v1)
 - Others are automatically declined → their offers return to market
+
+**API endpoints (all v069):**
+- `GET /v069/{buyOffer|sellOffer}/{id}/tradeRequestReceived` — list incoming trade requests
+- `GET /v069/{buyOffer|sellOffer}/{id}/tradeRequestReceived/{userId}` — get specific request details
+- `POST /v069/{buyOffer|sellOffer}/{id}/tradeRequestReceived/{userId}/accept` — accept (creates Contract)
+- `DELETE /v069/{buyOffer|sellOffer}/{id}/tradeRequestReceived/{userId}` — reject
+
+**Note:** Once accepted, the resulting Contract is managed via v1 endpoints (`/v1/contract/:id`).
 
 ---
 
@@ -45,6 +53,18 @@ Triggered when a trade is cancelled and the seller needs to recover escrowed fun
 - Broadcast signed transaction: `POST /offer/:offerId/refund`
 
 ⚠️ **This is the most technically complex screen.** Client-side Bitcoin transaction signing in the browser is a significant engineering dependency. Requires an engineering spike before starting.
+
+---
+
+## Wallet Visualization (read-only)
+
+Display wallet balance and UTXOs using the user's xpub — no signing capability, just a read-only view of the user's wallet.
+
+- Derive addresses from xpub using BIP32 (e.g. bitcoinjs-lib)
+- Query a public blockchain API (mempool.space or blockstream.info) for address balances and UTXOs
+- Display total balance in Peach standard Bitcoin format + list of UTXOs
+
+⚠️ **Blocked:** `xpub` is not currently included in `window.__PEACH_AUTH__`. The login handshake (QR code flow from mobile app) needs a backend/protocol change to pass the xpub to the browser session. Frontend work can begin once the xpub is available in auth.
 
 ---
 
@@ -109,10 +129,10 @@ These rows exist in the Settings screen but navigate to placeholder/empty views.
 
 ### Payment Methods (`peach-payment-methods.jsx`)
 - ✅ **Wire PM fetch** — PMs fetched from `GET /v069/selfUser` (PGP-encrypted in `encryptedPaymentData` field). Decrypted client-side via `src/utils/pgp.js`. Shows real PMs on regtest, mock data when logged out, "Failed to load payment data" error card on fetch failure. Same pattern in offer-creation and market-view.
-- ⚠️ **PM save/delete endpoints unknown** — no explicit POST/PUT/DELETE for individual PM CRUD discovered. **Confirm with backend engineer** how PM save and delete work before wiring those calls.
+- ✅ **PM save/sync** — PMs are serialised, PGP-encrypted + signed, and sent via `POST /v069/selfUser/encryptedPaymentData` with `{ encryptedPaymentData, encryptedPaymentDataSignature }`. Persists across refresh — confirmed working on regtest. Note: the mobile app only pushes PMs to the server (local-first model, never reads them back). The web app reads + writes since it has no persistent local storage.
 
 ### Trades Dashboard (`peach-trades-dashboard.jsx`)
-- **List view row layout needs UI rework** — current list rows are functional but visually rough. Columns feel cramped, amount/fiat/status alignment needs polish, and the overall row design doesn't scan well. Revisit the row layout with a design pass — consider a purpose-built compact row component rather than squeezing the grid card data into columns.
+- 🟡 **Pending Offers tab — render offers waiting for matches** — The Pending Offers tab fetches from both V1 and V069, but needs to correctly display offers that are waiting for matches (status: `hasMatchesAvailable`, `waitingForTradeRequest`, `searchingForPeer`, `offerPublished`, `fundEscrow`). Verify that these offers render properly with real API data and that the user can navigate to match/accept flows from this tab.
 
 ---
 
@@ -124,3 +144,4 @@ These are not UI screens but are blockers for specific features:
 - **Chat encryption key compatibility** — the mobile app keypair must be importable or derivable in the browser. Resolve during engineering spike before building chat encryption.
 - **BIP322 signature verification** — required for Custom Payout Wallet (and Refund Address) to verify the user controls the submitted address. Implement server-side using a BIP322-compatible library before wiring the address save endpoints.
 - **Dispute symmetric key encryption** — opening a dispute requires encrypting the chat's symmetric key with the platform's PGP public key (from `GET /info`), using openpgp.js.
+- **`useApi()` v069 support** — as more v069 calls are added (trade requests, offer creation), consider adding a version parameter to `useApi()` to avoid manual URL string manipulation (`auth.baseUrl.replace(/\/v1$/, '/v069')`) in every screen.

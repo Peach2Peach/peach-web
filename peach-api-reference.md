@@ -83,7 +83,7 @@ First call: `POST /user/register`. Subsequently: `POST /user/auth`.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/offer/:offerId` | Get public details of an offer. |
-| POST | `/offer/search` | Search offers. Body: `{ type, meansOfPayment, ... }`, filters: `{ sortBy, size, ... }`. |
+| POST | `/offer/search` | Search offers. Body: `{ type, meansOfPayment, ... }`, filters: `{ sortBy, size, ... }`. **Note:** `size` defaults to ~2; pass `size: 50` to get a full page of results. |
 
 ---
 
@@ -92,7 +92,7 @@ First call: `POST /user/register`. Subsequently: `POST /user/auth`.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/offers` | Get all own offers. |
-| GET | `/offers/summary` | Get summaries of own offers. |
+| GET | `/offers/summary` | Get summaries of own offers. **Returns historical offers** (completed, cancelled, etc.) — not pending/active ones. Each offer has `type: "ask"` (sell) or `type: "bid"` (buy), and a `tradeStatus` field. |
 | GET | `/offer/:offerId/details` | Get full private details of own offer. |
 | POST | `/offer` | Create a buy offer (bid) or sell offer (ask). Buy body: `{ type:"bid", releaseAddress, paymentData, meansOfPayment, amount, maxPremium, ... }`. Sell body: `{ type:"ask", escrowPublicKey, meansOfPayment, amount, premium, ... }`. |
 | PATCH | `/offer/:offerId` | Update a buy or sell offer. Same fields as POST. |
@@ -121,7 +121,7 @@ First call: `POST /user/register`. Subsequently: `POST /user/auth`.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/contracts` | Get all own contracts. |
-| GET | `/contracts/summary` | Get summaries of own contracts. |
+| GET | `/contracts/summary` | Get summaries of own contracts. **Returns historical contracts** (completed, cancelled, etc.). Direction is determined by `c.type` field: `"bid"` = buy, `"ask"` = sell. Do NOT use `c.buyer.id` — this field may be absent. |
 | GET | `/contract/:contractId` | Get full contract details. |
 | POST | `/contract/:id/payment/confirm` | Buyer: confirm payment sent. Seller: confirm payment received + provide release transaction. Body: `{ releaseTransaction }`. |
 | POST | `/contract/:id/rating` | Rate counterparty. Body: `{ rating: 1\|5, signature }`. |
@@ -146,4 +146,30 @@ First call: `POST /user/register`. Subsequently: `POST /user/auth`.
 
 ---
 
-*Total: 63 endpoints | Auth: Bearer token in Authorization header | Content-Type: application/json | TypeScript wrapper: github.com/Peach2Peach/peach-api-ts*
+## V069 — Own Offers (Current Protocol)
+
+These endpoints use the V069 API version (`/v069/` instead of `/v1/`). Base URL: `auth.baseUrl.replace(/\/v1$/, '/v069')`.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v069/buyOffer?ownOffers=true` | Get own buy (bid) offers. Returns pending/active offers not returned by `/v1/offers/summary`. |
+| GET | `/v069/sellOffer?ownOffers=true` | Get own sell (ask) offers. Same as above for sell side. |
+
+**Note:** V069 returns currently active offers (searching for peer, waiting for match, etc.), while V1 `/offers/summary` returns historical/finished offers. Use both endpoints together for a complete picture.
+
+---
+
+## Known `tradeStatus` Values
+
+**Finished (historical):**
+`completed` · `cancelled` · `offerCanceled` · `tradeCanceled` · `tradeCompleted` · `wrongAmountFundedOnContract`
+
+**Pending (offer published, waiting):**
+`hasMatchesAvailable` · `waitingForTradeRequest` · `searchingForPeer` · `offerPublished` · `fundEscrow` · `fundingAmountDifferent`
+
+**Active (trade in progress):**
+`paymentRequired` · `confirmPaymentRequired` · any status not in the finished or pending lists above
+
+---
+
+*Total: 63+ endpoints | Auth: Bearer token in Authorization header | Content-Type: application/json | TypeScript wrapper: github.com/Peach2Peach/peach-api-ts*

@@ -4,7 +4,7 @@ import { SideNav, Topbar } from "../components/Navbars.jsx";
 import { IcoBtc } from "../components/BitcoinAmount.jsx";
 import { useAuth } from "../hooks/useAuth.js";
 import { useApi } from "../hooks/useApi.js";
-import { decryptPaymentMethods, extractPMsFromProfile, encryptPGPMessage, isApiError } from "../utils/pgp.js";
+import { decryptPaymentMethods, extractPMsFromProfile, encryptPGPMessage, signPGPMessage, isApiError } from "../utils/pgp.js";
 
 // ─── INPUT VALIDATORS (inline for Claude.ai preview; import from peach-validators.js for GitHub build) ──
 const IBAN_RE = /^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/;
@@ -870,13 +870,27 @@ export default function PeachPaymentMethods() {
       const json = JSON.stringify(apiMap);
       console.log("[PM Sync] Serialised PM map:", apiMap);
 
-      const encrypted = await encryptPGPMessage(json, auth.pgpPrivKey);
+      const [encrypted, signature] = await Promise.all([
+        encryptPGPMessage(json, auth.pgpPrivKey),
+        signPGPMessage(json, auth.pgpPrivKey),
+      ]);
       if (!encrypted) throw new Error("Encryption returned null");
 
       console.log("[PM Sync] Encrypted blob length:", encrypted.length);
+      if (signature) console.log("[PM Sync] Signature length:", signature.length);
 
-      // PATCH /user with the encrypted PM blob
-      const res = await patch('/user', { encryptedPaymentData: encrypted });
+      // POST to v069 endpoint (not PATCH /v1/user — that ignores this field)
+      const payload = { encryptedPaymentData: encrypted };
+      if (signature) payload.encryptedPaymentDataSignature = signature;
+      const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
+      const res = await fetch(`${v069Base}/selfUser/encryptedPaymentData`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${auth.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
       if (!res.ok) {
         const body = await res.text();
         throw new Error(`${res.status} ${body}`);

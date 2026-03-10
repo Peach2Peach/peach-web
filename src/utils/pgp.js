@@ -84,6 +84,34 @@ export async function encryptPGPMessage(plaintext, armoredPrivKey) {
 }
 
 /**
+ * Sign a plaintext string with the user's PGP private key.
+ * Returns the armored PGP signature string, or null on failure.
+ * Used alongside encryptPGPMessage() for PM sync — the server
+ * expects both encryptedPaymentData and encryptedPaymentDataSignature.
+ */
+export async function signPGPMessage(plaintext, armoredPrivKey) {
+  try {
+    let privateKey = await openpgp.readPrivateKey({ armoredKey: armoredPrivKey });
+
+    if (!privateKey.isDecrypted()) {
+      try {
+        privateKey = await openpgp.decryptKey({ privateKey, passphrase: "" });
+      } catch {
+        console.warn("[PGP] Private key is passphrase-protected and cannot be unlocked for signing");
+        return null;
+      }
+    }
+
+    const message = await openpgp.createMessage({ text: plaintext });
+    const signature = await openpgp.sign({ message, signingKeys: privateKey });
+    return signature;
+  } catch (err) {
+    console.warn("[PGP] Signing failed:", err.message);
+    return null;
+  }
+}
+
+/**
  * Find the first object key whose value is a PGP-encrypted string.
  */
 function findEncryptedKey(obj) {
@@ -202,8 +230,11 @@ export async function extractPMsFromProfile(profile, armoredPrivKey) {
     console.log("[PGP] Profile keys:", Object.keys(profile));
 
     // Collect all PGP-encrypted fields — top-level and one level deep
+    // Skip signature fields — they are PGP signed messages, not encrypted data
+    const SKIP_FIELDS = new Set(["encryptedPaymentDataSignature"]);
     const encryptedEntries = [];
     for (const [key, val] of Object.entries(profile)) {
+      if (SKIP_FIELDS.has(key)) continue;
       if (isPGPString(val)) {
         encryptedEntries.push([key, val]);
       } else if (val && typeof val === "object" && !Array.isArray(val)) {

@@ -529,7 +529,7 @@ function HistorySatsAmount({ sats }) {
   );
 }
 
-function HistoryTable({ rows }) {
+function HistoryTable({ rows, onTradeSelect }) {
   const navigate = useNavigate();
   const [sortKey, setSortKey] = useState("createdAt");
   const [sortDir, setSortDir] = useState(-1);
@@ -656,7 +656,7 @@ function HistoryTable({ rows }) {
           </thead>
           <tbody>
             {sorted.map(r => (
-              <tr key={r.id} className="hist-row" style={{cursor:"pointer"}} onClick={() => navigate(`/trade/${r.id}`)}>
+              <tr key={r.id} className="hist-row" style={{cursor:"pointer"}} onClick={() => onTradeSelect ? onTradeSelect(r) : navigate(`/trade/${r.id}`)}>
                 <td><span style={{ fontFamily:"monospace", fontSize:".78rem", color:"var(--black-65)" }}>{r.tradeId}</span></td>
                 <td>
                   <span className={`direction-badge direction-${r.direction}`}>{r.direction.toUpperCase()}</span>
@@ -684,7 +684,7 @@ function HistoryTable({ rows }) {
       {/* ── Mobile list ── */}
       <div className="hist-mobile">
         {sorted.map(r => (
-          <div key={r.id} className="hist-mob-row" onClick={() => navigate(`/trade/${r.id}`)}>
+          <div key={r.id} className="hist-mob-row" onClick={() => onTradeSelect ? onTradeSelect(r) : navigate(`/trade/${r.id}`)}>
             <div className="hist-mob-left">
               <span className="hist-mob-id">{r.tradeId}</span>
               <span className="hist-mob-date">{formatDate(r.createdAt)}</span>
@@ -1284,15 +1284,19 @@ export default function TradesDashboard() {
   const [matchError, setMatchError]       = useState(null);    // error message shown in popup
 
   function handleTradeSelect(trade) {
-    const hasMatches = trade.kind === "pending_match" && trade.matchCount > 0;
-    if (hasMatches && !acceptedTrades.has(trade.id)) {
+    // Offers with available matches → show match acceptance popup
+    if (trade.tradeStatus === "hasMatchesAvailable" && !acceptedTrades.has(trade.id)) {
       setMatchesPopup(trade);
       setMatchDetail(null);
       setMatchConfirm(null);
       setMatchError(null);
-    } else {
+      return;
+    }
+    // Only contracts have valid IDs for trade execution
+    if (trade.kind === "contract") {
       navigate(`/trade/${trade.id}`);
     }
+    // Pending offers (searching, published, fund escrow) → no-op for now
   }
 
   function getMatchesForTrade(trade) {
@@ -1482,7 +1486,7 @@ export default function TradesDashboard() {
               <p>No pending offers.</p>
             </div>
           ) : (
-            <HistoryTable rows={pendingItems}/>
+            <HistoryTable rows={pendingItems} onTradeSelect={handleTradeSelect}/>
           )
         )}
 
@@ -1494,7 +1498,7 @@ export default function TradesDashboard() {
               <p>No active trades yet.</p>
             </div>
           ) : (
-            <HistoryTable rows={activeItems}/>
+            <HistoryTable rows={activeItems} onTradeSelect={handleTradeSelect}/>
           )
         )}
 
