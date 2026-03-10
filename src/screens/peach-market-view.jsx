@@ -806,16 +806,18 @@ export default function PeachMarket() {
     async function fetchMarket() {
       try {
         const [bidsRes, asksRes] = await Promise.all([
-          post('/offer/search', { type: 'bid' }),
-          post('/offer/search', { type: 'ask' }),
+          post('/offer/search', { type: 'bid', size: 50 }),
+          post('/offer/search', { type: 'ask', size: 50 }),
         ]);
         const [bids, asks] = await Promise.all([
           bidsRes.ok ? bidsRes.json() : [],
           asksRes.ok ? asksRes.json() : [],
         ]);
+        const bidsArr = Array.isArray(bids) ? bids : bids?.offers ?? [];
+        const asksArr = Array.isArray(asks) ? asks : asks?.offers ?? [];
         const all = [
-          ...(Array.isArray(bids) ? bids : bids?.offers ?? []).map(normalizeOffer),
-          ...(Array.isArray(asks) ? asks : asks?.offers ?? []).map(normalizeOffer),
+          ...bidsArr.map(normalizeOffer),
+          ...asksArr.map(normalizeOffer),
         ];
         setLiveOffers(all);
       } catch {}

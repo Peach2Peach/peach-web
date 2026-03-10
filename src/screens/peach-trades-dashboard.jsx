@@ -41,195 +41,136 @@ const STATUS_CONFIG = {
   cancellation_pending:{ label: "Cancellation Req.",  bg: "#FFE6E1", color: "#DF321F", action: true  },
   completed:           { label: "Completed",           bg: "#F2F9E7", color: "#65A519", action: false },
   cancelled:           { label: "Cancelled",           bg: "#F4EEEB", color: "#7D675E", action: false },
+  paymentRequired:     { label: "Payment Required",     bg: "#FEEDE5", color: "#C45104", action: true  },
+  confirmPaymentRequired:{ label: "Confirm Payment",   bg: "#FEFCE5", color: "#9A7000", action: true  },
+  hasMatchesAvailable: { label: "Matches Available",   bg: "#D7F2FE", color: "#037DB5", action: true  },
+  waitingForTradeRequest:{ label: "Waiting for Match", bg: "#F4EEEB", color: "#7D675E", action: false },
+  searchingForPeer:    { label: "Searching",           bg: "#F4EEEB", color: "#7D675E", action: false },
+  offerPublished:      { label: "Published",           bg: "#D7F2FE", color: "#037DB5", action: false },
+  fundEscrow:          { label: "Fund Escrow",         bg: "#FEFCE5", color: "#9A7000", action: true  },
+  fundingAmountDifferent:{ label: "Wrong Funding",     bg: "#FEEDE5", color: "#C45104", action: true  },
+  offerCanceled:       { label: "Offer Cancelled",     bg: "#F4EEEB", color: "#7D675E", action: false },
+  tradeCanceled:       { label: "Trade Cancelled",     bg: "#F4EEEB", color: "#7D675E", action: false },
+  tradeCompleted:      { label: "Trade Completed",     bg: "#F2F9E7", color: "#65A519", action: false },
+  wrongAmountFundedOnContract: { label: "Wrong Amount", bg: "#FEEDE5", color: "#C45104", action: false },
 };
+
+// Statuses that represent a finished state → Trade History
+const FINISHED_STATUSES = new Set([
+  "completed", "cancelled", "offerCanceled", "tradeCanceled",
+  "tradeCompleted", "wrongAmountFundedOnContract",
+]);
+
+// Statuses that represent a pending/open offer → Pending Offers tab
+const PENDING_STATUSES = new Set([
+  "hasMatchesAvailable", "waitingForTradeRequest", "searchingForPeer",
+  "offerPublished", "fundEscrow", "fundingAmountDifferent",
+  "open_offer", "pending_match",
+]);
 
 // Mock avatars by initials + color
 const AVATARS = ["KL","MR","ST","DV","NB","FR","PW","JC","EH","OT"];
 const AVATAR_COLORS = ["#FF7A50","#037DB5","#65A519","#F56522","#9B5CFF","#DF321F","#F5CE22","#05A85A"];
 
-// Mock match requesters — used by pending_match trades with incoming requests
-const MOCK_MATCHES = [
+// ── MOCK TRADES (normalized format — used when API data is unavailable) ──
+// 3 pending + 4 active + 8 history = 15 total
+const MOCK_PENDING = [
   {
-    offerId: "match-offer-1",
-    user: { initials:"KL", color:"#FF7A50", name:"Peer #4E2A", rep:4.9, trades:312, badges:["supertrader","fast"] },
-    amount: 85000,
-    premium: -1.2,
-    methods: ["SEPA","Revolut"],
-    currencies: ["EUR"],
-    requestedAt: Date.now() - 12*60_000,
+    id: "1360", tradeId: "PC\u20111360", kind: "offer", direction: "buy",
+    amount: 100000, premium: -1.0, fiatAmount: "87.43", currency: "EUR",
+    tradeStatus: "hasMatchesAvailable",
+    createdAt: new Date(Date.now() - 1 * 3600_000),
   },
   {
-    offerId: "match-offer-2",
-    user: { initials:"DV", color:"#F56522", name:"Peer #A1F3", rep:4.6, trades:67, badges:[] },
-    amount: 85000,
-    premium: -0.8,
-    methods: ["SEPA"],
-    currencies: ["EUR"],
-    requestedAt: Date.now() - 25*60_000,
+    id: "1358", tradeId: "PC\u20111358", kind: "offer", direction: "buy",
+    amount: 55000, premium: -0.5, fiatAmount: "48.09", currency: "EUR",
+    tradeStatus: "waitingForTradeRequest",
+    createdAt: new Date(Date.now() - 6 * 3600_000),
   },
   {
-    offerId: "match-offer-3",
-    user: { initials:"FR", color:"#DF321F", name:"Peer #D8B1", rep:3.9, trades:9, badges:[] },
-    amount: 85000,
-    premium: -0.5,
-    methods: ["SEPA"],
-    currencies: ["EUR"],
-    requestedAt: Date.now() - 45*60_000,
+    id: "1355", tradeId: "PC\u20111355", kind: "offer", direction: "sell",
+    amount: 200000, premium: 2.0, fiatAmount: "174.86", currency: "EUR",
+    tradeStatus: "fundEscrow",
+    createdAt: new Date(Date.now() - 12 * 3600_000),
   },
 ];
 
-// Active trades mock — 6 buy, 6 sell
-const MOCK_ACTIVE = [
-  // ── BUY ──
+const MOCK_TRADES = [
+  // ── ACTIVE — BUY ──
   {
-    id:"b1", kind:"open_offer", direction:"buy",
-    amount:80000, premium:-0.5, methods:["SEPA"], currencies:["EUR"],
-    createdAt: Date.now() - 45*60_000, expiresIn:"23h 15m",
-    counterparty:null, unread:0,
+    id: "1350", tradeId: "PC\u20111350", kind: "contract", direction: "buy",
+    amount: 85000, premium: -1.2, fiatAmount: "74.32", currency: "EUR",
+    tradeStatus: "paymentRequired",
+    createdAt: new Date(Date.now() - 4 * 3600_000),
   },
   {
-    id:"b2", kind:"pending_match", direction:"buy",
-    amount:85000, premium:-1.2, methods:["SEPA","Revolut"], currencies:["EUR"],
-    matchedAt: Date.now() - 12*60_000,
-    counterparty:null,
-    matchCount:3, matches:MOCK_MATCHES,
-    unread:3,
+    id: "1348", tradeId: "PC\u20111348", kind: "contract", direction: "buy",
+    amount: 42000, premium: 0.5, fiatAmount: "38.14", currency: "CHF",
+    tradeStatus: "confirmPaymentRequired",
+    createdAt: new Date(Date.now() - 26 * 3600_000),
+  },
+  // ── ACTIVE — SELL ──
+  {
+    id: "1345", tradeId: "PC\u20111345", kind: "offer", direction: "sell",
+    amount: 120000, premium: 1.8, fiatAmount: "106.81", currency: "EUR",
+    tradeStatus: "escrow_funded",
+    createdAt: new Date(Date.now() - 2 * 3600_000),
   },
   {
-    id:"b3", kind:"contract", tradeStatus:"awaiting_payment", direction:"buy",
-    amount:85000, premium:-1.2, methods:["SEPA"], currencies:["EUR"],
-    creationDate: Date.now() - 4*3600_000, paymentExpectedBy: Date.now() + 8*3600_000,
-    counterparty:{ initials:"ST", color:"#65A519", name:"Peer #2B90", rep:5.0, trades:541, badges:["supertrader"] },
-    unread:3, fiatAmount:"74.32",
+    id: "1342", tradeId: "PC\u20111342", kind: "contract", direction: "sell",
+    amount: 95000, premium: 1.5, fiatAmount: "82.79", currency: "EUR",
+    tradeStatus: "payment_in_transit",
+    createdAt: new Date(Date.now() - 30 * 60_000),
+  },
+  // ── HISTORY — COMPLETED (3 buy, 3 sell) ──
+  {
+    id: "1330-1329", tradeId: "PC\u20111330\u20111329", kind: "contract", direction: "buy",
+    amount: 100000, premium: -1.5, fiatAmount: "87.43", currency: "EUR",
+    tradeStatus: "tradeCompleted",
+    createdAt: new Date(Date.now() - 2 * 86400_000),
   },
   {
-    id:"b4", kind:"contract", tradeStatus:"not_paid_in_time", direction:"buy",
-    amount:42000, premium:0.5, methods:["Wise"], currencies:["CHF"],
-    creationDate: Date.now() - 26*3600_000,
-    counterparty:{ initials:"MR", color:"#037DB5", name:"Peer #7F1C", rep:4.7, trades:88, badges:["fast"] },
-    unread:2, fiatAmount:"38.14",
+    id: "1325-1324", tradeId: "PC\u20111325\u20111324", kind: "contract", direction: "sell",
+    amount: 50000, premium: 0.8, fiatAmount: "44.21", currency: "EUR",
+    tradeStatus: "tradeCompleted",
+    createdAt: new Date(Date.now() - 5 * 86400_000),
   },
   {
-    id:"b5", kind:"contract", tradeStatus:"payment_confirmed", direction:"buy",
-    amount:55000, premium:-0.8, methods:["SEPA"], currencies:["EUR"],
-    creationDate: Date.now() - 6*3600_000,
-    counterparty:{ initials:"NB", color:"#9B5CFF", name:"Peer #C73E", rep:4.8, trades:156, badges:[] },
-    unread:0, fiatAmount:"47.88",
+    id: "1318-1317", tradeId: "PC\u20111318\u20111317", kind: "contract", direction: "buy",
+    amount: 45000, premium: -2.1, fiatAmount: "39.34", currency: "CHF",
+    tradeStatus: "tradeCompleted",
+    createdAt: new Date(Date.now() - 12 * 86400_000),
   },
   {
-    id:"b6", kind:"contract", tradeStatus:"dispute", direction:"buy",
-    amount:30000, premium:-2.0, methods:["Revolut"], currencies:["EUR"],
-    creationDate: Date.now() - 28*3600_000,
-    counterparty:{ initials:"FR", color:"#DF321F", name:"Peer #D8B1", rep:3.9, trades:9, badges:[] },
-    unread:5, fiatAmount:"26.23",
-  },
-  // ── SELL ──
-  {
-    id:"s1", kind:"open_offer", direction:"sell",
-    amount:73000, premium:0.8, methods:["SEPA","Wise"], currencies:["EUR","CHF"],
-    createdAt: Date.now() - 2*3600_000, expiresIn:"22h",
-    counterparty:null, unread:0,
+    id: "1312-1311", tradeId: "PC\u20111312\u20111311", kind: "contract", direction: "sell",
+    amount: 200000, premium: 1.2, fiatAmount: "174.86", currency: "EUR",
+    tradeStatus: "tradeCompleted",
+    createdAt: new Date(Date.now() - 14 * 86400_000),
   },
   {
-    id:"s1b", kind:"pending_match", direction:"sell",
-    amount:95000, premium:1.5, methods:["SEPA"], currencies:["EUR"],
-    matchedAt: Date.now() - 8*60_000,
-    counterparty:null,
-    matchCount:2, matches:MOCK_MATCHES.slice(0,2),
-    unread:2,
+    id: "1305-1304", tradeId: "PC\u20111305\u20111304", kind: "contract", direction: "buy",
+    amount: 75000, premium: -0.5, fiatAmount: "65.57", currency: "EUR",
+    tradeStatus: "tradeCompleted",
+    createdAt: new Date(Date.now() - 21 * 86400_000),
   },
   {
-    id:"s2", kind:"contract", tradeStatus:"matched", direction:"sell",
-    amount:95000, premium:1.5, methods:["SEPA"], currencies:["EUR"],
-    creationDate: Date.now() - 30*60_000,
-    counterparty:{ initials:"DV", color:"#F56522", name:"Peer #A1F3", rep:4.6, trades:67, badges:[] },
-    unread:1, fiatAmount:"82.79",
+    id: "1298-1297", tradeId: "PC\u20111298\u20111297", kind: "contract", direction: "sell",
+    amount: 350000, premium: 0.3, fiatAmount: "306.01", currency: "EUR",
+    tradeStatus: "tradeCompleted",
+    createdAt: new Date(Date.now() - 30 * 86400_000),
+  },
+  // ── HISTORY — CANCELLED (1 buy, 1 sell) ──
+  {
+    id: "1290", tradeId: "PC\u20111290", kind: "offer", direction: "buy",
+    amount: 60000, premium: -0.8, fiatAmount: "52.46", currency: "EUR",
+    tradeStatus: "offerCanceled",
+    createdAt: new Date(Date.now() - 8 * 86400_000),
   },
   {
-    id:"s3", kind:"contract", tradeStatus:"payment_in_transit", direction:"sell",
-    amount:120000, premium:1.8, methods:["PayPal"], currencies:["EUR"],
-    creationDate: Date.now() - 1.5*3600_000,
-    counterparty:{ initials:"PW", color:"#05A85A", name:"Peer #F9C2", rep:4.3, trades:22, badges:[] },
-    unread:1, fiatAmount:"102.18",
-  },
-  {
-    id:"s4", kind:"contract", tradeStatus:"confirm_payment", direction:"sell",
-    amount:50000, premium:0.3, methods:["Revolut"], currencies:["EUR"],
-    creationDate: Date.now() - 10*60_000,
-    counterparty:{ initials:"JC", color:"#9B5CFF", name:"Peer #B8D0", rep:5.0, trades:289, badges:["supertrader","fast"] },
-    unread:0, fiatAmount:"43.25",
-  },
-  {
-    id:"s5", kind:"contract", tradeStatus:"payment_confirmed", direction:"sell",
-    amount:200000, premium:2.1, methods:["SEPA"], currencies:["EUR"],
-    creationDate: Date.now() - 8*3600_000,
-    counterparty:{ initials:"EH", color:"#037DB5", name:"Peer #3A7E", rep:4.5, trades:44, badges:["fast"] },
-    unread:0, fiatAmount:"174.86",
-  },
-  {
-    id:"s6", kind:"contract", tradeStatus:"dispute", direction:"sell",
-    amount:65000, premium:1.0, methods:["Strike"], currencies:["EUR"],
-    creationDate: Date.now() - 36*3600_000,
-    counterparty:{ initials:"OT", color:"#F56522", name:"Peer #E52C", rep:2.1, trades:3, badges:[] },
-    unread:4, fiatAmount:"56.73",
-  },
-];
-
-// Trade history mock
-const MOCK_HISTORY = [
-  {
-    id:"h1", direction:"buy", tradeStatus:"completed",
-    amount:100000, fiatAmount:"87.43", currency:"EUR", premium:-1.5,
-    method:"SEPA",
-    counterparty:{ initials:"PW", color:"#FF7A50", name:"Peer #4E2A", rep:4.9 },
-    completedAt: new Date(Date.now() - 2 * 86400_000),
-    ratingGiven: 5,
-    tradeId:"CT-00142",
-  },
-  {
-    id:"h2", direction:"sell", tradeStatus:"completed",
-    amount:50000, fiatAmount:"44.21", currency:"EUR", premium:0.8,
-    method:"Revolut",
-    counterparty:{ initials:"JC", color:"#037DB5", name:"Peer #F2E0", rep:4.7 },
-    completedAt: new Date(Date.now() - 5 * 86400_000),
-    ratingGiven: 5,
-    tradeId:"CT-00138",
-  },
-  {
-    id:"h3", direction:"buy", tradeStatus:"cancelled",
-    amount:75000, fiatAmount:"65.57", currency:"EUR", premium:-0.5,
-    method:"SEPA",
-    counterparty:{ initials:"EH", color:"#65A519", name:"Peer #91CA", rep:4.2 },
-    completedAt: new Date(Date.now() - 8 * 86400_000),
-    ratingGiven: null,
-    tradeId:"CT-00131",
-  },
-  {
-    id:"h4", direction:"sell", tradeStatus:"completed",
-    amount:200000, fiatAmount:"174.86", currency:"EUR", premium:1.2,
-    method:"Wise",
-    counterparty:{ initials:"OT", color:"#9B5CFF", name:"Peer #55D3", rep:5.0 },
-    completedAt: new Date(Date.now() - 14 * 86400_000),
-    ratingGiven: 5,
-    tradeId:"CT-00122",
-  },
-  {
-    id:"h5", direction:"buy", tradeStatus:"completed",
-    amount:45000, fiatAmount:"39.34", currency:"CHF", premium:-2.1,
-    method:"SEPA",
-    counterparty:{ initials:"KL", color:"#F56522", name:"Peer #7B2F", rep:4.8 },
-    completedAt: new Date(Date.now() - 21 * 86400_000),
-    ratingGiven: 1,
-    tradeId:"CT-00115",
-  },
-  {
-    id:"h6", direction:"sell", tradeStatus:"completed",
-    amount:350000, fiatAmount:"306.01", currency:"EUR", premium:0.3,
-    method:"SEPA",
-    counterparty:{ initials:"MR", color:"#05A85A", name:"Peer #CC88", rep:4.9 },
-    completedAt: new Date(Date.now() - 30 * 86400_000),
-    ratingGiven: 5,
-    tradeId:"CT-00108",
+    id: "1285-1284", tradeId: "PC\u20111285\u20111284", kind: "contract", direction: "sell",
+    amount: 65000, premium: 1.0, fiatAmount: "56.73", currency: "EUR",
+    tradeStatus: "tradeCanceled",
+    createdAt: new Date(Date.now() - 18 * 86400_000),
   },
 ];
 
@@ -297,7 +238,7 @@ function FilterDropdown({ label, options, selected, onChange }) {
 
 // ─── STATUS CHIP ─────────────────────────────────────────────────────────────
 function StatusChip({ status }) {
-  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.open_offer;
+  const cfg = STATUS_CONFIG[status] || { label: status || "Unknown", bg: "#F4EEEB", color: "#7D675E", action: false };
   return (
     <span style={{
       display:"inline-flex", alignItems:"center", gap:4,
@@ -590,40 +531,49 @@ function HistorySatsAmount({ sats }) {
 
 function HistoryTable({ rows }) {
   const navigate = useNavigate();
-  const [sortKey, setSortKey] = useState("completedAt");
+  const [sortKey, setSortKey] = useState("createdAt");
   const [sortDir, setSortDir] = useState(-1);
   const [histSearch, setHistSearch] = useState("");
+  const [dirFilter, setDirFilter] = useState("all");       // "all" | "buy" | "sell"
+  const [statusFilter, setStatusFilter] = useState("all"); // "all" | "completed" | "cancelled"
 
   function toggleSort(key) {
     if (sortKey === key) setSortDir(d => d * -1);
     else { setSortKey(key); setSortDir(-1); }
   }
 
+  // Status grouping for the filter: "completed" covers all completion-like statuses,
+  // "cancelled" covers all cancellation-like statuses
+  function statusGroup(s) {
+    if (["completed", "tradeCompleted"].includes(s)) return "completed";
+    if (["cancelled", "offerCanceled", "tradeCanceled"].includes(s)) return "cancelled";
+    return "other";
+  }
+
   const sorted = [...rows]
     .filter(r => {
+      if (dirFilter !== "all" && r.direction !== dirFilter) return false;
+      if (statusFilter !== "all" && statusGroup(r.tradeStatus) !== statusFilter) return false;
       if (!histSearch.trim()) return true;
       const q = histSearch.toLowerCase();
       return r.tradeId.toLowerCase().includes(q) ||
-        r.counterparty.name.toLowerCase().includes(q) ||
-        r.method.toLowerCase().includes(q) ||
-        r.currency.toLowerCase().includes(q);
+        r.currency.toLowerCase().includes(q) ||
+        (r.tradeStatus ?? "").toLowerCase().includes(q);
     })
     .sort((a, b) => {
-      if (sortKey === "completedAt") return (a.completedAt - b.completedAt) * sortDir;
+      if (sortKey === "createdAt")   return (a.createdAt - b.createdAt) * sortDir;
       if (sortKey === "amount")      return (a.amount - b.amount) * sortDir;
-      if (sortKey === "fiatAmount")  return (parseFloat(a.fiatAmount) - parseFloat(b.fiatAmount)) * sortDir;
+      if (sortKey === "fiatAmount")  return (parseFloat(a.fiatAmount || 0) - parseFloat(b.fiatAmount || 0)) * sortDir;
       if (sortKey === "premium")     return (a.premium - b.premium) * sortDir;
       return 0;
     });
 
   function exportCSV() {
-    const headers = ["Trade ID","Type","Counterparty","Amount (sats)","Fiat","Currency","Premium (%)","Method","Status","Rating","Date"];
+    const headers = ["Trade ID","Type","Status","Amount (sats)","Fiat","Currency","Premium (%)","Date"];
     const rowsCSV = sorted.map(r => [
-      r.tradeId, r.direction.toUpperCase(), r.counterparty.name,
+      r.tradeId, r.direction.toUpperCase(), r.tradeStatus,
       r.amount, r.fiatAmount, r.currency,
-      r.premium.toFixed(2), r.method, r.tradeStatus,
-      r.ratingGiven !== null ? (r.ratingGiven === 5 ? "positive" : "negative") : "",
-      formatDate(r.completedAt),
+      r.premium.toFixed(2), formatDate(r.createdAt),
     ]);
     const csv = [headers, ...rowsCSV].map(row => row.join(",")).join("\n");
     const blob = new Blob([csv], { type:"text/csv" });
@@ -657,17 +607,37 @@ function HistoryTable({ rows }) {
 
   return (
     <div>
-      {/* Search + Export row */}
+      {/* Search + Filters + Export row */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, marginBottom:16, flexWrap:"wrap" }}>
         <input
           className="hist-search"
-          placeholder="Search by ID, counterparty, method…"
+          placeholder="Search by ID, currency, status…"
           value={histSearch}
           onChange={e => setHistSearch(e.target.value)}
         />
-        <button onClick={exportCSV} className="hist-export-btn">
-          ↓ Export CSV
-        </button>
+        <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+          <select
+            value={dirFilter}
+            onChange={e => setDirFilter(e.target.value)}
+            style={{ padding:"6px 10px", borderRadius:8, border:"1px solid var(--black-10)", fontSize:".82rem", fontFamily:"inherit", fontWeight:600, background:"white", cursor:"pointer" }}
+          >
+            <option value="all">All types</option>
+            <option value="buy">Buy</option>
+            <option value="sell">Sell</option>
+          </select>
+          <select
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            style={{ padding:"6px 10px", borderRadius:8, border:"1px solid var(--black-10)", fontSize:".82rem", fontFamily:"inherit", fontWeight:600, background:"white", cursor:"pointer" }}
+          >
+            <option value="all">All statuses</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+          <button onClick={exportCSV} className="hist-export-btn">
+            ↓ Export CSV
+          </button>
+        </div>
       </div>
 
       {/* ── Desktop table ── */}
@@ -677,14 +647,11 @@ function HistoryTable({ rows }) {
             <tr>
               <th>Trade ID</th>
               <th>Type</th>
-              <th>Counterparty</th>
+              <th>Status</th>
               <Th col="amount" label="Amount"/>
               <Th col="fiatAmount" label="Fiat"/>
               <Th col="premium" label="Premium" align="right"/>
-              <th>Method</th>
-              <th>Status</th>
-              <th>Rating</th>
-              <Th col="completedAt" label="Date"/>
+              <Th col="createdAt" label="Date"/>
             </tr>
           </thead>
           <tbody>
@@ -694,14 +661,9 @@ function HistoryTable({ rows }) {
                 <td>
                   <span className={`direction-badge direction-${r.direction}`}>{r.direction.toUpperCase()}</span>
                 </td>
-                <td>
-                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                    <Avatar initials={r.counterparty.initials} color={r.counterparty.color} size={26}/>
-                    <span style={{ fontSize:".83rem" }}>{r.counterparty.name}</span>
-                  </div>
-                </td>
+                <td><StatusChip status={r.tradeStatus}/></td>
                 <td><HistorySatsAmount sats={r.amount}/></td>
-                <td style={{ fontWeight:600 }}>{r.currency === "CHF" ? "₣" : "€"}{r.fiatAmount}</td>
+                <td style={{ fontWeight:600 }}>{r.fiatAmount !== "—" ? `${r.currency === "CHF" ? "₣" : "€"}${r.fiatAmount}` : "—"}</td>
                 <td style={{ textAlign:"right" }}>
                   <span style={{
                     fontWeight:700, fontSize:".82rem",
@@ -712,15 +674,7 @@ function HistoryTable({ rows }) {
                     {r.premium > 0 ? "+" : ""}{r.premium.toFixed(2)}%
                   </span>
                 </td>
-                <td><span className="tag tag-method">{r.method}</span></td>
-                <td><StatusChip status={r.tradeStatus}/></td>
-                <td>
-                  {r.ratingGiven !== null
-                    ? <span style={{ fontSize:"1rem" }}>{r.ratingGiven === 5 ? "👍" : "👎"}</span>
-                    : <span style={{ color:"var(--black-25)", fontSize:".78rem" }}>—</span>
-                  }
-                </td>
-                <td style={{ color:"var(--black-65)", fontSize:".82rem", whiteSpace:"nowrap" }}>{formatDate(r.completedAt)}</td>
+                <td style={{ color:"var(--black-65)", fontSize:".82rem", whiteSpace:"nowrap" }}>{formatDate(r.createdAt)}</td>
               </tr>
             ))}
           </tbody>
@@ -733,7 +687,7 @@ function HistoryTable({ rows }) {
           <div key={r.id} className="hist-mob-row" onClick={() => navigate(`/trade/${r.id}`)}>
             <div className="hist-mob-left">
               <span className="hist-mob-id">{r.tradeId}</span>
-              <span className="hist-mob-date">{formatDate(r.completedAt)}</span>
+              <span className="hist-mob-date">{formatDate(r.createdAt)}</span>
               <span className="hist-mob-status" style={{
                 color: r.direction === "buy" ? "#65A519" : "#DF321F"
               }}>
@@ -742,7 +696,7 @@ function HistoryTable({ rows }) {
             </div>
             <div className="hist-mob-right">
               <HistorySatsAmount sats={r.amount}/>
-              <span className="hist-mob-fiat">{r.currency === "CHF" ? "₣" : "€"}{r.fiatAmount}</span>
+              <span className="hist-mob-fiat">{r.fiatAmount !== "—" ? `${r.currency === "CHF" ? "₣" : "€"}${r.fiatAmount}` : "—"}</span>
             </div>
           </div>
         ))}
@@ -1099,7 +1053,7 @@ const CSS = `
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function TradesDashboard() {
   const navigate = useNavigate();
-  const [mainTab, setMainTab]     = useState("active");   // "active" | "history"
+  const [mainTab, setMainTab]     = useState("history");   // "active" | "pending" | "history"
   const [subTab, setSubTab]       = useState("buy");      // "buy" | "sell"
   const [filterMethods, setFilterMethods]     = useState([]);
   const [filterCurrencies, setFilterCurrencies] = useState([]);
@@ -1111,8 +1065,9 @@ export default function TradesDashboard() {
 
   // ── AUTH + API ──
   const { get, post, del, auth } = useApi();
-  const [liveItems, setLiveItems] = useState(null);   // null = use mock
-  const [liveLimit, setLiveLimit] = useState(null);   // null = use mock
+  const [liveItems, setLiveItems] = useState(null);    // null = use mock
+  const [livePending, setLivePending] = useState(null); // null = use mock
+  const [liveLimit, setLiveLimit] = useState(null);    // null = use mock
 
   const { isLoggedIn, handleLogin, handleLogout, showAvatarMenu, setShowAvatarMenu } = useAuth();
   useEffect(() => {
@@ -1148,42 +1103,49 @@ export default function TradesDashboard() {
     if (!auth) return;
     const peachId = auth.peachId;
 
+    function formatTradeId(id) {
+      const s = String(id);
+      // "1239-1238" → "PC‑1239‑1238", "1257" → "PC‑1257"
+      return "PC\u2011" + s.replace(/-/g, "\u2011");
+    }
+
     function normalizeOffer(o) {
-      const isBuy = o.type === "bid";
-      const methods = o.meansOfPayment ? Object.keys(o.meansOfPayment) : [];
-      const currencies = o.meansOfPayment
-        ? [...new Set(Object.values(o.meansOfPayment).flat())]
-        : [];
+      const rawType = (o.type ?? o.offerType ?? '').toLowerCase();
+      const isBuy = rawType === 'bid' || rawType === 'buy';
+      // Extract first fiat price from prices object (e.g. { EUR: 22.88 })
+      const pricesObj = o.prices ?? {};
+      const firstCurrency = Object.keys(pricesObj)[0] ?? null;
+      const fiatAmount = firstCurrency ? String(pricesObj[firstCurrency]) : "—";
+      const currency = firstCurrency ?? "";
       return {
         id: o.id,
-        kind: "open_offer",
+        tradeId: formatTradeId(o.id),
+        kind: "offer",
         direction: isBuy ? "buy" : "sell",
         amount: Array.isArray(o.amount) ? o.amount[0] : (o.amount ?? 0),
         premium: o.premium ?? 0,
-        methods,
-        currencies,
-        createdAt: o.creationDate ?? Date.now(),
-        expiresIn: null,
-        counterparty: null,
-        unread: 0,
+        fiatAmount,
+        currency,
+        tradeStatus: o.tradeStatus ?? "unknown",
+        createdAt: new Date(o.creationDate ?? Date.now()),
       };
     }
 
     function normalizeContract(c) {
-      const isBuyer = (c.buyer?.id ?? c.buyerId) === peachId;
+      const rawType = (c.type ?? '').toLowerCase();
+      const isBuyer = rawType === 'bid' || rawType === 'buy'
+        || (c.buyer?.id ?? c.buyerId) === peachId;
       return {
         id: c.id,
+        tradeId: formatTradeId(c.id),
         kind: "contract",
         direction: isBuyer ? "buy" : "sell",
-        tradeStatus: c.status ?? "unknown",
-        instantTrade: c.instantTrade ?? false,
         amount: c.amount ?? 0,
         premium: c.premium ?? 0,
-        methods: c.paymentMethod ? [c.paymentMethod] : [],
-        currencies: c.currency ? [c.currency] : [],
-        createdAt: c.creationDate ?? Date.now(),
-        counterparty: null,
-        unread: 0,
+        fiatAmount: c.price != null ? String(c.price) : "—",
+        currency: c.currency ?? "",
+        tradeStatus: c.tradeStatus ?? c.status ?? "unknown",
+        createdAt: new Date(c.creationDate ?? Date.now()),
       };
     }
 
@@ -1199,18 +1161,55 @@ export default function TradesDashboard() {
           contractsRes.ok ? contractsRes.json() : [],
           limitRes.ok ? limitRes.json() : null,
         ]);
+        const offersArr = Array.isArray(offersData) ? offersData : (offersData?.offers ?? []);
+        const contractsArr = Array.isArray(contractsData) ? contractsData : (contractsData?.contracts ?? []);
         const items = [
-          ...(Array.isArray(offersData) ? offersData.map(normalizeOffer) : []),
-          ...(Array.isArray(contractsData) ? contractsData.map(normalizeContract) : []),
+          ...offersArr.map(normalizeOffer),
+          ...contractsArr.map(normalizeContract),
         ];
         setLiveItems(items);
         if (limitData) setLiveLimit(limitData);
       } catch {}
     }
+
+    // Fetch pending offers from both V1 and V069
+    async function fetchPendingOffers() {
+      try {
+        const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
+        const [v1Res, v069Res] = await Promise.all([
+          get('/offers/summary'),
+          fetch(`${v069Base}/buyOffer?ownOffers=true`, {
+            headers: { Authorization: `Bearer ${auth.token}` },
+          }),
+        ]);
+        const [v1Data, v069Data] = await Promise.all([
+          v1Res.ok ? v1Res.json() : [],
+          v069Res.ok ? v069Res.json() : [],
+        ]);
+        const v1Arr = Array.isArray(v1Data) ? v1Data : (v1Data?.offers ?? []);
+        const v069Arr = Array.isArray(v069Data) ? v069Data : (v069Data?.offers ?? []);
+        // Merge and deduplicate by ID, preferring V069 data
+        const byId = new Map();
+        v1Arr.forEach(o => byId.set(o.id, o));
+        v069Arr.forEach(o => byId.set(o.id, o));
+        const all = [...byId.values()].map(normalizeOffer);
+        // Keep only items with pending statuses
+        const pending = all.filter(i => PENDING_STATUSES.has(i.tradeStatus));
+        setLivePending(pending);
+      } catch {}
+    }
+
     fetchTradesAndLimits();
+    fetchPendingOffers();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const trades = liveItems ?? MOCK_ACTIVE;
+  const trades = liveItems ?? MOCK_TRADES;
+
+  // Split items into active (unfinished) vs history (finished)
+  const allItems = liveItems ?? MOCK_TRADES;
+  const activeItems = allItems.filter(i => !FINISHED_STATUSES.has(i.tradeStatus) && !PENDING_STATUSES.has(i.tradeStatus));
+  const historyItems = allItems.filter(i => FINISHED_STATUSES.has(i.tradeStatus));
+  const pendingItems = livePending ?? MOCK_PENDING;
 
   const satsPerCur  = Math.round(SAT / btcPrice);
 
@@ -1456,11 +1455,14 @@ export default function TradesDashboard() {
         {/* Tabs + urgent banner + New Offer button — all one row */}
         <div className="tabs-action-row">
           <div className="main-tabs" style={{margin:0}}>
+            <button className={`main-tab${mainTab === "pending" ? " active" : ""}`} onClick={() => setMainTab("pending")}>
+              Pending Offers {pendingItems.length > 0 && <span style={{ background:"var(--primary)", color:"white", borderRadius:999, padding:"0 7px", fontSize:".7rem", fontWeight:800, marginLeft:6 }}>{pendingItems.length}</span>}
+            </button>
             <button className={`main-tab${mainTab === "active" ? " active" : ""}`} onClick={() => setMainTab("active")}>
-              Active Trades {trades.length > 0 && <span style={{ background:"var(--primary)", color:"white", borderRadius:999, padding:"0 7px", fontSize:".7rem", fontWeight:800, marginLeft:6 }}>{trades.length}</span>}
+              Active Trades {activeItems.length > 0 && <span style={{ background:"var(--primary)", color:"white", borderRadius:999, padding:"0 7px", fontSize:".7rem", fontWeight:800, marginLeft:6 }}>{activeItems.length}</span>}
             </button>
             <button className={`main-tab${mainTab === "history" ? " active" : ""}`} onClick={() => setMainTab("history")}>
-              Trade History
+              Trade History {historyItems.length > 0 && <span style={{ background:"var(--primary)", color:"white", borderRadius:999, padding:"0 7px", fontSize:".7rem", fontWeight:800, marginLeft:6 }}>{historyItems.length}</span>}
             </button>
           </div>
           {urgentCount > 0 && (
@@ -1472,104 +1474,33 @@ export default function TradesDashboard() {
           <button className="btn-cta" style={{marginLeft:"auto",flexShrink:0}}>+ New Offer</button>
         </div>
 
+        {/* ── PENDING OFFERS ── */}
+        {mainTab === "pending" && (
+          pendingItems.length === 0 ? (
+            <div className="empty-state">
+              <IconEmpty/>
+              <p>No pending offers.</p>
+            </div>
+          ) : (
+            <HistoryTable rows={pendingItems}/>
+          )
+        )}
+
         {/* ── ACTIVE TRADES ── */}
         {mainTab === "active" && (
-          <>
-            {/* Buy / Sell sub-tabs */}
-            <div className="sub-tabs">
-              <button className={`sub-tab buy${subTab === "buy" ? " active" : ""}`} onClick={() => setSubTab("buy")}>
-                Buy
-                <span className="sub-tab-count">{buyCount}</span>
-              </button>
-              <button className={`sub-tab sell${subTab === "sell" ? " active" : ""}`} onClick={() => setSubTab("sell")}>
-                Sell
-                <span className="sub-tab-count">{sellCount}</span>
-              </button>
+          activeItems.length === 0 ? (
+            <div className="empty-state">
+              <IconEmpty/>
+              <p>No active trades yet.</p>
             </div>
-
-            {/* Filter row */}
-            <div className="filter-row">
-              <span className="filter-label">Filter</span>
-              <FilterDropdown
-                label="Payment Method"
-                options={ALL_METHODS}
-                selected={filterMethods}
-                onChange={setFilterMethods}
-              />
-              <FilterDropdown
-                label="Currency"
-                options={ALL_CURRENCIES}
-                selected={filterCurrencies}
-                onChange={setFilterCurrencies}
-              />
-              <FilterDropdown
-                label="Status"
-                options={ALL_STATUSES}
-                selected={filterStatuses}
-                onChange={v => setFilterStatuses(v)}
-              />
-              {anyFilterActive && (
-                <button onClick={clearAllFilters} style={{
-                  background:"none", border:"none", cursor:"pointer",
-                  font:"inherit", fontSize:".78rem", fontWeight:700,
-                  color:"var(--black-65)", padding:"4px 8px", borderRadius:999,
-                  transition:"color .15s",
-                }} onMouseEnter={e => e.target.style.color="var(--error)"}
-                   onMouseLeave={e => e.target.style.color="var(--black-65)"}>
-                  Clear all ✕
-                </button>
-              )}
-            </div>
-
-            {/* View mode toggle */}
-            <div className="view-toggle">
-              <button className={`view-toggle-btn${viewMode === "grid" ? " active" : ""}`}
-                onClick={() => setViewMode("grid")} title="Grid view">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>
-              </button>
-              <button className={`view-toggle-btn${viewMode === "list" ? " active" : ""}`}
-                onClick={() => setViewMode("list")} title="List view">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><line x1="1" y1="3" x2="15" y2="3"/><line x1="1" y1="8" x2="15" y2="8"/><line x1="1" y1="13" x2="15" y2="13"/></svg>
-              </button>
-            </div>
-
-            {/* Cards */}
-            {sortedFiltered.length === 0 ? (
-              <div className="empty-state">
-                <IconEmpty/>
-                <p>{anyFilterActive ? "No trades match the selected filters." : `No ${subTab} trades yet.`}</p>
-                <div className="empty-actions">
-                  {anyFilterActive
-                    ? <button className="btn-cta" onClick={clearAllFilters}>Clear Filters</button>
-                    : <button className="btn-cta">Browse Market</button>
-                  }
-                </div>
-              </div>
-            ) : viewMode === "list" ? (
-              <div className="cards-list">
-                <div className="list-header">
-                  <span></span>
-                  <span>ID</span>
-                  <span>Counterparty</span>
-                  <span>Amount</span>
-                  <span>Fiat</span>
-                  <span>Time</span>
-                  <span>Chat</span>
-                  <span>Status</span>
-                </div>
-                {sortedFiltered.map(t => <TradeCard key={t.id} trade={t} layout="list" onSelect={handleTradeSelect}/>)}
-              </div>
-            ) : (
-              <div className="cards-grid">
-                {sortedFiltered.map(t => <TradeCard key={t.id} trade={t} layout="grid" onSelect={handleTradeSelect}/>)}
-              </div>
-            )}
-          </>
+          ) : (
+            <HistoryTable rows={activeItems}/>
+          )
         )}
 
         {/* ── TRADE HISTORY ── */}
         {mainTab === "history" && (
-          <HistoryTable rows={MOCK_HISTORY}/>
+          <HistoryTable rows={historyItems}/>
         )}
       </main>
 

@@ -1,9 +1,10 @@
 /**
- * PGP utilities for decrypting Peach API responses.
+ * PGP utilities for encrypting and decrypting Peach API data.
  *
- * The Peach API returns payment method data encrypted with the user's
- * PGP public key. These helpers decrypt it client-side using the private
- * key stored at window.__PEACH_AUTH__.pgpPrivKey.
+ * The Peach API stores payment method data encrypted with the user's
+ * PGP public key. These helpers decrypt it on read (using the private
+ * key at window.__PEACH_AUTH__.pgpPrivKey) and encrypt it on write
+ * (deriving the public key from the same private key).
  */
 import * as openpgp from "openpgp";
 
@@ -45,6 +46,39 @@ export async function decryptPGPMessage(armoredMessage, armoredPrivKey) {
     return data;
   } catch (err) {
     console.warn("[PGP] Decryption failed:", err.message);
+    return null;
+  }
+}
+
+/**
+ * Encrypt a plaintext string with the user's PGP key.
+ * Derives the public key from the private key for self-encryption,
+ * and signs the message with the private key.
+ * Returns the armored PGP message string, or null on failure.
+ */
+export async function encryptPGPMessage(plaintext, armoredPrivKey) {
+  try {
+    let privateKey = await openpgp.readPrivateKey({ armoredKey: armoredPrivKey });
+
+    if (!privateKey.isDecrypted()) {
+      try {
+        privateKey = await openpgp.decryptKey({ privateKey, passphrase: "" });
+      } catch {
+        console.warn("[PGP] Private key is passphrase-protected and cannot be unlocked for encryption");
+        return null;
+      }
+    }
+
+    const publicKey = privateKey.toPublic();
+    const message = await openpgp.createMessage({ text: plaintext });
+    const encrypted = await openpgp.encrypt({
+      message,
+      encryptionKeys: publicKey,
+      signingKeys: privateKey,
+    });
+    return encrypted;
+  } catch (err) {
+    console.warn("[PGP] Encryption failed:", err.message);
     return null;
   }
 }
