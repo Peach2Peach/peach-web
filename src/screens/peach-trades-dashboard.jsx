@@ -31,6 +31,7 @@ function fmt(n) {
 const STATUS_CONFIG = {
   open_offer:          { label: "Open Offer",          bg: "#F4EEEB", color: "#7D675E", action: false },
   pending_match:       { label: "Pending Match",       bg: "#D7F2FE", color: "#037DB5", action: false },
+  accept_trade_request:{ label: "Accept Trade Request", bg: "#F56522", color: "white",   action: true  },
   matched:             { label: "Matched",             bg: "#FEFCE5", color: "#9A7000", action: true  },
   escrow_funded:       { label: "Escrow Funded",       bg: "#FEFCE5", color: "#9A7000", action: true  },
   payment_in_transit:  { label: "Payment Sent",        bg: "#FEEDE5", color: "#C45104", action: false },
@@ -46,6 +47,37 @@ const STATUS_CONFIG = {
 const AVATARS = ["KL","MR","ST","DV","NB","FR","PW","JC","EH","OT"];
 const AVATAR_COLORS = ["#FF7A50","#037DB5","#65A519","#F56522","#9B5CFF","#DF321F","#F5CE22","#05A85A"];
 
+// Mock match requesters — used by pending_match trades with incoming requests
+const MOCK_MATCHES = [
+  {
+    offerId: "match-offer-1",
+    user: { initials:"KL", color:"#FF7A50", name:"Peer #4E2A", rep:4.9, trades:312, badges:["supertrader","fast"] },
+    amount: 85000,
+    premium: -1.2,
+    methods: ["SEPA","Revolut"],
+    currencies: ["EUR"],
+    requestedAt: Date.now() - 12*60_000,
+  },
+  {
+    offerId: "match-offer-2",
+    user: { initials:"DV", color:"#F56522", name:"Peer #A1F3", rep:4.6, trades:67, badges:[] },
+    amount: 85000,
+    premium: -0.8,
+    methods: ["SEPA"],
+    currencies: ["EUR"],
+    requestedAt: Date.now() - 25*60_000,
+  },
+  {
+    offerId: "match-offer-3",
+    user: { initials:"FR", color:"#DF321F", name:"Peer #D8B1", rep:3.9, trades:9, badges:[] },
+    amount: 85000,
+    premium: -0.5,
+    methods: ["SEPA"],
+    currencies: ["EUR"],
+    requestedAt: Date.now() - 45*60_000,
+  },
+];
+
 // Active trades mock — 6 buy, 6 sell
 const MOCK_ACTIVE = [
   // ── BUY ──
@@ -59,8 +91,9 @@ const MOCK_ACTIVE = [
     id:"b2", kind:"pending_match", direction:"buy",
     amount:85000, premium:-1.2, methods:["SEPA","Revolut"], currencies:["EUR"],
     matchedAt: Date.now() - 12*60_000,
-    counterparty:{ initials:"KL", color:"#FF7A50", name:"Peer #4E2A", rep:4.9, trades:312, badges:["supertrader"] },
-    unread:0,
+    counterparty:null,
+    matchCount:3, matches:MOCK_MATCHES,
+    unread:3,
   },
   {
     id:"b3", kind:"contract", tradeStatus:"awaiting_payment", direction:"buy",
@@ -96,6 +129,14 @@ const MOCK_ACTIVE = [
     amount:73000, premium:0.8, methods:["SEPA","Wise"], currencies:["EUR","CHF"],
     createdAt: Date.now() - 2*3600_000, expiresIn:"22h",
     counterparty:null, unread:0,
+  },
+  {
+    id:"s1b", kind:"pending_match", direction:"sell",
+    amount:95000, premium:1.5, methods:["SEPA"], currencies:["EUR"],
+    matchedAt: Date.now() - 8*60_000,
+    counterparty:null,
+    matchCount:2, matches:MOCK_MATCHES.slice(0,2),
+    unread:2,
   },
   {
     id:"s2", kind:"contract", tradeStatus:"matched", direction:"sell",
@@ -296,6 +337,7 @@ function Avatar({ initials, color, size = 36, online }) {
 const PILL_CONFIG = {
   open_offer:          { bg:"var(--primary-bg)", color:"var(--primary-dark)", label:"Waiting for a match",   passive:true  },
   pending_match:       { bg:"var(--primary-bg)", color:"var(--primary-dark)", label:"Waiting for seller",    passive:true  },
+  accept_trade_request:{ bg:"var(--primary)",    color:"white",              label:"Accept trade request",  passive:false },
   payment_in_transit:  { bg:"var(--primary-bg)", color:"var(--primary-dark)", label:"Payment sent · awaiting confirmation", passive:true },
   completed:           { bg:"#F2F9E7", color:"#65A519", label:"Completed",             passive:true  },
   cancelled:           { bg:"var(--primary-bg)", color:"var(--primary-dark)", label:"Cancelled",             passive:true  },
@@ -355,7 +397,8 @@ function Badge({ label, icon }) {
 
 // ─── TRADE CARD — Variant C ───────────────────────────────────────────────────
 function TradeCard({ trade, onSelect, layout = "grid" }) {
-  const statusKey = trade.kind === "contract" ? trade.tradeStatus : trade.kind;
+  const hasMatches = trade.kind === "pending_match" && trade.matchCount > 0;
+  const statusKey = hasMatches ? "accept_trade_request" : (trade.kind === "contract" ? trade.tradeStatus : trade.kind);
   const pill = PILL_CONFIG[statusKey] || PILL_CONFIG.open_offer;
   const isBuy = trade.direction === "buy";
   const hasSatsRange = Array.isArray(trade.amount);
@@ -382,7 +425,7 @@ function TradeCard({ trade, onSelect, layout = "grid" }) {
   // ── LIST LAYOUT ──
   if (layout === "list") {
     return (
-      <div className="trade-row" onClick={() => onSelect && onSelect(trade.id)}>
+      <div className="trade-row" onClick={() => onSelect && onSelect(trade)}>
         <span className={`direction-badge direction-${isBuy ? "buy" : "sell"}`}>
           {isBuy ? "BUY" : "SELL"}
         </span>
@@ -421,7 +464,7 @@ function TradeCard({ trade, onSelect, layout = "grid" }) {
 
   // ── GRID LAYOUT (default) ──
   return (
-    <div className="trade-card-v3" onClick={() => onSelect && onSelect(trade.id)}>
+    <div className="trade-card-v3" onClick={() => onSelect && onSelect(trade)}>
 
       {/* ── ROW 1: direction badge · trade ID · date ··· unread ── */}
       <div className="v3c-top">
@@ -469,8 +512,8 @@ function TradeCard({ trade, onSelect, layout = "grid" }) {
               </div>
             </>
           ) : (
-            <span style={{ fontSize:".8rem", color:"var(--black-65)", fontStyle:"italic", paddingTop:4 }}>
-              No counterparty yet
+            <span style={{ fontSize:".8rem", color: hasMatches ? "var(--primary-dark)" : "var(--black-65)", fontStyle:"italic", paddingTop:4, fontWeight: hasMatches ? 700 : 400 }}>
+              {hasMatches ? `${trade.matchCount} trade request${trade.matchCount !== 1 ? "s" : ""}` : "No counterparty yet"}
             </span>
           )}
         </div>
@@ -983,6 +1026,74 @@ const CSS = `
     border:1px solid rgba(245,101,34,.25);border-radius:12px;
     padding:10px 16px;margin-bottom:20px;
     display:flex;align-items:center;gap:10px;font-size:.83rem;color:var(--primary-dark);font-weight:600;width:fit-content}
+
+  /* ── Matches popup ── */
+  .matches-overlay{
+    position:fixed;inset:0;z-index:600;
+    background:rgba(43,25,17,.55);
+    display:flex;align-items:center;justify-content:center;
+    padding:20px;
+    animation:matchesFadeIn .2s ease;
+  }
+  @keyframes matchesFadeIn{from{opacity:0}to{opacity:1}}
+  .matches-popup{
+    background:var(--surface);border-radius:20px;
+    max-width:480px;width:100%;
+    box-shadow:0 16px 48px rgba(43,25,17,.25);
+    animation:matchesSlideUp .25s ease;
+    max-height:85vh;overflow-y:auto;
+  }
+  @keyframes matchesSlideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+  .matches-header{
+    display:flex;align-items:center;gap:10px;
+    padding:18px 24px 12px;
+    border-bottom:1px solid var(--black-10);
+    position:sticky;top:0;background:var(--surface);border-radius:20px 20px 0 0;z-index:1;
+  }
+  .matches-close{
+    margin-left:auto;background:none;border:none;cursor:pointer;
+    font-size:1.1rem;color:var(--black-65);padding:4px 8px;border-radius:8px;
+    transition:background .15s,color .15s;
+  }
+  .matches-close:hover{background:var(--black-5);color:var(--black)}
+  .matches-back{
+    background:none;border:none;cursor:pointer;padding:4px;border-radius:8px;
+    display:flex;align-items:center;color:var(--black-65);transition:color .15s;
+  }
+  .matches-back:hover{color:var(--black)}
+  .match-list{padding:0 12px 16px}
+  .match-row{
+    display:flex;align-items:center;gap:12px;
+    padding:12px;border-radius:12px;
+    cursor:pointer;transition:background .12s;
+  }
+  .match-row:hover{background:var(--black-5)}
+  .match-detail-terms{
+    background:var(--bg);border-radius:12px;padding:12px 16px;
+    display:flex;flex-direction:column;gap:10px;
+  }
+  .match-detail-row{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+  }
+  .match-detail-label{
+    font-size:.78rem;font-weight:600;color:var(--black-65);flex-shrink:0;
+  }
+  .match-btn-accept{
+    flex:1;background:var(--grad);color:white;border:none;border-radius:999px;
+    font-family:var(--font);font-size:.88rem;font-weight:800;
+    padding:12px 20px;cursor:pointer;
+    box-shadow:0 2px 12px rgba(245,101,34,.3);transition:transform .15s,box-shadow .15s;
+  }
+  .match-btn-accept:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(245,101,34,.4)}
+  .match-btn-skip{
+    flex:1;background:none;border:1.5px solid var(--black-10);border-radius:999px;
+    font-family:var(--font);font-size:.88rem;font-weight:700;color:var(--black-65);
+    padding:12px 20px;cursor:pointer;transition:border-color .15s,color .15s;
+  }
+  .match-btn-skip:hover{border-color:var(--primary);color:var(--primary-dark)}
+  @media(max-width:500px){
+    .matches-popup{max-width:100%;border-radius:16px}
+  }
 `;
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
@@ -999,7 +1110,7 @@ export default function TradesDashboard() {
   const [mobileOpen, setMobileOpen]     = useState(false);
 
   // ── AUTH + API ──
-  const { get, auth } = useApi();
+  const { get, post, del, auth } = useApi();
   const [liveItems, setLiveItems] = useState(null);   // null = use mock
   const [liveLimit, setLiveLimit] = useState(null);   // null = use mock
 
@@ -1133,17 +1244,24 @@ export default function TradesDashboard() {
     return true;
   });
 
+  const [acceptedTrades, setAcceptedTrades] = useState(new Set()); // trade ids accepted
+
+  function resolveStatusKey(t) {
+    if (t.kind === "pending_match" && t.matchCount > 0 && !acceptedTrades.has(t.id)) return "accept_trade_request";
+    return t.kind === "contract" ? t.tradeStatus : t.kind;
+  }
+
   // Sort: action-required first, then by time
   const sortedFiltered = [...filtered].sort((a, b) => {
-    const aAction = (STATUS_CONFIG[a.kind === "contract" ? a.tradeStatus : a.kind] || {}).action ? 1 : 0;
-    const bAction = (STATUS_CONFIG[b.kind === "contract" ? b.tradeStatus : b.kind] || {}).action ? 1 : 0;
+    const aAction = (STATUS_CONFIG[resolveStatusKey(a)] || {}).action ? 1 : 0;
+    const bAction = (STATUS_CONFIG[resolveStatusKey(b)] || {}).action ? 1 : 0;
     if (aAction !== bAction) return bAction - aAction;
     return 0;
   });
 
   // Count urgent items
   const urgentCount = trades.filter(t => {
-    const cfg = STATUS_CONFIG[t.kind === "contract" ? t.tradeStatus : t.kind] || {};
+    const cfg = STATUS_CONFIG[resolveStatusKey(t)] || {};
     return cfg.action;
   }).length;
 
@@ -1157,6 +1275,98 @@ export default function TradesDashboard() {
     setFilterMethods([]);
     setFilterCurrencies([]);
     setFilterStatuses([]);
+  }
+
+  // ── Matches popup state ──
+  const [matchesPopup, setMatchesPopup]   = useState(null);   // trade object or null
+  const [matchDetail, setMatchDetail]     = useState(null);   // selected match or null
+  const [matchConfirm, setMatchConfirm]   = useState(null);   // match pending confirmation or null
+  const [localMatches, setLocalMatches]   = useState({});      // tradeId → remaining matches
+  const [matchError, setMatchError]       = useState(null);    // error message shown in popup
+
+  function handleTradeSelect(trade) {
+    const hasMatches = trade.kind === "pending_match" && trade.matchCount > 0;
+    if (hasMatches && !acceptedTrades.has(trade.id)) {
+      setMatchesPopup(trade);
+      setMatchDetail(null);
+      setMatchConfirm(null);
+      setMatchError(null);
+    } else {
+      navigate(`/trade/${trade.id}`);
+    }
+  }
+
+  function getMatchesForTrade(trade) {
+    if (localMatches[trade.id]) return localMatches[trade.id];
+    return trade.matches || [];
+  }
+
+  async function handleSkipMatch(trade, match) {
+    setMatchError(null);
+    // Save current state for rollback
+    const previousMatches = getMatchesForTrade(trade);
+    // Update UI immediately (optimistic)
+    const remaining = previousMatches.filter(m => m.offerId !== match.offerId);
+    setLocalMatches(prev => ({ ...prev, [trade.id]: remaining }));
+    setMatchDetail(null);
+    if (remaining.length === 0) {
+      setMatchesPopup(null);
+    }
+    // Send rejection to API
+    if (auth) {
+      try {
+        const res = await del('/offer/match', { matchOfferId: match.offerId });
+        if (!res.ok) {
+          // Rollback: restore the requester
+          setLocalMatches(prev => ({ ...prev, [trade.id]: previousMatches }));
+          setMatchesPopup(trade);
+          setMatchError("Could not decline this request. Please try again.");
+        }
+      } catch {
+        setLocalMatches(prev => ({ ...prev, [trade.id]: previousMatches }));
+        setMatchesPopup(trade);
+        setMatchError("Network error — could not decline this request.");
+      }
+    }
+  }
+
+  function handleAcceptMatch(trade, match) {
+    setMatchError(null);
+    setMatchConfirm(match);
+  }
+
+  async function handleConfirmAccept(trade, match) {
+    setMatchError(null);
+    if (!auth) {
+      // Mock mode — just update UI
+      setAcceptedTrades(prev => new Set([...prev, trade.id]));
+      setMatchesPopup(null);
+      setMatchDetail(null);
+      setMatchConfirm(null);
+      return;
+    }
+    try {
+      const res = await post('/offer/match', { matchOfferId: match.offerId });
+      if (res.ok) {
+        setAcceptedTrades(prev => new Set([...prev, trade.id]));
+        setMatchesPopup(null);
+        setMatchDetail(null);
+        setMatchConfirm(null);
+      } else {
+        setMatchConfirm(null);
+        setMatchError("Could not accept this trade. Please try again.");
+      }
+    } catch {
+      setMatchConfirm(null);
+      setMatchError("Network error — could not accept this trade.");
+    }
+  }
+
+  function closeMatchesPopup() {
+    setMatchesPopup(null);
+    setMatchDetail(null);
+    setMatchConfirm(null);
+    setMatchError(null);
   }
 
   return (
@@ -1347,11 +1557,11 @@ export default function TradesDashboard() {
                   <span>Chat</span>
                   <span>Status</span>
                 </div>
-                {sortedFiltered.map(t => <TradeCard key={t.id} trade={t} layout="list" onSelect={(id) => navigate(`/trade/${id}`)}/>)}
+                {sortedFiltered.map(t => <TradeCard key={t.id} trade={t} layout="list" onSelect={handleTradeSelect}/>)}
               </div>
             ) : (
               <div className="cards-grid">
-                {sortedFiltered.map(t => <TradeCard key={t.id} trade={t} layout="grid" onSelect={(id) => navigate(`/trade/${id}`)}/>)}
+                {sortedFiltered.map(t => <TradeCard key={t.id} trade={t} layout="grid" onSelect={handleTradeSelect}/>)}
               </div>
             )}
           </>
@@ -1362,6 +1572,180 @@ export default function TradesDashboard() {
           <HistoryTable rows={MOCK_HISTORY}/>
         )}
       </main>
+
+      {/* ── MATCHES POPUP ── */}
+      {matchesPopup && (() => {
+        const trade = matchesPopup;
+        const matches = getMatchesForTrade(trade);
+        const isBuy = trade.direction === "buy";
+
+        // ── Confirmation dialog ──
+        if (matchConfirm) {
+          const m = matchConfirm;
+          return (
+            <div className="matches-overlay" onClick={closeMatchesPopup}>
+              <div className="matches-popup" onClick={e => e.stopPropagation()}>
+                <div className="matches-header">
+                  <span style={{fontWeight:800,fontSize:"1.05rem"}}>Confirm trade</span>
+                  <button className="matches-close" onClick={closeMatchesPopup}>✕</button>
+                </div>
+                <div style={{padding:"20px 24px",textAlign:"center"}}>
+                  <Avatar initials={m.user.initials} color={m.user.color} size={56}/>
+                  <div style={{fontWeight:800,fontSize:"1rem",marginTop:12}}>
+                    Accept trade with {m.user.name}?
+                  </div>
+                  <div style={{fontSize:".82rem",color:"var(--black-65)",marginTop:6}}>
+                    This will create a contract. Other requesters will be automatically declined.
+                  </div>
+                  <div style={{display:"flex",gap:10,marginTop:20,justifyContent:"center"}}>
+                    <button className="match-btn-skip" onClick={() => setMatchConfirm(null)}>Cancel</button>
+                    <button className="match-btn-accept" onClick={() => handleConfirmAccept(trade, m)}>Confirm</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        // ── Detail view ──
+        if (matchDetail) {
+          const m = matchDetail;
+          const reqAgo = relativeTime(m.requestedAt);
+          return (
+            <div className="matches-overlay" onClick={closeMatchesPopup}>
+              <div className="matches-popup" onClick={e => e.stopPropagation()}>
+                <div className="matches-header">
+                  <button className="matches-back" onClick={() => setMatchDetail(null)}>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="10,2 4,8 10,14"/></svg>
+                  </button>
+                  <span style={{fontWeight:800,fontSize:"1.05rem"}}>Review trader</span>
+                  <button className="matches-close" onClick={closeMatchesPopup}>✕</button>
+                </div>
+                <div style={{padding:"16px 24px 24px"}}>
+                  {/* Peer profile */}
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8,marginBottom:20}}>
+                    <Avatar initials={m.user.initials} color={m.user.color} size={56}/>
+                    <div style={{fontWeight:800,fontSize:"1rem"}}>{m.user.name}</div>
+                    <PeachRating rep={m.user.rep} size={20}/>
+                    <span style={{fontSize:".82rem",color:"var(--black-65)"}}>{m.user.trades} trades</span>
+                    {m.user.badges.length > 0 && (
+                      <div style={{display:"flex",gap:6}}>
+                        {m.user.badges.includes("supertrader") && <Badge label="supertrader" icon="☆"/>}
+                        {m.user.badges.includes("fast") && <Badge label="fast" icon="⚡"/>}
+                      </div>
+                    )}
+                  </div>
+                  {/* Trade terms */}
+                  <div className="match-detail-terms">
+                    <div className="match-detail-row">
+                      <span className="match-detail-label">Amount</span>
+                      <SatsAmount sats={m.amount}/>
+                    </div>
+                    <div className="match-detail-row">
+                      <span className="match-detail-label">Fiat</span>
+                      <span style={{fontWeight:700}}>≈ €{satsToFiat(m.amount)}</span>
+                    </div>
+                    <div className="match-detail-row">
+                      <span className="match-detail-label">Premium</span>
+                      <span style={{fontWeight:700,color:m.premium < 0 ? "#65A519" : m.premium > 0 ? "#DF321F" : "var(--black)"}}>
+                        {m.premium > 0 ? "+" : ""}{m.premium.toFixed(2)}%
+                      </span>
+                    </div>
+                    <div className="match-detail-row">
+                      <span className="match-detail-label">Payment</span>
+                      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                        {m.methods.map(pm => <span key={pm} className="tag tag-method">{pm}</span>)}
+                        {m.currencies.map(c => <span key={c} className="tag tag-currency">{c}</span>)}
+                      </div>
+                    </div>
+                    <div className="match-detail-row">
+                      <span className="match-detail-label">Requested</span>
+                      <span style={{fontSize:".82rem",color:"var(--black-65)"}}>{reqAgo}</span>
+                    </div>
+                  </div>
+                  {/* Error */}
+                  {matchError && (
+                    <div style={{background:"var(--error-bg)",color:"var(--error)",borderRadius:10,padding:"8px 14px",fontSize:".82rem",fontWeight:600,marginTop:12}}>
+                      {matchError}
+                    </div>
+                  )}
+                  {/* Actions */}
+                  <div style={{display:"flex",gap:10,marginTop:12}}>
+                    <button className="match-btn-skip" onClick={() => handleSkipMatch(trade, m)}>Skip</button>
+                    <button className="match-btn-accept" onClick={() => handleAcceptMatch(trade, m)}>Accept trade</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        // ── List view ──
+        return (
+          <div className="matches-overlay" onClick={closeMatchesPopup}>
+            <div className="matches-popup" onClick={e => e.stopPropagation()}>
+              <div className="matches-header">
+                <span style={{fontWeight:800,fontSize:"1.05rem"}}>Trade requests</span>
+                <span style={{fontSize:".78rem",fontFamily:"monospace",color:"var(--black-65)"}}>{trade.id.toUpperCase()}</span>
+                <button className="matches-close" onClick={closeMatchesPopup}>✕</button>
+              </div>
+              {/* Offer summary */}
+              <div style={{padding:"8px 24px 12px",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                <span className={`direction-badge direction-${isBuy ? "buy" : "sell"}`}>
+                  {isBuy ? "BUY" : "SELL"}
+                </span>
+                <SatsAmount sats={trade.amount}/>
+                {trade.premium !== undefined && (
+                  <span style={{fontSize:".78rem",fontWeight:700,
+                    color: isBuy
+                      ? (trade.premium < 0 ? "#65A519" : "#DF321F")
+                      : (trade.premium > 0 ? "#65A519" : "#DF321F"),
+                  }}>
+                    {trade.premium > 0 ? "+" : ""}{trade.premium.toFixed(2)}%
+                  </span>
+                )}
+                <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                  {trade.methods.map(m => <span key={m} className="tag tag-method">{m}</span>)}
+                </div>
+              </div>
+              {/* Count */}
+              <div style={{padding:"0 24px 12px",fontSize:".85rem",fontWeight:600,color:"var(--black-75)"}}>
+                {matches.length} trader{matches.length !== 1 ? "s" : ""} want{matches.length === 1 ? "s" : ""} to trade with you
+              </div>
+              {matchError && (
+                <div style={{padding:"0 24px 12px"}}>
+                  <div style={{background:"var(--error-bg)",color:"var(--error)",borderRadius:10,padding:"8px 14px",fontSize:".82rem",fontWeight:600}}>
+                    {matchError}
+                  </div>
+                </div>
+              )}
+              {/* Match rows */}
+              <div className="match-list">
+                {matches.map(m => (
+                  <div key={m.offerId} className="match-row" onClick={() => setMatchDetail(m)}>
+                    <Avatar initials={m.user.initials} color={m.user.color} size={36}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                        <span style={{fontWeight:700,fontSize:".88rem"}}>{m.user.name}</span>
+                        <PeachRating rep={m.user.rep}/>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3}}>
+                        <span style={{fontSize:".72rem",color:"var(--black-65)"}}>{m.user.trades} trades</span>
+                        {m.user.badges.includes("supertrader") && <Badge label="supertrader" icon="☆"/>}
+                        {m.user.badges.includes("fast") && <Badge label="fast" icon="⚡"/>}
+                      </div>
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:2,flexShrink:0}}>
+                      <span style={{fontSize:".72rem",color:"var(--black-65)"}}>{relativeTime(m.requestedAt)}</span>
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--black-65)" strokeWidth="2" strokeLinecap="round"><polyline points="5,2 10,7 5,12"/></svg>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── AUTH POPUP (when logged out) ── */}
       {!isLoggedIn && (

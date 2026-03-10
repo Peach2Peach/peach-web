@@ -180,7 +180,9 @@ export default function PeachAuth() {
 
       setDevAuthProfile(profile);
       setDevAuthPhase("success");
+      try { localStorage.setItem("peach_logged_in", "true"); } catch {}
       setTimeout(() => { setPhase("success"); }, 1200);
+      setTimeout(() => { navigate("/home"); }, 2200);
     } catch (err) {
       setDevAuthError(err.message);
       setDevAuthPhase("error");
@@ -234,14 +236,14 @@ export default function PeachAuth() {
     setDesktopPastePhase("validating");
     setTimeout(() => {
       if (desktopPasteVal.trim().toUpperCase().startsWith("ERR")) setDesktopPastePhase("error");
-      else { setDesktopPastePhase("success"); setTimeout(() => navigate("/home"), 1500); }
+      else { setDesktopPastePhase("success"); try { localStorage.setItem("peach_logged_in", "true"); } catch {} setTimeout(() => navigate("/home"), 1500); }
     }, 1200);
   }
 
   // Demo: click QR cycles states
   function handleQRClick() {
     if (phase==="waiting")  { setPhase("scanning"); return; }
-    if (phase==="scanning") { setPhase("success"); setTimeout(() => navigate("/home"), 1500); return; }
+    if (phase==="scanning") { setPhase("success"); try { localStorage.setItem("peach_logged_in", "true"); } catch {} setTimeout(() => navigate("/home"), 500); return; }
     if (phase==="success")  { resetQR();             return; }
     if (phase==="expired")  { resetQR();             return; }
   }
@@ -255,7 +257,7 @@ export default function PeachAuth() {
     setTimeout(() => {
       // Mock: codes starting with "ERR" fail
       if (pasteVal.trim().toUpperCase().startsWith("ERR")) setPastePhase("error");
-      else { setPastePhase("success"); setTimeout(() => navigate("/home"), 1500); }
+      else { setPastePhase("success"); try { localStorage.setItem("peach_logged_in", "true"); } catch {} setTimeout(() => navigate("/home"), 1500); }
     }, 1200);
   }
   function handlePasteReset() { setPasteVal(""); setPastePhase("idle"); }

@@ -4,6 +4,7 @@ import { SideNav, Topbar } from "../components/Navbars.jsx";
 import { SatsAmount, IcoBtc } from "../components/BitcoinAmount.jsx";
 import { useAuth } from "../hooks/useAuth.js";
 import { useApi } from "../hooks/useApi.js";
+import { extractPMsFromProfile, isApiError } from "../utils/pgp.js";
 
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
 const MOCK_OFFERS = [
@@ -23,7 +24,7 @@ const MOCK_OFFERS = [
   { id:"b5", type:"bid", amount:300000,  premium:1.2,  methods:["SEPA"],           currencies:["EUR","CHF"], rep:5.0, trades:489, badges:["supertrader","fast"],auto:true,  online:true  },
 ];
 
-// Mock user's saved payment methods (would come from GET /user/me/paymentMethods)
+// Mock user's saved payment methods (replaced by GET /v069/selfUser when authenticated)
 const USER_PMS = [
   { id:"pm1", type:"SEPA",    currencies:["EUR","CHF"], details:{ holder:"Peter Weber", iban:"DE89370400440532013000" }},
   { id:"pm2", type:"Revolut", currencies:["EUR","GBP"], details:{ username:"@peterweber" }},
@@ -693,6 +694,7 @@ export default function PeachMarket() {
   const { get, post, auth } = useApi();
   const [liveOffers,   setLiveOffers]   = useState(null); // null = use mock
   const [liveUserPMs,  setLiveUserPMs]  = useState(null); // null = use mock
+  const [pmError,      setPmError]      = useState(false);
 
   const { isLoggedIn, handleLogin, handleLogout, showAvatarMenu, setShowAvatarMenu } = useAuth();
   useEffect(() => {
@@ -821,24 +823,66 @@ export default function PeachMarket() {
     fetchMarket();
 
     if (auth) {
-      get('/user/me/paymentMethods')
+      const selfUserBase = auth.baseUrl.replace(/\/v1$/, '/v069');
+      fetch(`${selfUserBase}/selfUser`, {
+        headers: { Authorization: `Bearer ${auth.token}` },
+      })
         .then(r => r.ok ? r.json() : null)
-        .then(data => {
-          if (Array.isArray(data) && data.length > 0) {
-            setLiveUserPMs(data.map(pm => ({
+        .then(async (data) => {
+          const profile = data?.user ?? data;
+          if (!profile || isApiError(profile)) throw new Error(`API error: ${profile?.error || profile?.message || "no data"}`);
+          const pms = auth?.pgpPrivKey
+            ? await extractPMsFromProfile(profile, auth.pgpPrivKey)
+            : null;
+          if (!pms) throw new Error("No PM data found in profile");
+          // Keys that belong to the PM structure — everything else is a detail field
+          const STRUCTURAL = new Set([
+            "id", "methodId", "type", "name", "label", "currencies", "hashes",
+            "details", "data", "country", "anonymous",
+          ]);
+          function mapD(d) {
+            const m = { ...d };
+            if (d.userName && !d.username) m.username = d.userName;
+            if (d.userName && !d.email)    m.email    = d.userName;
+            if (d.beneficiary && !d.holder) m.holder  = d.beneficiary;
+            return m;
+          }
+          function shortId(raw) { return raw.replace(/-\d+$/, ""); }
+          function sweepFields(obj) {
+            const explicit = obj.data || obj.details || null;
+            const swept = {};
+            if (!explicit) {
+              for (const [k, v] of Object.entries(obj)) {
+                if (!STRUCTURAL.has(k) && typeof v !== "object") swept[k] = v;
+              }
+            }
+            return mapD(explicit || (Object.keys(swept).length ? swept : {}));
+          }
+          if (Array.isArray(pms) && pms.length > 0) {
+            setLiveUserPMs(pms.map(pm => ({
               id: pm.id,
-              type: pm.type ?? pm.id,
+              type: shortId(pm.type ?? pm.id),
               currencies: pm.currencies ?? [],
-              details: pm.data ?? pm.details ?? {},
+              details: sweepFields(pm),
+            })));
+          } else if (pms && typeof pms === "object") {
+            setLiveUserPMs(Object.entries(pms).map(([key, val]) => ({
+              id: val?.id || key,
+              type: shortId(key),
+              currencies: val?.currencies ?? [],
+              details: sweepFields(val || {}),
             })));
           }
         })
-        .catch(() => {});
+        .catch((err) => {
+          console.warn("[MarketView] PM fetch failed:", err.message);
+          setPmError(true);
+        });
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const marketOffers = liveOffers ?? MOCK_OFFERS;
-  const userPMs = liveUserPMs ?? USER_PMS;
+  const userPMs = liveUserPMs ?? (auth ? [] : USER_PMS);
 
   const offerType = isSellTab ? "bid" : "ask";
 
@@ -1023,7 +1067,12 @@ export default function PeachMarket() {
                 <div className="popup-section-label">
                   Select your payment method
                 </div>
-                {hasMissingPM ? (
+                {pmError ? (
+                  <div style={{padding:"12px 16px",borderRadius:10,background:"var(--error-bg)",
+                    color:"var(--error)",fontWeight:700,fontSize:".82rem",textAlign:"center"}}>
+                    Failed to load payment data
+                  </div>
+                ) : hasMissingPM ? (
                   <div className="popup-pm-warning">
                     <span style={{fontSize:"1rem",flexShrink:0}}>⚠️</span>
                     <div>

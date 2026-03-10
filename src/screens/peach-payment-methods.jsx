@@ -4,6 +4,7 @@ import { SideNav, Topbar } from "../components/Navbars.jsx";
 import { IcoBtc } from "../components/BitcoinAmount.jsx";
 import { useAuth } from "../hooks/useAuth.js";
 import { useApi } from "../hooks/useApi.js";
+import { decryptPaymentMethods, extractPMsFromProfile, isApiError } from "../utils/pgp.js";
 
 // ─── INPUT VALIDATORS (inline for Claude.ai preview; import from peach-validators.js for GitHub build) ──
 const IBAN_RE = /^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/;
@@ -173,15 +174,15 @@ function methodLabel(pm) {
   const d = pm.details || {};
   if (d.iban)      return d.iban.replace(/\s/g,"").replace(/^(.{4})(.*)(.{4})$/, "$1 •••• $3");
   if (d.email)     return d.email.replace(/(.{2})(.*)(@.*)/, "$1•••$3");
-  if (d.username)  return d.username;
+  if (d.username || d.userName) return d.username || d.userName;
   if (d.phone)     return d.phone.replace(/(.{5})(.*)(.{3})/, "$1•••$3");
-  if (d.holder)    return d.holder;
+  if (d.holder || d.beneficiary) return d.holder || d.beneficiary;
   if (d.sortCode)  return `${d.sortCode} / ${d.accountNo || ""}`;
   return "—";
 }
 
 // Mock saved PMs — used as fallback when not regtest-authenticated.
-// When window.__PEACH_AUTH__ is set, replaced by GET /user/me/paymentMethods on mount.
+// When window.__PEACH_AUTH__ is set, replaced by GET /v069/selfUser on mount.
 const MOCK_SAVED = [
   { id:"pm1", methodId:"sepa",    name:"SEPA",    currencies:["EUR","CHF"], details:{ holder:"Peter Weber", iban:"DE89 3704 0044 0532 0130 00" }},
   { id:"pm2", methodId:"revolut", name:"Revolut",  currencies:["EUR","GBP"], details:{ username:"@peterweber" }},
@@ -666,8 +667,9 @@ export default function PeachPaymentMethods() {
   const [catalogueLoading, setCatalogueLoading] = useState(true);
 
   // User's saved PMs
-  const [savedMethods, setSavedMethods] = useState(MOCK_SAVED);
+  const [savedMethods, setSavedMethods] = useState(auth ? [] : MOCK_SAVED);
   const [savedLoading, setSavedLoading] = useState(false);
+  const [pmError, setPmError]           = useState(false);
 
   // Modal states
   const [showAddFlow, setShowAddFlow]   = useState(false);
@@ -721,37 +723,102 @@ export default function PeachPaymentMethods() {
 
     (async () => {
       try {
-        const res = await get('/user/me/paymentMethods');
+        // Fetch from /v069/selfUser — this endpoint contains PGP-encrypted PM data.
+        // It uses a different API version than the standard /v1 endpoints,
+        // so we build the URL manually instead of using useApi's get().
+        const selfUserBase = auth.baseUrl.replace(/\/v1$/, '/v069');
+        const res = await fetch(`${selfUserBase}/selfUser`, {
+          headers: { Authorization: `Bearer ${auth.token}` },
+        });
         if (!res.ok) throw new Error(`${res.status}`);
         const data = await res.json();
+        console.log("[PaymentMethods] /v069/selfUser response keys:", Object.keys(data));
 
-        // Normalise API response into our internal shape:
+        // Response is { user: { ...profile } } — extract the user object
+        const profile = data.user ?? data;
+
+        // Reject API error responses
+        if (isApiError(profile)) throw new Error(`API error: ${profile.error || profile.message}`);
+
+        // Extract and decrypt PM data from the profile
+        const pms = auth?.pgpPrivKey
+          ? await extractPMsFromProfile(profile, auth.pgpPrivKey)
+          : null;
+
+        console.log("[PaymentMethods] Extracted PMs:", pms);
+        if (Array.isArray(pms) && pms[0]) {
+          console.log("[PaymentMethods] First PM keys:", Object.keys(pms[0]));
+          console.log("[PaymentMethods] First PM raw:", JSON.stringify(pms[0], null, 2));
+        }
+
+        if (!pms) throw new Error("No PM data found in profile");
+
+        // Keys that belong to the PM structure — everything else is a detail field
+        const STRUCTURAL = new Set([
+          "id", "methodId", "type", "name", "label", "currencies", "hashes",
+          "details", "data", "country", "anonymous",
+        ]);
+
+        // Map API field names to our form field names
+        function mapDetails(d) {
+          const m = { ...d };
+          if (d.userName && !d.username) m.username = d.userName;
+          if (d.userName && !d.email)    m.email    = d.userName;
+          if (d.beneficiary && !d.holder) m.holder  = d.beneficiary;
+          return m;
+        }
+
+        // Extract short method type from an ID like "wise-1772024982578" → "wise"
+        function shortMethodId(raw) {
+          return raw.replace(/-\d+$/, "");
+        }
+
+        // Normalise into our internal shape:
         //   { id, methodId, name, currencies, details }
-        // The exact API shape isn't documented — adapt once confirmed.
-        if (Array.isArray(data)) {
-          const normalised = data.map((pm, i) => ({
-            id:         pm.id        || `api-pm-${i}`,
-            methodId:   pm.methodId  || pm.type || pm.id || "unknown",
-            name:       pm.name      || pm.label || pm.type || "Payment Method",
-            currencies: pm.currencies || [],
-            details:    pm.details   || pm.data || {},
-          }));
+        if (Array.isArray(pms)) {
+          const normalised = pms.map((pm, i) => {
+            // Use explicit details/data sub-object if present
+            const explicit = pm.details || pm.data || null;
+            // Otherwise sweep non-structural top-level fields into details
+            const swept = {};
+            if (!explicit) {
+              for (const [k, v] of Object.entries(pm)) {
+                if (!STRUCTURAL.has(k) && typeof v !== "object") swept[k] = v;
+              }
+            }
+            const rawId = pm.methodId || pm.type || pm.id || "unknown";
+            return {
+              id:         pm.id        || `api-pm-${i}`,
+              methodId:   shortMethodId(rawId),
+              name:       pm.name      || pm.label || pm.type || "Payment Method",
+              currencies: pm.currencies || [],
+              details:    mapDetails(explicit || (Object.keys(swept).length ? swept : {})),
+            };
+          });
           setSavedMethods(normalised);
-        } else if (data && typeof data === "object") {
-          // API may return { [methodId]: details } map — flatten
-          const normalised = Object.entries(data).map(([key, val], i) => ({
-            id:         val?.id || `api-pm-${i}`,
-            methodId:   key,
-            name:       val?.name || val?.label || key,
-            currencies: val?.currencies || [],
-            details:    val?.details || val?.data || val || {},
-          }));
+        } else if (pms && typeof pms === "object") {
+          // API returns { [pmId]: pmData } map — flatten
+          const normalised = Object.entries(pms).map(([key, val], i) => {
+            const explicit = val?.details || val?.data || null;
+            const swept = {};
+            if (!explicit && val && typeof val === "object") {
+              for (const [k, v] of Object.entries(val)) {
+                if (!STRUCTURAL.has(k) && typeof v !== "object") swept[k] = v;
+              }
+            }
+            return {
+              id:         val?.id || key,
+              methodId:   shortMethodId(key),
+              name:       val?.name || val?.label || key,
+              currencies: val?.currencies || [],
+              details:    mapDetails(explicit || (Object.keys(swept).length ? swept : {})),
+            };
+          });
           setSavedMethods(normalised);
         }
-        // else: unexpected shape — keep MOCK_SAVED
       } catch (err) {
         console.warn("[PaymentMethods] Failed to fetch saved PMs:", err.message);
-        // Keep mock data as fallback
+        setPmError(true);
       } finally {
         setSavedLoading(false);
       }
@@ -854,6 +921,10 @@ export default function PeachPaymentMethods() {
           <div className="pm-empty-state">
             <div style={{ fontSize:"1.1rem", color:"var(--black-65)", fontWeight:600 }}>Loading your payment methods…</div>
           </div>
+        ) : pmError ? (
+          <div className="pm-empty-state">
+            <div className="pm-card pm-card-error">Failed to load payment data</div>
+          </div>
         ) : savedMethods.length === 0 ? (
           <div className="pm-empty-state">
             <div className="pm-empty-icon">💳</div>
@@ -955,7 +1026,7 @@ export default function PeachPaymentMethods() {
 const CSS = `
   /* Page layout */
   .page-wrap{margin-top:var(--topbar);margin-left:68px;padding:32px 28px;min-height:calc(100vh - 56px)}
-  @media(max-width:767px){.page-wrap{margin-left:0;padding:20px 16px}}
+  @media(max-width:767px){.page-wrap{margin-left:0;padding:20px 16px;overflow-x:hidden}}
 
   .page-header{display:flex;align-items:flex-start;gap:16px;margin-bottom:28px;flex-wrap:wrap}
   .page-title{font-size:1.5rem;font-weight:800;letter-spacing:-.02em}
@@ -987,6 +1058,9 @@ const CSS = `
     border:1.5px solid var(--black-10);border-radius:14px;padding:14px 16px;
     transition:border-color .15s,box-shadow .15s}
   .pm-card:hover{border-color:var(--primary);box-shadow:0 2px 12px rgba(245,101,34,.08)}
+  .pm-card.pm-card-error{background:var(--error-bg);border-color:var(--error);
+    color:var(--error);font-weight:700;font-size:.88rem;text-align:center;
+    justify-content:center;padding:18px 16px}
   .pm-card+.pm-card{margin-top:8px}
   .pm-card-left{flex:1;min-width:0}
   .pm-card-name{font-size:.92rem;font-weight:700;color:var(--black);margin-bottom:2px}

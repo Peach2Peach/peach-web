@@ -62,8 +62,9 @@ First call: `POST /user/register`. Subsequently: `POST /user/auth`.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/user/me` | Get own profile: trades, rating, payment methods, etc. |
-| GET | `/user/me/paymentMethods` | Own registered payment method info. |
+| GET | `/user/me` | Get own profile: trades, rating, medals, etc. (does NOT include PMs). |
+| GET | `/user/me/paymentMethods` | Returns `{"forbidden":{"buy":[],"sell":[]}}` on regtest — not usable for PM data. |
+| GET | `/v069/selfUser` | **Full user profile with PGP-encrypted PM data.** Response: `{ user: { ...profile, encryptedPaymentData: "PGP..." } }`. Decrypt `encryptedPaymentData` with user's PGP private key to get PM array. Different API version (`v069`, not `v1`). |
 | GET | `/user/tradingLimit` | Own trading limits. |
 | PATCH | `/user` | Update own profile. Body: user fields, optional PGP key. |
 | GET | `/user/:userId/status` | Get status of another user (online, etc.). |

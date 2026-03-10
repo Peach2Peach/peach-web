@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 export function useAuth() {
   const auth = window.__PEACH_AUTH__ ?? null;
+  const navigate = useNavigate();
 
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
     if (window.__PEACH_AUTH__) return true;
@@ -11,8 +13,7 @@ export function useAuth() {
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
 
   const handleLogin = () => {
-    setIsLoggedIn(true);
-    try { localStorage.setItem("peach_logged_in", "true"); } catch {}
+    navigate("/");
   };
 
   const handleLogout = () => {

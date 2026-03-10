@@ -4,6 +4,7 @@ import { SideNav, Topbar } from "../components/Navbars.jsx";
 import { SatsAmount, IcoBtc } from "../components/BitcoinAmount.jsx";
 import { useAuth } from "../hooks/useAuth.js";
 import { useApi } from "../hooks/useApi.js";
+import { extractPMsFromProfile, isApiError } from "../utils/pgp.js";
 
 const BTC_PRICE_INIT = 87432;
 const SAT = 100_000_000;
@@ -31,18 +32,19 @@ const METHOD_FIELDS = {
 
 // Derive a short display label for a saved PM
 function methodLabel(pm) {
-  const d = pm.details;
+  const d = pm.details || {};
   const curr = (pm.currencies||[]).join("/");
-  if(pm.type==="SEPA")    return `SEPA · ${curr} · ${d.iban?d.iban.replace(/\s/g,"").slice(0,6)+"…":"—"}`;
-  if(pm.type==="Revolut") return `Revolut · ${curr} · ${d.username||"—"}`;
-  if(pm.type==="Wise")    return `Wise · ${curr} · ${d.email||"—"}`;
-  if(pm.type==="PayPal")  return `PayPal · ${curr} · ${d.email||"—"}`;
-  if(pm.type==="Strike")  return `Strike · ${curr} · ${d.username||"—"}`;
-  if(pm.type==="Cash")    return `Cash · ${curr}`;
+  const t = (pm.type||"").split("-")[0].toLowerCase();
+  if(t==="sepa")    return `SEPA · ${curr} · ${d.iban?d.iban.replace(/\s/g,"").slice(0,6)+"…":(d.beneficiary||d.holder||"—")}`;
+  if(t==="revolut") return `Revolut · ${curr} · ${d.username||d.userName||"—"}`;
+  if(t==="wise")    return `Wise · ${curr} · ${d.email||d.userName||"—"}`;
+  if(t==="paypal")  return `PayPal · ${curr} · ${d.email||"—"}`;
+  if(t==="strike")  return `Strike · ${curr} · ${d.username||d.userName||"—"}`;
+  if(t==="cash")    return `Cash · ${curr}`;
   return pm.type;
 }
 
-// Mock pre-seeded saved PMs (would come from GET /user/me/paymentMethods)
+// Mock pre-seeded saved PMs (replaced by GET /v069/selfUser when authenticated)
 const MOCK_SAVED = [
   {id:"pm1",type:"SEPA",    currencies:["EUR","CHF"],details:{holder:"Peter Weber",iban:"DE89370400440532013000"}},
   {id:"pm2",type:"Revolut", currencies:["EUR","GBP"],details:{username:"@peterweber"}},
@@ -959,23 +961,68 @@ export default function OfferCreation({ initialType="buy" }) {
   const [savedMethods, setSavedMethods] = useState(MOCK_SAVED);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPM,    setEditingPM]    = useState(null); // PM object being edited
+  const [pmError,      setPmError]      = useState(false);
 
   // ── FETCH LIVE SAVED PMs ──
   useEffect(() => {
     if (!auth) return;
-    get('/user/me/paymentMethods')
+    // On regtest, clear mock data while we fetch
+    setSavedMethods([]);
+    const selfUserBase = auth.baseUrl.replace(/\/v1$/, '/v069');
+    fetch(`${selfUserBase}/selfUser`, {
+      headers: { Authorization: `Bearer ${auth.token}` },
+    })
       .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (Array.isArray(data) && data.length > 0) {
-          setSavedMethods(data.map(pm => ({
+      .then(async (data) => {
+        const profile = data?.user ?? data;
+        if (!profile || isApiError(profile)) throw new Error(`API error: ${profile?.error || profile?.message || "no data"}`);
+        const pms = auth?.pgpPrivKey
+          ? await extractPMsFromProfile(profile, auth.pgpPrivKey)
+          : null;
+        if (!pms) throw new Error("No PM data found in profile");
+        // Keys that belong to the PM structure — everything else is a detail field
+        const STRUCTURAL = new Set([
+          "id", "methodId", "type", "name", "label", "currencies", "hashes",
+          "details", "data", "country", "anonymous",
+        ]);
+        function mapD(d) {
+          const m = { ...d };
+          if (d.userName && !d.username) m.username = d.userName;
+          if (d.userName && !d.email)    m.email    = d.userName;
+          if (d.beneficiary && !d.holder) m.holder  = d.beneficiary;
+          return m;
+        }
+        function shortId(raw) { return raw.replace(/-\d+$/, ""); }
+        function sweepFields(obj) {
+          const explicit = obj.data || obj.details || null;
+          const swept = {};
+          if (!explicit) {
+            for (const [k, v] of Object.entries(obj)) {
+              if (!STRUCTURAL.has(k) && typeof v !== "object") swept[k] = v;
+            }
+          }
+          return mapD(explicit || (Object.keys(swept).length ? swept : {}));
+        }
+        if (Array.isArray(pms) && pms.length > 0) {
+          setSavedMethods(pms.map(pm => ({
             id: pm.id,
-            type: pm.type ?? pm.id,
+            type: shortId(pm.type ?? pm.id),
             currencies: pm.currencies ?? [],
-            details: pm.data ?? pm.details ?? {},
+            details: sweepFields(pm),
+          })));
+        } else if (pms && typeof pms === "object") {
+          setSavedMethods(Object.entries(pms).map(([key, val]) => ({
+            id: val?.id || key,
+            type: shortId(key),
+            currencies: val?.currencies ?? [],
+            details: sweepFields(val || {}),
           })));
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.warn("[OfferCreation] PM fetch failed:", err.message);
+        setPmError(true);
+      });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
@@ -1261,7 +1308,14 @@ export default function OfferCreation({ initialType="buy" }) {
                   </button>
                 </div>
 
-                {savedMethods.length === 0 ? (
+                {pmError ? (
+                  <div className="pm-empty">
+                    <div style={{padding:"12px 16px",borderRadius:12,background:"var(--error-bg)",
+                      color:"var(--error)",fontWeight:700,fontSize:".82rem",textAlign:"center"}}>
+                      Failed to load payment data
+                    </div>
+                  </div>
+                ) : savedMethods.length === 0 ? (
                   <div className="pm-empty">
                     <div style={{fontSize:"1.6rem",opacity:.35}}>💳</div>
                     <div style={{fontSize:".82rem",fontWeight:700,color:"var(--black-65)"}}>

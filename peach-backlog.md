@@ -108,8 +108,8 @@ These rows exist in the Settings screen but navigate to placeholder/empty views.
 - **Escrow funding timer (seller POV)** — add a big, prominent countdown timer for how long the seller has left to fund the escrow. Same data source: `SellOffer.funding.expiry`.
 
 ### Payment Methods (`peach-payment-methods.jsx`)
-- **Wire `GET /user/me/paymentMethods`** — replace `MOCK_SAVED` with a real API fetch on mount (auth-gated via `window.__PEACH_AUTH__`). Falls back to mock data when not authenticated.
-- ⚠️ **PM save/delete endpoints unknown** — the API reference lists `GET /user/me/paymentMethods` but no explicit POST/PUT/DELETE for individual PM CRUD. **Confirm with backend engineer** how PM save and delete work before wiring those calls.
+- ✅ **Wire PM fetch** — PMs fetched from `GET /v069/selfUser` (PGP-encrypted in `encryptedPaymentData` field). Decrypted client-side via `src/utils/pgp.js`. Shows real PMs on regtest, mock data when logged out, "Failed to load payment data" error card on fetch failure. Same pattern in offer-creation and market-view.
+- ⚠️ **PM save/delete endpoints unknown** — no explicit POST/PUT/DELETE for individual PM CRUD discovered. **Confirm with backend engineer** how PM save and delete work before wiring those calls.
 
 ### Trades Dashboard (`peach-trades-dashboard.jsx`)
 - **List view row layout needs UI rework** — current list rows are functional but visually rough. Columns feel cramped, amount/fiat/status alignment needs polish, and the overall row design doesn't scan well. Revisit the row layout with a design pass — consider a purpose-built compact row component rather than squeezing the grid card data into columns.
