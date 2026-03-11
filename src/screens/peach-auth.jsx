@@ -160,7 +160,7 @@ export default function PeachAuth() {
       const token = parsed.token;
       if (!token) throw new Error("No 'token' field found in JSON");
 
-      const res = await fetch("https://api-regtest.peachbitcoin.com/v1/user/me", {
+      const res = await fetch("/api-regtest/v1/user/me", {
         headers: { "Authorization": `Bearer ${token}` }
       });
       if (!res.ok) {
@@ -170,11 +170,12 @@ export default function PeachAuth() {
       const profile = await res.json();
 
       // Store auth globally so other screens can pick it up
+      // baseUrl goes through the Vite proxy to avoid CORS issues
       window.__PEACH_AUTH__ = {
         token,
         pgpPrivKey: parsed.pgpPrivKey || null,
         peachId: profile.id || profile.publicKey || null,
-        baseUrl: "https://api-regtest.peachbitcoin.com/v1",
+        baseUrl: "/api-regtest/v1",
         profile
       };
 

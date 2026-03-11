@@ -1,11 +1,17 @@
 import { IcoBtc } from "./BitcoinAmount.jsx";
 
+// ─── PEACH ID FORMATTING ─────────────────────────────────────────────────────
+export function formatPeachId(rawId) {
+  if (!rawId) return "PEACH00000000";
+  return "PEACH" + rawId.slice(0, 8).toUpperCase();
+}
+
 // ─── TOPBAR PEACH ID (3 states: logged out / mock / regtest) ─────────────────
 export function getTopbarPeachId() {
   const auth = window.__PEACH_AUTH__;
   if (auth?.token) {
     const pub = auth.peachId || auth.profile?.publicKey || "";
-    return "Regtest: PEACH" + pub.slice(0, 8).toUpperCase();
+    return "Regtest: " + formatPeachId(pub);
   }
   return "MOCK: PEACH08476D23";
 }

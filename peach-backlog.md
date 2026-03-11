@@ -133,6 +133,7 @@ These rows exist in the Settings screen but navigate to placeholder/empty views.
 
 ### Trades Dashboard (`peach-trades-dashboard.jsx`)
 - 🟡 **Pending Offers tab — render offers waiting for matches** — The Pending Offers tab fetches from both V1 and V069, but needs to correctly display offers that are waiting for matches (status: `hasMatchesAvailable`, `waitingForTradeRequest`, `searchingForPeer`, `offerPublished`, `fundEscrow`). Verify that these offers render properly with real API data and that the user can navigate to match/accept flows from this tab.
+- **Trade History tab — unread chat badge** — The Trade History tab badge should turn orange if any completed trade has unread chat messages. Requires fetching unread message count per contract (not yet wired).
 
 ---
 

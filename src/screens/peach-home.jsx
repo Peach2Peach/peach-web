@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { SideNav, Topbar } from "../components/Navbars.jsx";
+import { SideNav, Topbar, formatPeachId } from "../components/Navbars.jsx";
 import { SatsAmount, IcoBtc } from "../components/BitcoinAmount.jsx";
 import { useAuth } from "../hooks/useAuth.js";
 import { useApi } from "../hooks/useApi.js";
@@ -303,7 +303,7 @@ export default function PeachHome() {
   const { get } = useApi();
   const liveProfile = auth?.profile ?? null;
   const user = {
-    peachId:             auth?.peachId              ?? MOCK_USER.peachId,
+    peachId:             auth?.peachId ? formatPeachId(auth.peachId) : MOCK_USER.peachId,
     memberSince:         MOCK_USER.memberSince,
     trades:              liveProfile?.trades         ?? MOCK_USER.trades,
     disputesTotal:       MOCK_USER.disputesTotal,

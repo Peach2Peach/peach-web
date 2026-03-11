@@ -1605,7 +1605,8 @@ export default function TradeExecution() {
   const activeLive = !!liveContract;
   const scenario = activeLive ? liveContract : demoScenario;
   const messages = activeLive ? (liveMessages ?? []) : demoMessages;
-  const { contract, counterparty, tradeStatus: status, role, paymentDetails } = scenario;
+  const { contract, counterparty: rawCounterparty, tradeStatus: status, role, paymentDetails } = scenario;
+  const counterparty = rawCounterparty ?? { initials: "??", color: "#7D675E", name: "Unknown", rep: 0, trades: 0, badges: [], online: false };
 
   useEffect(() => {
     async function fetchPrices() {
@@ -1651,7 +1652,21 @@ export default function TradeExecution() {
             paymentExpectedBy: c.paymentExpectedBy ?? null,
             escrow: c.escrow ?? null,
           },
-          counterparty: null,
+          counterparty: (() => {
+            const cpId = isBuyer
+              ? (c.seller?.id ?? c.sellerId ?? "unknown")
+              : (c.buyer?.id ?? c.buyerId ?? "unknown");
+            const short = cpId.length > 8 ? "Peach" + cpId.slice(-4).toUpperCase() : cpId;
+            return {
+              initials: short.slice(-2).toUpperCase(),
+              color: "#7D675E",
+              name: short,
+              rep: c.ratingBuyer ?? c.ratingSeller ?? 0,
+              trades: 0,
+              badges: [],
+              online: false,
+            };
+          })(),
           paymentDetails: c.paymentData ?? null,
         });
       } catch {}
@@ -1818,7 +1833,7 @@ export default function TradeExecution() {
               <div style={{ flex:1, minWidth:0 }}>
                 <div className="cp-name">{counterparty.name}</div>
                 <div className="cp-meta">
-                  <span>★ {counterparty.rep.toFixed(1)}</span>
+                  <span>★ {(counterparty.rep ?? 0).toFixed(1)}</span>
                   <span>·</span>
                   <span>{counterparty.trades} trades</span>
                 </div>

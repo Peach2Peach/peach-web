@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { SideNav, Topbar } from "../components/Navbars.jsx";
+import { SideNav, Topbar, formatPeachId } from "../components/Navbars.jsx";
 import { IcoBtc } from "../components/BitcoinAmount.jsx";
 import { useAuth } from "../hooks/useAuth.js";
 import { useApi } from "../hooks/useApi.js";
@@ -346,7 +346,8 @@ function OutlineBtn({ label, onClick }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ProfileSubScreen({ onBack }) {
-  const peachId = "PEACH03CF9E9A";
+  const auth = window.__PEACH_AUTH__;
+  const peachId = auth?.peachId ? formatPeachId(auth.peachId) : "PEACH03CF9E9A";
   const pubkey  = "03CF9E9A9DFB2951CEFC6107BCD63D963D85A00C50FCB93B7240C54C8E4053EEFA";
   const badges  = ["supertrader ⭐", "fast trader ⚡", "early adopter 🐣"];
   const rating  = 5.0;

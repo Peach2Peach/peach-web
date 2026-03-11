@@ -7,6 +7,11 @@ export default defineConfig({
   base: '/peach-web/',
   server: {
     proxy: {
+      '/api-regtest': {
+        target: 'https://api-regtest.peachbitcoin.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api-regtest/, ''),
+      },
       '/api': {
         target: 'https://api.peachbitcoin.com/v1',
         changeOrigin: true,

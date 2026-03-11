@@ -4,6 +4,11 @@ import { SideNav, Topbar } from "../components/Navbars.jsx";
 import { SatsAmount, IcoBtc } from "../components/BitcoinAmount.jsx";
 import { useAuth } from "../hooks/useAuth.js";
 import { useApi, getCached, setCache, clearCache } from "../hooks/useApi.js";
+import {
+  extractPMsFromProfile, isApiError,
+  generateSymmetricKey, encryptForRecipients,
+  encryptSymmetric, signPGPMessage, hashPaymentFields,
+} from "../utils/pgp.js";
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 const IconSort      = ({ dir }) => <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d={dir === "asc" ? "M2 8l4-5 4 5" : dir === "desc" ? "M2 4l4 5 4-5" : "M2 4.5l4-3 4 3M2 7.5l4 3 4-3"}/></svg>;
@@ -28,31 +33,38 @@ function fmt(n) {
 }
 
 // Status config: label, chip color, text color, whether action is required
+// Status chip colors — 3 categories:
+//   Orange (#FEEDE5 / #C45104) = action required
+//   Yellow (#FEFCE5 / #9A7000) = warning, attention requested
+//   Grey   (#F4EEEB / #7D675E) = pending, no action required
+// Plus: green for completed, red for disputes/cancellation
 const STATUS_CONFIG = {
   open_offer:          { label: "Open Offer",          bg: "#F4EEEB", color: "#7D675E", action: false },
-  pending_match:       { label: "Pending Match",       bg: "#D7F2FE", color: "#037DB5", action: false },
-  accept_trade_request:{ label: "Accept Trade Request", bg: "#F56522", color: "white",   action: true  },
+  pending_match:       { label: "Pending Match",       bg: "#F4EEEB", color: "#7D675E", action: false },
+  accept_trade_request:{ label: "Accept Trade Request", bg: "#FEEDE5", color: "#C45104", action: true  },
+  acceptTradeRequest:  { label: "Accept Trade Request", bg: "#FEEDE5", color: "#C45104", action: true  },
   matched:             { label: "Matched",             bg: "#FEFCE5", color: "#9A7000", action: true  },
   escrow_funded:       { label: "Escrow Funded",       bg: "#FEFCE5", color: "#9A7000", action: true  },
-  payment_in_transit:  { label: "Payment Sent",        bg: "#FEEDE5", color: "#C45104", action: false },
+  payment_in_transit:  { label: "Payment Sent",        bg: "#F4EEEB", color: "#7D675E", action: false },
   awaiting_payment:    { label: "Awaiting Payment",    bg: "#FEEDE5", color: "#C45104", action: true  },
-  payment_confirmed:   { label: "Payment Confirmed",   bg: "#F2F9E7", color: "#65A519", action: true  },
+  payment_confirmed:   { label: "Payment Confirmed",   bg: "#F2F9E7", color: "#65A519", action: false },
   dispute:             { label: "Dispute",             bg: "#FFE6E1", color: "#DF321F", action: true  },
   cancellation_pending:{ label: "Cancellation Req.",  bg: "#FFE6E1", color: "#DF321F", action: true  },
   completed:           { label: "Completed",           bg: "#F2F9E7", color: "#65A519", action: false },
   cancelled:           { label: "Cancelled",           bg: "#F4EEEB", color: "#7D675E", action: false },
   paymentRequired:     { label: "Payment Required",     bg: "#FEEDE5", color: "#C45104", action: true  },
-  confirmPaymentRequired:{ label: "Confirm Payment",   bg: "#FEFCE5", color: "#9A7000", action: true  },
+  confirmPaymentRequired:{ label: "Confirm Payment",   bg: "#FEEDE5", color: "#C45104", action: true  },
+  paymentTooLate:      { label: "Not Paid in Time",    bg: "#FEFCE5", color: "#9A7000", action: true  },
   hasMatchesAvailable: { label: "Matches Available",   bg: "#FEEDE5", color: "#C45104", action: true  },
   waitingForTradeRequest:{ label: "Waiting for Match", bg: "#F4EEEB", color: "#7D675E", action: false },
-  searchingForPeer:    { label: "Searching",           bg: "#F4EEEB", color: "#7D675E", action: false },
-  offerPublished:      { label: "Published",           bg: "#D7F2FE", color: "#037DB5", action: false },
+  searchingForPeer:    { label: "Waiting for Match",   bg: "#F4EEEB", color: "#7D675E", action: false },
+  offerPublished:      { label: "Published",           bg: "#F4EEEB", color: "#7D675E", action: false },
   fundEscrow:          { label: "Fund Escrow",         bg: "#FEFCE5", color: "#9A7000", action: true  },
-  fundingAmountDifferent:{ label: "Wrong Funding",     bg: "#FEEDE5", color: "#C45104", action: true  },
+  fundingAmountDifferent:{ label: "Wrong Funding",     bg: "#FEFCE5", color: "#9A7000", action: true  },
   offerCanceled:       { label: "Offer Cancelled",     bg: "#F4EEEB", color: "#7D675E", action: false },
   tradeCanceled:       { label: "Trade Cancelled",     bg: "#F4EEEB", color: "#7D675E", action: false },
   tradeCompleted:      { label: "Trade Completed",     bg: "#F2F9E7", color: "#65A519", action: false },
-  wrongAmountFundedOnContract: { label: "Wrong Amount", bg: "#FEEDE5", color: "#C45104", action: false },
+  wrongAmountFundedOnContract: { label: "Wrong Amount", bg: "#FEFCE5", color: "#9A7000", action: false },
 };
 
 // Statuses that represent a finished state → Trade History
@@ -65,6 +77,7 @@ const FINISHED_STATUSES = new Set([
 const PENDING_STATUSES = new Set([
   "hasMatchesAvailable", "waitingForTradeRequest", "searchingForPeer",
   "offerPublished", "fundEscrow", "fundingAmountDifferent",
+  "acceptTradeRequest",
   "open_offer", "pending_match",
 ]);
 
@@ -552,15 +565,37 @@ function HistorySatsAmount({ sats }) {
   );
 }
 
-function HistoryTable({ rows, onTradeSelect }) {
+const CURRENCY_SYMBOLS = { EUR: "€", CHF: "₣", GBP: "£", USD: "$", SEK: "kr", NOK: "kr", DKK: "kr", PLN: "zł", CZK: "Kč" };
+
+function HistoryTable({ rows, onTradeSelect, selectedCurrency, tab }) {
   const navigate = useNavigate();
   const [sortKey, setSortKey] = useState("createdAt");
   const [sortDir, setSortDir] = useState(-1);
+  const [userSorted, setUserSorted] = useState(false); // true once user clicks a sort header
   const [histSearch, setHistSearch] = useState("");
   const [dirFilter, setDirFilter] = useState("all");       // "all" | "buy" | "sell"
   const [statusFilter, setStatusFilter] = useState("all"); // "all" | "completed" | "cancelled"
 
+  // Pick the best fiat price: prefer topbar currency, fall back to offer's default
+  function fiatDisplay(r) {
+    const prices = r.prices ?? {};
+    // If topbar currency is available in this offer's prices, use it
+    if (selectedCurrency && prices[selectedCurrency] != null) {
+      const sym = CURRENCY_SYMBOLS[selectedCurrency] ?? selectedCurrency + " ";
+      return `${sym}${Number(prices[selectedCurrency]).toFixed(2)}`;
+    }
+    // Fall back to the offer's stored fiatAmount + currency
+    if (r.fiatAmount && r.fiatAmount !== "—") {
+      const sym = CURRENCY_SYMBOLS[r.currency] ?? r.currency + " ";
+      return `${sym}${r.fiatAmount}`;
+    }
+    return "—";
+  }
+
+  const isHistory = tab === "history";
+
   function toggleSort(key) {
+    setUserSorted(true);
     if (sortKey === key) setSortDir(d => d * -1);
     else { setSortKey(key); setSortDir(-1); }
   }
@@ -584,6 +619,17 @@ function HistoryTable({ rows, onTradeSelect }) {
         (r.tradeStatus ?? "").toLowerCase().includes(q);
     })
     .sort((a, b) => {
+      // Pin action-required items on top unless user clicked a sort header
+      if (!userSorted) {
+        const aAction = STATUS_CONFIG[a.tradeStatus]?.action ? 1 : 0;
+        const bAction = STATUS_CONFIG[b.tradeStatus]?.action ? 1 : 0;
+        if (aAction !== bAction) return bAction - aAction; // action items first
+      }
+      if (sortKey === "status") {
+        const aLabel = (STATUS_CONFIG[a.tradeStatus]?.label ?? a.tradeStatus ?? "").toLowerCase();
+        const bLabel = (STATUS_CONFIG[b.tradeStatus]?.label ?? b.tradeStatus ?? "").toLowerCase();
+        return aLabel.localeCompare(bLabel) * sortDir;
+      }
       if (sortKey === "createdAt")   return (a.createdAt - b.createdAt) * sortDir;
       if (sortKey === "amount")      return (a.amount - b.amount) * sortDir;
       if (sortKey === "fiatAmount")  return (parseFloat(a.fiatAmount || 0) - parseFloat(b.fiatAmount || 0)) * sortDir;
@@ -648,7 +694,7 @@ function HistoryTable({ rows, onTradeSelect }) {
             <option value="buy">Buy</option>
             <option value="sell">Sell</option>
           </select>
-          <select
+          {isHistory && <select
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value)}
             style={{ padding:"6px 10px", borderRadius:8, border:"1px solid var(--black-10)", fontSize:".82rem", fontFamily:"inherit", fontWeight:600, background:"white", cursor:"pointer" }}
@@ -656,7 +702,7 @@ function HistoryTable({ rows, onTradeSelect }) {
             <option value="all">All statuses</option>
             <option value="completed">Completed</option>
             <option value="cancelled">Cancelled</option>
-          </select>
+          </select>}
           <button onClick={exportCSV} className="hist-export-btn">
             ↓ Export CSV
           </button>
@@ -670,7 +716,7 @@ function HistoryTable({ rows, onTradeSelect }) {
             <tr>
               <th>Trade ID</th>
               <th>Type</th>
-              <th>Status</th>
+              <Th col="status" label="Status"/>
               <Th col="amount" label="Amount"/>
               <Th col="fiatAmount" label="Fiat"/>
               <Th col="premium" label="Premium" align="right"/>
@@ -686,7 +732,7 @@ function HistoryTable({ rows, onTradeSelect }) {
                 </td>
                 <td><StatusChip status={r.tradeStatus}/></td>
                 <td><HistorySatsAmount sats={r.amount}/></td>
-                <td style={{ fontWeight:600 }}>{r.fiatAmount !== "—" ? `${r.currency === "CHF" ? "₣" : "€"}${r.fiatAmount}` : "—"}</td>
+                <td style={{ fontWeight:600 }}>{fiatDisplay(r)}</td>
                 <td style={{ textAlign:"right" }}>
                   <span style={{
                     fontWeight:700, fontSize:".82rem",
@@ -714,12 +760,14 @@ function HistoryTable({ rows, onTradeSelect }) {
               <span className="hist-mob-status" style={{
                 color: r.direction === "buy" ? "#65A519" : "#DF321F"
               }}>
-                {r.direction === "buy" ? "↓ bought" : "↑ sold"}
+                {r.direction === "buy"
+                  ? (isHistory ? "↓ Bought" : "↓ Buy")
+                  : (isHistory ? "↑ Sold" : "↑ Sell")}
               </span>
             </div>
             <div className="hist-mob-right">
               <HistorySatsAmount sats={r.amount}/>
-              <span className="hist-mob-fiat">{r.fiatAmount !== "—" ? `${r.currency === "CHF" ? "₣" : "€"}${r.fiatAmount}` : "—"}</span>
+              <span className="hist-mob-fiat">{fiatDisplay(r)}</span>
             </div>
           </div>
         ))}
@@ -783,6 +831,18 @@ const CSS = `
   .main-tab:hover{color:var(--black)}
   .main-tab.active{background:var(--surface);color:var(--black);font-weight:700;
     box-shadow:0 1px 4px rgba(0,0,0,.08)}
+
+  /* Tab badge (count pill) */
+  .tab-badge{border-radius:999px;padding:0 7px;font-size:.7rem;font-weight:800;margin-left:6px;
+    background:var(--black-10);color:var(--black-65)}
+  .tab-badge[data-has-action="true"]{background:var(--primary);color:white}
+
+  /* Mobile: short labels only */
+  .tab-label-short{display:none}
+  @media(max-width:600px){
+    .tab-label-full{display:none}
+    .tab-label-short{display:inline}
+  }
 
   /* Sub-tabs (Buy/Sell) */
   .sub-tabs{display:flex;gap:8px;margin-bottom:16px;align-items:center}
@@ -1096,6 +1156,8 @@ export default function TradesDashboard() {
   const [tradesLoading, setTradesLoading] = useState(() => !!auth && !getCached("trades-items"));
   const [refreshKey, setRefreshKey] = useState(0);
 
+  const [userPMs, setUserPMs] = useState(null); // Decrypted user payment methods for match acceptance
+
   const { isLoggedIn, handleLogin, handleLogout, showAvatarMenu, setShowAvatarMenu } = useAuth();
   useEffect(() => {
     if (!showAvatarMenu) return;
@@ -1136,11 +1198,19 @@ export default function TradesDashboard() {
       return "PC\u2011" + s.replace(/-/g, "\u2011");
     }
 
+    // Format a raw peach ID (hex public key) into a short display name
+    function formatPeachName(rawId) {
+      if (!rawId || rawId === "unknown") return "Unknown";
+      // "03c292c382..." → "Peach82C3" (last 4 hex chars, uppercase)
+      return "Peach" + rawId.slice(-4).toUpperCase();
+    }
+
     // Transform an API Match object into the shape the popup expects
     function transformMatch(apiMatch) {
       const u = apiMatch.user ?? {};
       const peachId = u.id ?? "unknown";
-      const initials = peachId.substring(0, 2).toUpperCase();
+      const displayName = formatPeachName(peachId);
+      const initials = displayName.slice(-2).toUpperCase();
       const color = AVATAR_COLORS[
         peachId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % AVATAR_COLORS.length
       ];
@@ -1156,7 +1226,7 @@ export default function TradesDashboard() {
         offerId: apiMatch.offerId,
         requestedAt: new Date(apiMatch.creationDate ?? Date.now()).getTime(),
         user: {
-          name: peachId,
+          name: displayName,
           initials,
           color,
           rep: u.peachRating ?? u.rating ?? 0,
@@ -1180,11 +1250,62 @@ export default function TradesDashboard() {
       };
     }
 
+    // Transform a v069 trade request into the same shape as transformMatch
+    function transformTradeRequest(tr, offer) {
+      const peachId = tr.userId ?? "unknown";
+      const displayName = formatPeachName(peachId);
+      const initials = displayName.slice(-2).toUpperCase();
+      const color = AVATAR_COLORS[
+        peachId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % AVATAR_COLORS.length
+      ];
+      return {
+        offerId: String(tr.id), // trade request ID
+        requestedAt: new Date(tr.creationDate ?? Date.now()).getTime(),
+        user: {
+          name: displayName,
+          initials,
+          color,
+          rep: 0, // v069 trade requests don't include reputation
+          trades: 0,
+          badges: [],
+        },
+        amount: offer.amount ?? 0,
+        premium: offer.premium ?? 0,
+        methods: tr.paymentMethod ? [tr.paymentMethod] : [],
+        currencies: tr.currency ? [tr.currency] : [],
+        _raw: {
+          matchedPrice: tr.price,
+          prices: tr.currency ? { [tr.currency]: tr.price } : {},
+          selectedCurrency: tr.currency,
+          selectedPaymentMethod: tr.paymentMethod,
+          symmetricKeyEncrypted: tr.symmetricKeyEncrypted,
+          symmetricKeySignature: tr.symmetricKeySignature,
+          instantTrade: false,
+          pgpPublicKeys: [],
+          // v069-specific: counterparty already sent their encrypted payment data
+          paymentDataEncrypted: tr.paymentDataEncrypted,
+          paymentDataSignature: tr.paymentDataSignature,
+          isTradeRequest: true, // flag to use v069 accept endpoint
+          tradeRequestUserId: peachId,
+        },
+      };
+    }
+
     function normalizeOffer(o) {
+      // Direction: prefer _direction tag (set from v069 endpoint), fall back to type field
       const rawType = (o.type ?? o.offerType ?? '').toLowerCase();
-      const isBuy = rawType === 'bid' || rawType === 'buy';
-      // Extract first fiat price from prices object (e.g. { EUR: 22.88 })
-      const pricesObj = o.prices ?? {};
+      const isBuy = o._direction === 'buy' || rawType === 'bid' || rawType === 'buy';
+      // Extract first fiat price — v1 uses `prices` object, v069 uses `priceIn{CURRENCY}` fields
+      let pricesObj = o.prices ?? {};
+      if (Object.keys(pricesObj).length === 0) {
+        // Build prices from priceIn{CURRENCY} fields (e.g. priceInEUR, priceInCHF)
+        for (const key of Object.keys(o)) {
+          if (key.startsWith('priceIn')) {
+            const cur = key.slice(7); // "priceInEUR" → "EUR"
+            if (cur && o[key] != null) pricesObj[cur] = o[key];
+          }
+        }
+      }
       const firstCurrency = Object.keys(pricesObj)[0] ?? null;
       const fiatAmount = firstCurrency ? String(pricesObj[firstCurrency]) : "—";
       const currency = firstCurrency ?? "";
@@ -1192,16 +1313,21 @@ export default function TradesDashboard() {
       const mop = o.meansOfPayment ?? {};
       const offerCurrencies = Object.keys(mop);
       const offerMethods = [...new Set(Object.values(mop).flat())];
+      // Amount: v069 uses amountSats, v1 uses amount (can be array)
+      const amt = o.amountSats ?? (Array.isArray(o.amount) ? o.amount[0] : (o.amount ?? 0));
+      // Status: v069 buy offers use tradeStatusNew, sell offers use tradeStatus
+      const status = o.tradeStatus ?? o.tradeStatusNew ?? o.status ?? "unknown";
       return {
         id: o.id,
         tradeId: formatTradeId(o.id),
         kind: "offer",
         direction: isBuy ? "buy" : "sell",
-        amount: Array.isArray(o.amount) ? o.amount[0] : (o.amount ?? 0),
+        amount: amt,
         premium: o.premium ?? 0,
         fiatAmount,
         currency,
-        tradeStatus: o.tradeStatus ?? "unknown",
+        prices: pricesObj,
+        tradeStatus: status,
         createdAt: new Date(o.creationDate ?? Date.now()),
         methods: offerMethods.length > 0 ? offerMethods : (o.paymentMethods ?? []),
         currencies: offerCurrencies.length > 0 ? offerCurrencies : (o.currencies ?? []),
@@ -1273,6 +1399,9 @@ export default function TradesDashboard() {
         const v1Arr = Array.isArray(v1Data) ? v1Data : (v1Data?.offers ?? []);
         const v069BuyArr = Array.isArray(v069BuyData) ? v069BuyData : (v069BuyData?.offers ?? []);
         const v069SellArr = Array.isArray(v069SellData) ? v069SellData : (v069SellData?.offers ?? []);
+        // Tag direction on v069 offers (they don't have a type field)
+        v069BuyArr.forEach(o => { o._direction = 'buy'; });
+        v069SellArr.forEach(o => { o._direction = 'sell'; });
         // Merge and deduplicate by ID, preferring V069 data
         const byId = new Map();
         v1Arr.forEach(o => byId.set(o.id, o));
@@ -1282,20 +1411,39 @@ export default function TradesDashboard() {
         // Keep only items with pending statuses
         const pending = all.filter(i => PENDING_STATUSES.has(i.tradeStatus));
 
-        // Fetch matches for offers with hasMatchesAvailable status
-        const matchable = pending.filter(o => o.tradeStatus === "hasMatchesAvailable");
+        // Fetch matches/trade requests depending on status
+        const matchable = pending.filter(o => o.tradeStatus === "hasMatchesAvailable" || o.tradeStatus === "acceptTradeRequest");
         if (matchable.length > 0) {
+          const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
           const matchResults = await Promise.all(
             matchable.map(async (offer) => {
               try {
-                const res = await get(`/offer/${offer.id}/matches?page=0&size=21&sortBy=bestReputation`);
-                if (!res.ok) return { offerId: offer.id, matches: [], totalMatches: 0 };
-                const data = await res.json();
-                return {
-                  offerId: offer.id,
-                  matches: (data.matches ?? []).map(transformMatch),
-                  totalMatches: data.totalMatches ?? 0,
-                };
+                if (offer.tradeStatus === "acceptTradeRequest") {
+                  // v069: fetch trade requests received
+                  const offerType = offer.direction === "buy" ? "buyOffer" : "sellOffer";
+                  const res = await fetch(`${v069Base}/${offerType}/${offer.id}/tradeRequestReceived/`, {
+                    headers: { Authorization: `Bearer ${auth.token}` },
+                  });
+                  if (!res.ok) return { offerId: offer.id, matches: [], totalMatches: 0 };
+                  const data = await res.json();
+                  const requests = Array.isArray(data) ? data : (data?.tradeRequests ?? []);
+                  console.log("[Trades] Trade requests for", offer.id, ":", requests);
+                  return {
+                    offerId: offer.id,
+                    matches: requests.map(tr => transformTradeRequest(tr, offer)),
+                    totalMatches: requests.length,
+                  };
+                } else {
+                  // v1: fetch system matches
+                  const res = await get(`/offer/${offer.id}/matches?page=0&size=21&sortBy=bestReputation`);
+                  if (!res.ok) return { offerId: offer.id, matches: [], totalMatches: 0 };
+                  const data = await res.json();
+                  return {
+                    offerId: offer.id,
+                    matches: (data.matches ?? []).map(transformMatch),
+                    totalMatches: data.totalMatches ?? 0,
+                  };
+                }
               } catch {
                 return { offerId: offer.id, matches: [], totalMatches: 0 };
               }
@@ -1316,8 +1464,28 @@ export default function TradesDashboard() {
       } catch {}
     }
 
+    // Fetch user's payment methods (needed for match acceptance crypto)
+    async function fetchUserPMs() {
+      if (!auth?.pgpPrivKey) return;
+      try {
+        const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
+        const res = await fetch(`${v069Base}/selfUser`, {
+          headers: { Authorization: `Bearer ${auth.token}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const profile = data?.user ?? data;
+        if (!profile || isApiError(profile)) return;
+        const pms = await extractPMsFromProfile(profile, auth.pgpPrivKey);
+        if (pms) setUserPMs(pms);
+      } catch (err) {
+        console.warn("[Trades] PM fetch failed:", err.message);
+      }
+    }
+
     fetchTradesAndLimits();
     fetchPendingOffers();
+    fetchUserPMs();
   }, [refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleRefreshTrades() {
@@ -1421,8 +1589,8 @@ export default function TradesDashboard() {
   const [matchesLoading, setMatchesLoading] = useState(false);  // loading matches on demand
 
   async function handleTradeSelect(trade) {
-    // Offers with available matches → show match acceptance popup
-    if (trade.tradeStatus === "hasMatchesAvailable" && !acceptedTrades.has(trade.id)) {
+    // Offers with available matches or trade requests → show match acceptance popup
+    if ((trade.tradeStatus === "hasMatchesAvailable" || trade.tradeStatus === "acceptTradeRequest") && !acceptedTrades.has(trade.id)) {
       setMatchesPopup(trade);
       setMatchDetail(null);
       setMatchConfirm(null);
@@ -1431,37 +1599,80 @@ export default function TradesDashboard() {
       if (!trade.matches?.length && !localMatches[trade.id] && auth) {
         setMatchesLoading(true);
         try {
-          const res = await get(`/offer/${trade.id}/matches?page=0&size=21&sortBy=bestReputation`);
-          if (res.ok) {
-            const data = await res.json();
-            // transformMatch is inside useEffect — rebuild inline here
-            const transformed = (data.matches ?? []).map(apiMatch => {
-              const u = apiMatch.user ?? {};
-              const pid = u.id ?? "unknown";
-              const initials = pid.substring(0, 2).toUpperCase();
-              const color = AVATAR_COLORS[
-                pid.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % AVATAR_COLORS.length
-              ];
-              const badges = (u.medals ?? []).map(m =>
-                m === "fastTrader" ? "fast" : m === "superTrader" ? "supertrader" : m
-              );
-              const mop = apiMatch.meansOfPayment ?? {};
-              return {
-                offerId: apiMatch.offerId,
-                requestedAt: new Date(apiMatch.creationDate ?? Date.now()).getTime(),
-                user: { name: pid, initials, color, rep: u.peachRating ?? u.rating ?? 0, trades: u.trades ?? 0, badges },
-                amount: apiMatch.amount ?? 0,
-                premium: apiMatch.premium ?? 0,
-                methods: [...new Set(Object.values(mop).flat())],
-                currencies: Object.keys(mop),
-                _raw: {
-                  matchedPrice: apiMatch.matchedPrice, prices: apiMatch.prices,
-                  selectedCurrency: apiMatch.selectedCurrency, selectedPaymentMethod: apiMatch.selectedPaymentMethod,
-                  symmetricKeyEncrypted: apiMatch.symmetricKeyEncrypted, symmetricKeySignature: apiMatch.symmetricKeySignature,
-                  instantTrade: apiMatch.instantTrade, pgpPublicKeys: u.pgpPublicKeys,
-                },
-              };
+          let transformed = [];
+          if (trade.tradeStatus === "acceptTradeRequest") {
+            // v069: fetch trade requests
+            const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
+            const offerType = trade.direction === "buy" ? "buyOffer" : "sellOffer";
+            const res = await fetch(`${v069Base}/${offerType}/${trade.id}/tradeRequestReceived/`, {
+              headers: { Authorization: `Bearer ${auth.token}` },
             });
+            if (res.ok) {
+              const data = await res.json();
+              const requests = Array.isArray(data) ? data : (data?.tradeRequests ?? []);
+              console.log("[Trades] On-demand trade requests for", trade.id, ":", requests);
+              transformed = requests.map(tr => {
+                const peachId = tr.userId ?? "unknown";
+                const displayName = formatPeachName(peachId);
+                const initials = displayName.slice(-2).toUpperCase();
+                const color = AVATAR_COLORS[
+                  peachId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % AVATAR_COLORS.length
+                ];
+                return {
+                  offerId: String(tr.id),
+                  requestedAt: new Date(tr.creationDate ?? Date.now()).getTime(),
+                  user: { name: displayName, initials, color, rep: 0, trades: 0, badges: [] },
+                  amount: trade.amount ?? 0,
+                  premium: trade.premium ?? 0,
+                  methods: tr.paymentMethod ? [tr.paymentMethod] : [],
+                  currencies: tr.currency ? [tr.currency] : [],
+                  _raw: {
+                    matchedPrice: tr.price, prices: tr.currency ? { [tr.currency]: tr.price } : {},
+                    selectedCurrency: tr.currency, selectedPaymentMethod: tr.paymentMethod,
+                    symmetricKeyEncrypted: tr.symmetricKeyEncrypted, symmetricKeySignature: tr.symmetricKeySignature,
+                    instantTrade: false, pgpPublicKeys: [],
+                    paymentDataEncrypted: tr.paymentDataEncrypted, paymentDataSignature: tr.paymentDataSignature,
+                    isTradeRequest: true, tradeRequestUserId: peachId,
+                  },
+                };
+              });
+            }
+          } else {
+            // v1: fetch system matches
+            const res = await get(`/offer/${trade.id}/matches?page=0&size=21&sortBy=bestReputation`);
+            if (res.ok) {
+              const data = await res.json();
+              transformed = (data.matches ?? []).map(apiMatch => {
+                const u = apiMatch.user ?? {};
+                const pid = u.id ?? "unknown";
+                const displayName = formatPeachName(pid);
+                const initials = displayName.slice(-2).toUpperCase();
+                const color = AVATAR_COLORS[
+                  pid.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % AVATAR_COLORS.length
+                ];
+                const badges = (u.medals ?? []).map(m =>
+                  m === "fastTrader" ? "fast" : m === "superTrader" ? "supertrader" : m
+                );
+                const mop = apiMatch.meansOfPayment ?? {};
+                return {
+                  offerId: apiMatch.offerId,
+                  requestedAt: new Date(apiMatch.creationDate ?? Date.now()).getTime(),
+                  user: { name: displayName, initials, color, rep: u.peachRating ?? u.rating ?? 0, trades: u.trades ?? 0, badges },
+                  amount: apiMatch.amount ?? 0,
+                  premium: apiMatch.premium ?? 0,
+                  methods: [...new Set(Object.values(mop).flat())],
+                  currencies: Object.keys(mop),
+                  _raw: {
+                    matchedPrice: apiMatch.matchedPrice, prices: apiMatch.prices,
+                    selectedCurrency: apiMatch.selectedCurrency, selectedPaymentMethod: apiMatch.selectedPaymentMethod,
+                    symmetricKeyEncrypted: apiMatch.symmetricKeyEncrypted, symmetricKeySignature: apiMatch.symmetricKeySignature,
+                    instantTrade: apiMatch.instantTrade, pgpPublicKeys: u.pgpPublicKeys,
+                  },
+                };
+              });
+            }
+          }
+          if (transformed.length > 0) {
             setLocalMatches(prev => ({ ...prev, [trade.id]: transformed }));
           }
         } catch {}
@@ -1529,34 +1740,139 @@ export default function TradesDashboard() {
       const currency = match._raw?.selectedCurrency || match.currencies?.[0] || trade.currency;
       const paymentMethod = match._raw?.selectedPaymentMethod || match.methods?.[0] || "";
       const price = match._raw?.matchedPrice ?? match._raw?.prices?.[currency] ?? 0;
-      const res = await post(`/offer/${trade.id}/match`, {
-        matchingOfferId: match.offerId,
-        currency,
-        paymentMethod,
-        price,
-        premium: match.premium,
-        symmetricKeyEncrypted: match._raw?.symmetricKeyEncrypted,
-        symmetricKeySignature: match._raw?.symmetricKeySignature,
-        instantTrade: match._raw?.instantTrade ?? false,
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setAcceptedTrades(prev => new Set([...prev, trade.id]));
-        setMatchesPopup(null);
-        setMatchDetail(null);
-        setMatchConfirm(null);
-        // If a contract was created, navigate to it
-        if (data.contractId) {
-          navigate(`/trade/${data.contractId}`);
+
+      // ── Find user's PM for the selected payment method + currency ──
+      let pmData = null;
+      if (userPMs && typeof userPMs === "object") {
+        const entries = Array.isArray(userPMs) ? userPMs.map(pm => [pm.id || pm.type, pm]) : Object.entries(userPMs);
+        for (const [key, val] of entries) {
+          const pmType = (key || "").replace(/-\d+$/, "");
+          if (pmType === paymentMethod && (val?.currencies ?? []).includes(currency)) {
+            pmData = val;
+            break;
+          }
+        }
+        if (!pmData) {
+          for (const [key, val] of entries) {
+            const pmType = (key || "").replace(/-\d+$/, "");
+            if (pmType === paymentMethod) { pmData = val; break; }
+          }
+        }
+      }
+
+      // Clean PM data for encryption
+      const STRUCTURAL = new Set(["id", "methodId", "type", "name", "label", "currencies", "hashes", "details", "data", "country", "anonymous"]);
+      const cleanData = {};
+      if (pmData) {
+        for (const [k, v] of Object.entries(pmData)) {
+          if (!STRUCTURAL.has(k) && typeof v !== "object") cleanData[k] = v;
+        }
+      }
+
+      // ── Two different acceptance flows ──
+      if (match._raw?.isTradeRequest) {
+        // ═══ v069 trade request acceptance ═══
+        // Counterparty already sent their symmetricKeyEncrypted (encrypted to our PGP key).
+        // We decrypt it, then encrypt our PM data with it.
+        const { decryptPGPMessage } = await import("../utils/pgp.js");
+        let symmetricKey = null;
+        if (auth?.pgpPrivKey && match._raw?.symmetricKeyEncrypted) {
+          symmetricKey = await decryptPGPMessage(match._raw.symmetricKeyEncrypted, auth.pgpPrivKey);
+        }
+
+        let paymentDataEncrypted = null;
+        let paymentDataSignature = null;
+        if (symmetricKey && Object.keys(cleanData).length > 0) {
+          const pmJson = JSON.stringify(cleanData);
+          paymentDataEncrypted = await encryptSymmetric(pmJson, symmetricKey);
+          paymentDataSignature = await signPGPMessage(pmJson, auth.pgpPrivKey);
+        }
+
+        const userId = match._raw.tradeRequestUserId;
+        const offerType = trade.direction === "buy" ? "buyOffer" : "sellOffer";
+        const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
+        const acceptUrl = `${v069Base}/${offerType}/${trade.id}/tradeRequestReceived/${userId}/accept`;
+
+        console.log("[Trades] v069 accept URL:", acceptUrl);
+        console.log("[Trades] v069 accept payload has paymentDataEncrypted:", !!paymentDataEncrypted);
+
+        const res = await fetch(acceptUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${auth.token}` },
+          body: JSON.stringify({ paymentDataEncrypted, paymentDataSignature }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          setAcceptedTrades(prev => new Set([...prev, trade.id]));
+          setMatchesPopup(null);
+          setMatchDetail(null);
+          setMatchConfirm(null);
+          // v069 accept returns a Contract — navigate to it
+          const contractId = data.id ?? data.contractId;
+          if (contractId) navigate(`/trade/${contractId}`);
+        } else {
+          setMatchConfirm(null);
+          const errData = await res.json().catch(() => ({}));
+          setMatchError(errData.error
+            ? `Could not accept: ${errData.error}`
+            : "Could not accept this trade. Please try again.");
         }
       } else {
-        setMatchConfirm(null);
-        const errData = await res.json().catch(() => ({}));
-        setMatchError(errData.error
-          ? `Could not accept: ${errData.error}`
-          : "Could not accept this trade. Please try again.");
+        // ═══ v1 match acceptance (system-matched offers) ═══
+        let symmetricKeyEncrypted = null;
+        let symmetricKeySignature = null;
+        let paymentDataEncrypted = null;
+        let paymentDataSignature = null;
+        let hashedPaymentData = null;
+
+        if (auth?.pgpPrivKey) {
+          const symmetricKey = generateSymmetricKey();
+          const counterpartyKeys = (match._raw?.pgpPublicKeys ?? [])
+            .map(k => typeof k === "string" ? k : k?.publicKey)
+            .filter(Boolean);
+          const keyResult = await encryptForRecipients(symmetricKey, counterpartyKeys, auth.pgpPrivKey);
+          if (keyResult) {
+            symmetricKeyEncrypted = keyResult.encrypted;
+            symmetricKeySignature = keyResult.signature;
+          }
+          if (Object.keys(cleanData).length > 0 && symmetricKey) {
+            const pmJson = JSON.stringify(cleanData);
+            paymentDataEncrypted = await encryptSymmetric(pmJson, symmetricKey);
+            paymentDataSignature = await signPGPMessage(pmJson, auth.pgpPrivKey);
+            hashedPaymentData = await hashPaymentFields(paymentMethod, cleanData, pmData?.country || undefined);
+          }
+        }
+
+        const payload = {
+          matchingOfferId: match.offerId, currency, paymentMethod, price,
+          premium: match.premium, instantTrade: match._raw?.instantTrade ?? false,
+        };
+        if (symmetricKeyEncrypted) payload.symmetricKeyEncrypted = symmetricKeyEncrypted;
+        if (symmetricKeySignature) payload.symmetricKeySignature = symmetricKeySignature;
+        if (paymentDataEncrypted) payload.paymentDataEncrypted = paymentDataEncrypted;
+        if (paymentDataSignature) payload.paymentDataSignature = paymentDataSignature;
+        if (hashedPaymentData) payload.paymentData = hashedPaymentData;
+
+        console.log("[Trades] v1 match accept payload keys:", Object.keys(payload));
+        const res = await post(`/offer/${trade.id}/match`, payload);
+        if (res.ok) {
+          const data = await res.json();
+          setAcceptedTrades(prev => new Set([...prev, trade.id]));
+          setMatchesPopup(null);
+          setMatchDetail(null);
+          setMatchConfirm(null);
+          if (data.contractId) navigate(`/trade/${data.contractId}`);
+        } else {
+          setMatchConfirm(null);
+          const errData = await res.json().catch(() => ({}));
+          setMatchError(errData.error
+            ? `Could not accept: ${errData.error}`
+            : "Could not accept this trade. Please try again.");
+        }
       }
-    } catch {
+    } catch (err) {
+      console.warn("[Trades] Match accept failed:", err);
       setMatchConfirm(null);
       setMatchError("Network error — could not accept this trade.");
     }
@@ -1654,16 +1970,20 @@ export default function TradesDashboard() {
         </div>
 
         {/* Tabs + urgent banner + New Offer button — all one row */}
+        {/* Badge is orange only if at least one item in that tab has action:true */}
         <div className="tabs-action-row">
           <div className="main-tabs" style={{margin:0}}>
             <button className={`main-tab${mainTab === "pending" ? " active" : ""}`} onClick={() => setMainTab("pending")}>
-              Pending Offers {pendingItems.length > 0 && <span style={{ background:"var(--primary)", color:"white", borderRadius:999, padding:"0 7px", fontSize:".7rem", fontWeight:800, marginLeft:6 }}>{pendingItems.length}</span>}
+              <span className="tab-label-full">Pending Offers</span><span className="tab-label-short">Pending</span>
+              {pendingItems.length > 0 && <span className="tab-badge" data-has-action={pendingItems.some(i => STATUS_CONFIG[i.tradeStatus]?.action)}>{pendingItems.length}</span>}
             </button>
             <button className={`main-tab${mainTab === "active" ? " active" : ""}`} onClick={() => setMainTab("active")}>
-              Active Trades {activeItems.length > 0 && <span style={{ background:"var(--primary)", color:"white", borderRadius:999, padding:"0 7px", fontSize:".7rem", fontWeight:800, marginLeft:6 }}>{activeItems.length}</span>}
+              <span className="tab-label-full">Active Trades</span><span className="tab-label-short">Active</span>
+              {activeItems.length > 0 && <span className="tab-badge" data-has-action={activeItems.some(i => STATUS_CONFIG[i.tradeStatus]?.action)}>{activeItems.length}</span>}
             </button>
             <button className={`main-tab${mainTab === "history" ? " active" : ""}`} onClick={() => setMainTab("history")}>
-              Trade History {historyItems.length > 0 && <span style={{ background:"var(--black-10)", color:"var(--black-65)", borderRadius:999, padding:"0 7px", fontSize:".7rem", fontWeight:800, marginLeft:6 }}>{historyItems.length}</span>}
+              <span className="tab-label-full">Trade History</span><span className="tab-label-short">History</span>
+              {historyItems.length > 0 && <span className="tab-badge">{historyItems.length}</span>}
             </button>
             <button
               onClick={handleRefreshTrades}
@@ -1699,7 +2019,7 @@ export default function TradesDashboard() {
               <p>No pending offers.</p>
             </div>
           ) : (
-            <HistoryTable rows={pendingItems} onTradeSelect={handleTradeSelect}/>
+            <HistoryTable rows={pendingItems} onTradeSelect={handleTradeSelect} selectedCurrency={selectedCurrency} tab="pending"/>
           )
         )}
 
@@ -1711,13 +2031,13 @@ export default function TradesDashboard() {
               <p>No active trades yet.</p>
             </div>
           ) : (
-            <HistoryTable rows={activeItems} onTradeSelect={handleTradeSelect}/>
+            <HistoryTable rows={activeItems} onTradeSelect={handleTradeSelect} selectedCurrency={selectedCurrency} tab="active"/>
           )
         )}
 
         {/* ── TRADE HISTORY ── */}
         {mainTab === "history" && (
-          <HistoryTable rows={historyItems}/>
+          <HistoryTable rows={historyItems} selectedCurrency={selectedCurrency} tab="history"/>
         )}
         </>)}
       </main>
@@ -1835,7 +2155,7 @@ export default function TradesDashboard() {
             <div className="matches-popup" onClick={e => e.stopPropagation()}>
               <div className="matches-header">
                 <span style={{fontWeight:800,fontSize:"1.05rem"}}>Trade requests</span>
-                <span style={{fontSize:".78rem",fontFamily:"monospace",color:"var(--black-65)"}}>{trade.id.toUpperCase()}</span>
+                <span style={{fontSize:".78rem",fontFamily:"monospace",color:"var(--black-65)"}}>{String(trade.id).toUpperCase()}</span>
                 <button className="matches-close" onClick={closeMatchesPopup}>✕</button>
               </div>
               {/* Offer summary */}
