@@ -1070,7 +1070,7 @@ export default function PeachPaymentMethods() {
               Your details are private
             </div>
             <div style={{ fontSize:".76rem", color:"var(--black-65)", lineHeight:1.55 }}>
-              Payment details are only shared with your matched trade counterparty — not visible by Peach, unless a dispute is opened during a trade. Data is encrypted end-to-end and stored locally.
+              Payment details are only shared with your matched trade counterparty —  it's encrypted end-to-end and not visible by Peach, unless a dispute is opened during a trade.
             </div>
           </div>
         </div>

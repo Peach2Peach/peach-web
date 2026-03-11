@@ -10,8 +10,173 @@ import * as openpgp from "openpgp";
 
 const PGP_HEADER = "-----BEGIN PGP MESSAGE-----";
 
+// ── Sensitive PM fields that get SHA-256 hashed (not sent in plaintext) ──
+const HASH_FIELDS = new Set([
+  "iban", "accountNumber", "email", "phone", "userName",
+  "walletAddress", "ukSortCode", "routingNumber",
+]);
+
 function isPGPString(val) {
   return typeof val === "string" && val.trimStart().startsWith(PGP_HEADER);
+}
+
+// ── Helpers for hex ↔ bytes conversion ──
+function hexToBytes(hex) {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+  }
+  return bytes;
+}
+
+function bytesToHex(bytes) {
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Generate a 32-byte random symmetric key as a hex string.
+ * Used as the shared secret for AES-256 encryption of payment data
+ * and contract chat messages.
+ */
+export function generateSymmetricKey() {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return bytesToHex(bytes);
+}
+
+/**
+ * Encrypt a plaintext string with multiple recipients' PGP public keys
+ * and sign with the sender's private key.
+ *
+ * Used to encrypt the symmetric key so both parties can decrypt it.
+ * Returns { encrypted, signature } or null on failure.
+ *
+ * @param {string} plaintext - The text to encrypt
+ * @param {string[]} armoredPubKeys - Array of armored PGP public key strings
+ * @param {string} armoredPrivKey - Sender's armored PGP private key
+ */
+export async function encryptForRecipients(plaintext, armoredPubKeys, armoredPrivKey) {
+  try {
+    let privateKey = await openpgp.readPrivateKey({ armoredKey: armoredPrivKey });
+    if (!privateKey.isDecrypted()) {
+      try {
+        privateKey = await openpgp.decryptKey({ privateKey, passphrase: "" });
+      } catch {
+        console.warn("[PGP] Private key is passphrase-protected");
+        return null;
+      }
+    }
+
+    // Read all recipient public keys (filter out empty/invalid)
+    const encryptionKeys = [];
+    for (const armoredKey of armoredPubKeys) {
+      if (!armoredKey) continue;
+      try {
+        const key = await openpgp.readKey({ armoredKey });
+        encryptionKeys.push(key);
+      } catch (err) {
+        console.warn("[PGP] Could not read public key:", err.message);
+      }
+    }
+    // Always include own public key
+    encryptionKeys.push(privateKey.toPublic());
+
+    const message = await openpgp.createMessage({ text: plaintext });
+    const encrypted = await openpgp.encrypt({
+      message,
+      encryptionKeys,
+      signingKeys: privateKey,
+    });
+
+    // Also create a detached signature
+    const sigMessage = await openpgp.createMessage({ text: plaintext });
+    const signature = await openpgp.sign({
+      message: sigMessage,
+      signingKeys: privateKey,
+    });
+
+    return { encrypted, signature };
+  } catch (err) {
+    console.warn("[PGP] encryptForRecipients failed:", err.message);
+    return null;
+  }
+}
+
+/**
+ * Encrypt plaintext with AES-256-GCM using a hex-encoded key.
+ * Returns a base64 string containing IV (12 bytes) + ciphertext.
+ */
+export async function encryptAES256(plaintext, hexKey) {
+  try {
+    const keyBytes = hexToBytes(hexKey);
+    const key = await crypto.subtle.importKey(
+      'raw', keyBytes, { name: 'AES-GCM' }, false, ['encrypt']
+    );
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encoded = new TextEncoder().encode(plaintext);
+    const ciphertext = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv }, key, encoded
+    );
+    // Prepend IV to ciphertext and base64-encode
+    const combined = new Uint8Array(iv.length + ciphertext.byteLength);
+    combined.set(iv);
+    combined.set(new Uint8Array(ciphertext), iv.length);
+    return btoa(String.fromCharCode(...combined));
+  } catch (err) {
+    console.warn("[PGP] encryptAES256 failed:", err.message);
+    return null;
+  }
+}
+
+/**
+ * Decrypt an AES-256-GCM encrypted base64 string using a hex-encoded key.
+ * Expects the first 12 bytes to be the IV.
+ */
+export async function decryptAES256(base64Ciphertext, hexKey) {
+  try {
+    const keyBytes = hexToBytes(hexKey);
+    const key = await crypto.subtle.importKey(
+      'raw', keyBytes, { name: 'AES-GCM' }, false, ['decrypt']
+    );
+    const combined = Uint8Array.from(atob(base64Ciphertext), c => c.charCodeAt(0));
+    const iv = combined.slice(0, 12);
+    const ciphertext = combined.slice(12);
+    const decrypted = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv }, key, ciphertext
+    );
+    return new TextDecoder().decode(decrypted);
+  } catch (err) {
+    console.warn("[PGP] decryptAES256 failed:", err.message);
+    return null;
+  }
+}
+
+/**
+ * Hash sensitive payment method fields with SHA-256.
+ * Returns an object like: { "sepa": { hashes: ["abc123...", "def456..."], country: "DE" } }
+ *
+ * @param {string} methodType - e.g. "sepa", "wise", "revolut"
+ * @param {object} pmData - Payment method details (iban, email, etc.)
+ * @param {string} [country] - Optional country code
+ */
+export async function hashPaymentFields(methodType, pmData, country) {
+  try {
+    const hashes = [];
+    for (const [key, val] of Object.entries(pmData)) {
+      if (!val || typeof val !== "string") continue;
+      if (HASH_FIELDS.has(key)) {
+        const encoded = new TextEncoder().encode(val.toLowerCase().trim());
+        const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
+        const hashHex = bytesToHex(new Uint8Array(hashBuffer));
+        hashes.push(hashHex);
+      }
+    }
+    const result = { hashes };
+    if (country) result.country = country;
+    return { [methodType]: result };
+  } catch (err) {
+    console.warn("[PGP] hashPaymentFields failed:", err.message);
+    return { [methodType]: { hashes: [] } };
+  }
 }
 
 /**

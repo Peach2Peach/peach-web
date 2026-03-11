@@ -80,18 +80,39 @@ const MOCK_PENDING = [
     amount: 100000, premium: -1.0, fiatAmount: "87.43", currency: "EUR",
     tradeStatus: "hasMatchesAvailable",
     createdAt: new Date(Date.now() - 1 * 3600_000),
+    methods: ["SEPA", "Revolut"], currencies: ["EUR"],
+    matchCount: 3,
+    matches: [
+      {
+        offerId: "mock-match-1", requestedAt: Date.now() - 20 * 60_000,
+        user: { name: "Peach4E9F", initials: "PE", color: "#FF7A50", rep: 4.2, trades: 47, badges: ["supertrader"] },
+        amount: 100000, premium: -1.0, methods: ["SEPA"], currencies: ["EUR"], _raw: {},
+      },
+      {
+        offerId: "mock-match-2", requestedAt: Date.now() - 45 * 60_000,
+        user: { name: "PeachB3A1", initials: "PB", color: "#037DB5", rep: 3.8, trades: 22, badges: ["fast"] },
+        amount: 100000, premium: -0.8, methods: ["Revolut"], currencies: ["EUR"], _raw: {},
+      },
+      {
+        offerId: "mock-match-3", requestedAt: Date.now() - 2 * 3600_000,
+        user: { name: "PeachF712", initials: "PF", color: "#65A519", rep: 2.5, trades: 8, badges: [] },
+        amount: 100000, premium: -1.2, methods: ["SEPA"], currencies: ["EUR"], _raw: {},
+      },
+    ],
   },
   {
     id: "1358", tradeId: "PC\u20111358", kind: "offer", direction: "buy",
     amount: 55000, premium: -0.5, fiatAmount: "48.09", currency: "EUR",
     tradeStatus: "waitingForTradeRequest",
     createdAt: new Date(Date.now() - 6 * 3600_000),
+    methods: ["SEPA"], currencies: ["EUR"],
   },
   {
     id: "1355", tradeId: "PC\u20111355", kind: "offer", direction: "sell",
     amount: 200000, premium: 2.0, fiatAmount: "174.86", currency: "EUR",
     tradeStatus: "fundEscrow",
     createdAt: new Date(Date.now() - 12 * 3600_000),
+    methods: ["Wise", "SEPA"], currencies: ["EUR", "CHF"],
   },
 ];
 
@@ -1109,6 +1130,50 @@ export default function TradesDashboard() {
       return "PC\u2011" + s.replace(/-/g, "\u2011");
     }
 
+    // Transform an API Match object into the shape the popup expects
+    function transformMatch(apiMatch) {
+      const u = apiMatch.user ?? {};
+      const peachId = u.id ?? "unknown";
+      const initials = peachId.substring(0, 2).toUpperCase();
+      const color = AVATAR_COLORS[
+        peachId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % AVATAR_COLORS.length
+      ];
+      const badges = (u.medals ?? []).map(m => {
+        if (m === "fastTrader") return "fast";
+        if (m === "superTrader") return "supertrader";
+        return m;
+      });
+      const mop = apiMatch.meansOfPayment ?? {};
+      const currencies = Object.keys(mop);
+      const methods = [...new Set(Object.values(mop).flat())];
+      return {
+        offerId: apiMatch.offerId,
+        requestedAt: new Date(apiMatch.creationDate ?? Date.now()).getTime(),
+        user: {
+          name: peachId,
+          initials,
+          color,
+          rep: u.peachRating ?? u.rating ?? 0,
+          trades: u.trades ?? 0,
+          badges,
+        },
+        amount: apiMatch.amount ?? 0,
+        premium: apiMatch.premium ?? 0,
+        methods,
+        currencies,
+        _raw: {
+          matchedPrice: apiMatch.matchedPrice,
+          prices: apiMatch.prices,
+          selectedCurrency: apiMatch.selectedCurrency,
+          selectedPaymentMethod: apiMatch.selectedPaymentMethod,
+          symmetricKeyEncrypted: apiMatch.symmetricKeyEncrypted,
+          symmetricKeySignature: apiMatch.symmetricKeySignature,
+          instantTrade: apiMatch.instantTrade,
+          pgpPublicKeys: u.pgpPublicKeys,
+        },
+      };
+    }
+
     function normalizeOffer(o) {
       const rawType = (o.type ?? o.offerType ?? '').toLowerCase();
       const isBuy = rawType === 'bid' || rawType === 'buy';
@@ -1117,6 +1182,10 @@ export default function TradesDashboard() {
       const firstCurrency = Object.keys(pricesObj)[0] ?? null;
       const fiatAmount = firstCurrency ? String(pricesObj[firstCurrency]) : "—";
       const currency = firstCurrency ?? "";
+      // Extract payment methods and currencies from meansOfPayment
+      const mop = o.meansOfPayment ?? {};
+      const offerCurrencies = Object.keys(mop);
+      const offerMethods = [...new Set(Object.values(mop).flat())];
       return {
         id: o.id,
         tradeId: formatTradeId(o.id),
@@ -1128,6 +1197,8 @@ export default function TradesDashboard() {
         currency,
         tradeStatus: o.tradeStatus ?? "unknown",
         createdAt: new Date(o.creationDate ?? Date.now()),
+        methods: offerMethods.length > 0 ? offerMethods : (o.paymentMethods ?? []),
+        currencies: offerCurrencies.length > 0 ? offerCurrencies : (o.currencies ?? []),
       };
     }
 
@@ -1176,26 +1247,61 @@ export default function TradesDashboard() {
     async function fetchPendingOffers() {
       try {
         const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
-        const [v1Res, v069Res] = await Promise.all([
+        const [v1Res, v069BuyRes, v069SellRes] = await Promise.all([
           get('/offers/summary'),
           fetch(`${v069Base}/buyOffer?ownOffers=true`, {
             headers: { Authorization: `Bearer ${auth.token}` },
           }),
+          fetch(`${v069Base}/sellOffer?ownOffers=true`, {
+            headers: { Authorization: `Bearer ${auth.token}` },
+          }),
         ]);
-        const [v1Data, v069Data] = await Promise.all([
+        const [v1Data, v069BuyData, v069SellData] = await Promise.all([
           v1Res.ok ? v1Res.json() : [],
-          v069Res.ok ? v069Res.json() : [],
+          v069BuyRes.ok ? v069BuyRes.json() : [],
+          v069SellRes.ok ? v069SellRes.json() : [],
         ]);
         const v1Arr = Array.isArray(v1Data) ? v1Data : (v1Data?.offers ?? []);
-        const v069Arr = Array.isArray(v069Data) ? v069Data : (v069Data?.offers ?? []);
+        const v069BuyArr = Array.isArray(v069BuyData) ? v069BuyData : (v069BuyData?.offers ?? []);
+        const v069SellArr = Array.isArray(v069SellData) ? v069SellData : (v069SellData?.offers ?? []);
         // Merge and deduplicate by ID, preferring V069 data
         const byId = new Map();
         v1Arr.forEach(o => byId.set(o.id, o));
-        v069Arr.forEach(o => byId.set(o.id, o));
+        v069BuyArr.forEach(o => byId.set(o.id, o));
+        v069SellArr.forEach(o => byId.set(o.id, o));
         const all = [...byId.values()].map(normalizeOffer);
         // Keep only items with pending statuses
         const pending = all.filter(i => PENDING_STATUSES.has(i.tradeStatus));
-        setLivePending(pending);
+
+        // Fetch matches for offers with hasMatchesAvailable status
+        const matchable = pending.filter(o => o.tradeStatus === "hasMatchesAvailable");
+        if (matchable.length > 0) {
+          const matchResults = await Promise.all(
+            matchable.map(async (offer) => {
+              try {
+                const res = await get(`/offer/${offer.id}/matches?page=0&size=21&sortBy=bestReputation`);
+                if (!res.ok) return { offerId: offer.id, matches: [], totalMatches: 0 };
+                const data = await res.json();
+                return {
+                  offerId: offer.id,
+                  matches: (data.matches ?? []).map(transformMatch),
+                  totalMatches: data.totalMatches ?? 0,
+                };
+              } catch {
+                return { offerId: offer.id, matches: [], totalMatches: 0 };
+              }
+            })
+          );
+          const matchMap = new Map(matchResults.map(r => [r.offerId, r]));
+          const enriched = pending.map(o => {
+            const m = matchMap.get(o.id);
+            if (m) return { ...o, matchCount: m.totalMatches, matches: m.matches };
+            return o;
+          });
+          setLivePending(enriched);
+        } else {
+          setLivePending(pending);
+        }
       } catch {}
     }
 
@@ -1282,14 +1388,55 @@ export default function TradesDashboard() {
   const [matchConfirm, setMatchConfirm]   = useState(null);   // match pending confirmation or null
   const [localMatches, setLocalMatches]   = useState({});      // tradeId → remaining matches
   const [matchError, setMatchError]       = useState(null);    // error message shown in popup
+  const [matchesLoading, setMatchesLoading] = useState(false);  // loading matches on demand
 
-  function handleTradeSelect(trade) {
+  async function handleTradeSelect(trade) {
     // Offers with available matches → show match acceptance popup
     if (trade.tradeStatus === "hasMatchesAvailable" && !acceptedTrades.has(trade.id)) {
       setMatchesPopup(trade);
       setMatchDetail(null);
       setMatchConfirm(null);
       setMatchError(null);
+      // If no matches loaded yet, fetch on demand
+      if (!trade.matches?.length && !localMatches[trade.id] && auth) {
+        setMatchesLoading(true);
+        try {
+          const res = await get(`/offer/${trade.id}/matches?page=0&size=21&sortBy=bestReputation`);
+          if (res.ok) {
+            const data = await res.json();
+            // transformMatch is inside useEffect — rebuild inline here
+            const transformed = (data.matches ?? []).map(apiMatch => {
+              const u = apiMatch.user ?? {};
+              const pid = u.id ?? "unknown";
+              const initials = pid.substring(0, 2).toUpperCase();
+              const color = AVATAR_COLORS[
+                pid.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % AVATAR_COLORS.length
+              ];
+              const badges = (u.medals ?? []).map(m =>
+                m === "fastTrader" ? "fast" : m === "superTrader" ? "supertrader" : m
+              );
+              const mop = apiMatch.meansOfPayment ?? {};
+              return {
+                offerId: apiMatch.offerId,
+                requestedAt: new Date(apiMatch.creationDate ?? Date.now()).getTime(),
+                user: { name: pid, initials, color, rep: u.peachRating ?? u.rating ?? 0, trades: u.trades ?? 0, badges },
+                amount: apiMatch.amount ?? 0,
+                premium: apiMatch.premium ?? 0,
+                methods: [...new Set(Object.values(mop).flat())],
+                currencies: Object.keys(mop),
+                _raw: {
+                  matchedPrice: apiMatch.matchedPrice, prices: apiMatch.prices,
+                  selectedCurrency: apiMatch.selectedCurrency, selectedPaymentMethod: apiMatch.selectedPaymentMethod,
+                  symmetricKeyEncrypted: apiMatch.symmetricKeyEncrypted, symmetricKeySignature: apiMatch.symmetricKeySignature,
+                  instantTrade: apiMatch.instantTrade, pgpPublicKeys: u.pgpPublicKeys,
+                },
+              };
+            });
+            setLocalMatches(prev => ({ ...prev, [trade.id]: transformed }));
+          }
+        } catch {}
+        setMatchesLoading(false);
+      }
       return;
     }
     // Only contracts have valid IDs for trade execution
@@ -1318,7 +1465,7 @@ export default function TradesDashboard() {
     // Send rejection to API
     if (auth) {
       try {
-        const res = await del('/offer/match', { matchOfferId: match.offerId });
+        const res = await del(`/offer/${trade.id}/match`, { matchingOfferId: match.offerId });
         if (!res.ok) {
           // Rollback: restore the requester
           setLocalMatches(prev => ({ ...prev, [trade.id]: previousMatches }));
@@ -1349,15 +1496,35 @@ export default function TradesDashboard() {
       return;
     }
     try {
-      const res = await post('/offer/match', { matchOfferId: match.offerId });
+      const currency = match._raw?.selectedCurrency || match.currencies?.[0] || trade.currency;
+      const paymentMethod = match._raw?.selectedPaymentMethod || match.methods?.[0] || "";
+      const price = match._raw?.matchedPrice ?? match._raw?.prices?.[currency] ?? 0;
+      const res = await post(`/offer/${trade.id}/match`, {
+        matchingOfferId: match.offerId,
+        currency,
+        paymentMethod,
+        price,
+        premium: match.premium,
+        symmetricKeyEncrypted: match._raw?.symmetricKeyEncrypted,
+        symmetricKeySignature: match._raw?.symmetricKeySignature,
+        instantTrade: match._raw?.instantTrade ?? false,
+      });
       if (res.ok) {
+        const data = await res.json();
         setAcceptedTrades(prev => new Set([...prev, trade.id]));
         setMatchesPopup(null);
         setMatchDetail(null);
         setMatchConfirm(null);
+        // If a contract was created, navigate to it
+        if (data.contractId) {
+          navigate(`/trade/${data.contractId}`);
+        }
       } else {
         setMatchConfirm(null);
-        setMatchError("Could not accept this trade. Please try again.");
+        const errData = await res.json().catch(() => ({}));
+        setMatchError(errData.error
+          ? `Could not accept: ${errData.error}`
+          : "Could not accept this trade. Please try again.");
       }
     } catch {
       setMatchConfirm(null);
@@ -1640,12 +1807,17 @@ export default function TradesDashboard() {
                   </span>
                 )}
                 <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                  {trade.methods.map(m => <span key={m} className="tag tag-method">{m}</span>)}
+                  {(trade.methods || []).map(m => <span key={m} className="tag tag-method">{m}</span>)}
                 </div>
               </div>
-              {/* Count */}
+              {/* Count / Loading */}
               <div style={{padding:"0 24px 12px",fontSize:".85rem",fontWeight:600,color:"var(--black-75)"}}>
-                {matches.length} trader{matches.length !== 1 ? "s" : ""} want{matches.length === 1 ? "s" : ""} to trade with you
+                {matchesLoading && matches.length === 0
+                  ? "Loading matches\u2026"
+                  : matches.length === 0
+                    ? "No traders found"
+                    : `${matches.length} trader${matches.length !== 1 ? "s" : ""} want${matches.length === 1 ? "s" : ""} to trade with you`
+                }
               </div>
               {matchError && (
                 <div style={{padding:"0 24px 12px"}}>
