@@ -43,11 +43,7 @@ These are completed and kept for reference.
 
 ### ~~2.1 Contract Cancellation Flow~~ ✅
 
-### 2.2 Unread Message Counts
-- **File**: `src/screens/peach-trades-dashboard.jsx`
-- **Data source**: Contract summaries already include `unreadMessages` count
-- **Implementation**: Use the count from `GET /v1/contract/summaries` to populate badge (currently hardcoded to 0)
-- **Also**: Trade History tab badge should turn orange if any completed trade has unread chat messages
+### ~~2.2 Unread Message Counts~~ ✅
 
 ### 2.3 Rating
 - **File**: `src/screens/peach-trade-execution.jsx` → `RatingPanel`
@@ -297,7 +293,7 @@ Items that don't add new API wiring but improve existing screens.
 | ~~5~~ | ~~1.5 Dispute submission~~ | ✅ Done | |
 | ~~5b~~ | ~~1.6 Dispute ack + outcome~~ | ✅ Done | |
 | ~~6~~ | ~~2.1 Contract cancellation~~ | ✅ Done | |
-| 7 | 2.2 Unread counts | ~30 min | Polish |
+| ~~7~~ | ~~2.2 Unread counts~~ | ✅ Done | |
 | 7b | 2b.1–2b.3 Notifications & activity feed | ~2-3 sessions | Core UX |
 | 8 | 3.1–3.2 Reject + edit/withdraw | ~1 session | Offer management |
 | 9 | 4.1–4.2 Contact + About | ~1 session | Easy settings wins |

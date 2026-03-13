@@ -12,11 +12,24 @@ export default {
     }
 
     const url = new URL(request.url);
-    const targetUrl = 'https://api.peachbitcoin.com/v1' + url.pathname + url.search;
+
+    // Route: /regtest/... → api-regtest.peachbitcoin.com/...
+    // Route: everything else → api.peachbitcoin.com/v1/...
+    let targetUrl;
+    if (url.pathname.startsWith('/regtest/')) {
+      const regtestPath = url.pathname.replace(/^\/regtest/, '');
+      targetUrl = 'https://api-regtest.peachbitcoin.com' + regtestPath + url.search;
+    } else {
+      targetUrl = 'https://api.peachbitcoin.com/v1' + url.pathname + url.search;
+    }
+
+    const fwdHeaders = { 'Content-Type': request.headers.get('Content-Type') || 'application/json' };
+    const authHeader = request.headers.get('Authorization');
+    if (authHeader) fwdHeaders['Authorization'] = authHeader;
 
     const response = await fetch(targetUrl, {
       method: request.method,
-      headers: { 'Content-Type': request.headers.get('Content-Type') || 'application/json' },
+      headers: fwdHeaders,
       body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : undefined,
     });
 
