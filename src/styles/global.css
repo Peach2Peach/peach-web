@@ -136,6 +136,10 @@ body{font-family:var(--font);background:var(--primary-bg);color:var(--black)}
   text-transform:uppercase;white-space:nowrap;overflow:hidden;
   transition:opacity .15s,max-height .2s;max-height:20px;opacity:1;
 }
+.sidenav-badge{position:absolute;top:-5px;right:-8px;background:var(--error);color:white;
+  font-size:.5rem;font-weight:800;min-width:14px;height:14px;border-radius:999px;
+  display:flex;align-items:center;justify-content:center;padding:0 3px;
+  border:2px solid var(--surface);line-height:1}
 .sidenav-collapsed .sidenav-label{opacity:0;max-height:0;pointer-events:none}
 .sidenav-backdrop{display:none;position:fixed;inset:0;z-index:149;background:rgba(43,25,17,.4)}
 .sidenav-backdrop.open{display:block}

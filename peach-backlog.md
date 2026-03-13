@@ -23,6 +23,8 @@ These are completed and kept for reference.
 - ✅ **1.4 Chat Pagination + Mark Read + Polling** — `GET /contract/:id/chat?page=N` with auto-load on scroll-to-top, deduplication, chronological sort. `POST /contract/:id/chat/received` marks unread messages. 5s polling for real-time incoming messages. (`trade-execution/index.jsx`)
 - ✅ **1.5 Dispute Submission** — `POST /contract/:id/dispute` with role-aware reasons (buyer/seller), conditional form (noPayment needs email+message, others submit immediately). Encrypts symmetric key + both payment data fields for platform PGP key via `encryptForPublicKey`. Decrypts PM fields with symmetric-then-asymmetric fallback. (`trade-execution/index.jsx`, `pgp.js`)
 - ✅ **1.6 Dispute Acknowledgment + Outcome** — `DisputeBanner` component handles 3 states: counterparty dispute with email input (`POST /contract/:id/dispute/acknowledge`), active dispute info banner, and outcome display with acknowledge button (`POST /contract/:id/dispute/acknowledgeOutcome`). Supports all 5 mediator outcomes (buyerWins, sellerWins, none, cancelTrade, payOutBuyer). Payment deadline timer hidden during dispute. (`trade-execution/index.jsx`)
+- ✅ **2.1 Contract Cancellation Flow** — request/confirm/reject cancellation via `POST /contract/:id/cancel`, `/confirmCancelation`, `/rejectCancelation`. (`trade-execution/index.jsx`)
+- ✅ **2.2 Unread Message Counts** — wired from contract summaries `unreadMessages` field. (`trades-dashboard/index.jsx`)
 
 ---
 
@@ -39,13 +41,7 @@ These are completed and kept for reference.
 
 ## Phase 2: Contract Lifecycle Completion
 
-### 2.1 Contract Cancellation Flow
-- **File**: `src/screens/peach-trade-execution.jsx`
-- **Endpoints**:
-  - `POST /v1/contract/:id/cancel` (request cancellation)
-  - `POST /v1/contract/:id/confirmCancelation` (accept counterparty's cancel request)
-  - `POST /v1/contract/:id/rejectCancelation` (reject cancel request)
-- **UI**: Add cancel button in trade execution, show cancel request notification if counterparty requested
+### ~~2.1 Contract Cancellation Flow~~ ✅
 
 ### 2.2 Unread Message Counts
 - **File**: `src/screens/peach-trades-dashboard.jsx`
@@ -63,6 +59,29 @@ These are completed and kept for reference.
 - **File**: `src/screens/peach-trade-execution.jsx`
 - **Note**: "I've received the payment" slider logs to console. Wire to the release endpoint.
 - **Likely requires signing relay (Phase 5)** — seller must sign a release transaction (PSBT).
+
+---
+
+## Phase 2b: Notifications & Activity Feed
+
+### 2b.1 Notification Bell + Dropdown
+- **Files**: `src/components/Navbars.jsx`, new `src/components/NotificationPanel.jsx`
+- **UI**: Bell icon in the topbar, left of the PeachID and avatar. Unread dot/count badge. Clicking opens a dropdown panel (not a full page) showing a scrollable activity log.
+- **Panel contents**: Chronological list of events with timestamp, icon per type, and click-to-navigate action.
+
+### 2b.2 Wire Notification Events
+- **Data sources**: Poll existing API endpoints for state changes.
+- **Event types to track**:
+  - **Trade requests** — new trade request received on your offer (`v069 tradeRequestReceived`)
+  - **Messages** — new chat messages (`unreadMessages` from contract summaries)
+  - **Trade status changes** — escrow funded, payment sent, payment confirmed, trade completed, trade cancelled
+  - **Matches** — new matches available on your offer
+  - **Disputes** — dispute opened, dispute outcome
+  - **Offer expiry** — offer expired or funding expired
+- **Implementation**: Background polling (reuse existing fetch intervals), compare with previous state, push new events into a notification list stored in React state. Persist read/unread state in localStorage so it survives refresh.
+
+### 2b.3 Browser Tab Indicator
+- **UI**: Change document title to `(●) Peach` when unread notifications exist. Reset on panel open.
 
 ---
 
@@ -208,13 +227,7 @@ This unlocks features that need a Bitcoin signature from the mobile app.
 
 ## Phase 6: Remaining Features
 
-### 6.1 Notifications / Activity Feed
-- **New screen**: `src/screens/peach-notifications.jsx`
-- **Route**: `/notifications`
-- **Data source**: Poll contract summaries + offer summaries for status changes
-- **UI**: Chronological list of events (offer matched, payment received, chat message, etc.)
-- **No push notifications** — web-only in-app feed
-- Browser tab title changes to `(●) Peach` when there's a new event
+### ~~6.1 Notifications / Activity Feed~~ → Moved to Phase 2b
 
 ### 6.2 Auth Handshake Implementation
 - **File**: `src/screens/peach-auth.jsx`
@@ -283,15 +296,16 @@ Items that don't add new API wiring but improve existing screens.
 | ~~4~~ | ~~1.2 Buyer payment confirm~~ | ✅ Done | |
 | ~~5~~ | ~~1.5 Dispute submission~~ | ✅ Done | |
 | ~~5b~~ | ~~1.6 Dispute ack + outcome~~ | ✅ Done | |
-| 6 | 2.1 Contract cancellation | ~1 session | Safety feature |
+| ~~6~~ | ~~2.1 Contract cancellation~~ | ✅ Done | |
 | 7 | 2.2 Unread counts | ~30 min | Polish |
+| 7b | 2b.1–2b.3 Notifications & activity feed | ~2-3 sessions | Core UX |
 | 8 | 3.1–3.2 Reject + edit/withdraw | ~1 session | Offer management |
 | 9 | 4.1–4.2 Contact + About | ~1 session | Easy settings wins |
 | 10 | 4.3–4.4 Block users + fee save | ~1 session | Settings completion |
 | 11 | 4.10 Dark mode | ~1-2 sessions | User experience |
 | 12 | 4.5–4.9 Remaining settings | ~2-3 sessions | Settings completion |
 | 13 | 3.3–3.5 Republish, instant trade, pre-chat | ~2 sessions | Advanced offer features |
-| 14 | 6.1 Notifications feed | ~2-3 sessions | New screen |
+| ~~14~~ | ~~6.1 Notifications feed~~ | → Phase 2b | |
 | 15 | 2.3 Rating | ~1 session | If PGP sig works; else Phase 5 |
 | 16 | 6.2 Auth handshake | ~3-4 sessions | Requires server endpoints |
 | 17 | 5.x Signing relay | ~3-4 sessions | Unlocks sell-side |

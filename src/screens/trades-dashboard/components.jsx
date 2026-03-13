@@ -521,7 +521,12 @@ export function HistoryTable({ rows, onTradeSelect, selectedCurrency, tab }) {
                 <td>
                   <span className={`direction-badge direction-${r.direction}`}>{r.direction.toUpperCase()}</span>
                 </td>
-                <td><StatusChip status={r.tradeStatus} showAction/></td>
+                <td>
+                  <span style={{ display:"inline-flex", alignItems:"center", gap:6 }}>
+                    <StatusChip status={r.tradeStatus} showAction/>
+                    {r.unread > 0 && <span className="unread-badge"><span style={{ lineHeight:1 }}>{r.unread}</span><IconMsg/></span>}
+                  </span>
+                </td>
                 <td><HistorySatsAmount sats={r.amount}/></td>
                 <td style={{ fontWeight:600 }}>{fiatDisplay(r)}</td>
                 <td style={{ textAlign:"right" }}>

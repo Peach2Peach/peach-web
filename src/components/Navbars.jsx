@@ -1,4 +1,5 @@
 import { IcoBtc } from "./BitcoinAmount.jsx";
+import { useUnread } from "../hooks/useUnread.js";
 
 // ─── PEACH ID FORMATTING ─────────────────────────────────────────────────────
 export function formatPeachId(rawId) {
@@ -64,6 +65,7 @@ export const NAV_ROUTES = {
 
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
 export function SideNav({ active, collapsed, onToggle, mobileOpen, onClose, onNavigate, mobilePriceSlot }) {
+  const { total } = useUnread();
   return (
     <>
       <div className={`sidenav-backdrop${mobileOpen ? " open" : ""}`} onClick={onClose}/>
@@ -74,7 +76,10 @@ export function SideNav({ active, collapsed, onToggle, mobileOpen, onClose, onNa
         {NAV_ITEMS.map(({ id, label, icon }) => (
           <button key={id} className={`sidenav-item${active === id ? " sidenav-active" : ""}`}
             onClick={() => { if (onNavigate && NAV_ROUTES[id]) onNavigate(NAV_ROUTES[id]); }}>
-            <span className="sidenav-icon">{icon()}</span>
+            <span className="sidenav-icon" style={{ position:"relative" }}>
+              {icon()}
+              {id === "trades" && total > 0 && <span className="sidenav-badge">{total > 99 ? "99+" : total}</span>}
+            </span>
             <span className="sidenav-label">{label}</span>
           </button>
         ))}
@@ -100,6 +105,7 @@ export function Topbar({
   onCurrencyChange,
   showPrice = true,
 }) {
+  const { total: unreadTotal } = useUnread();
   const satsPerCur = btcPrice > 0 ? Math.round(100_000_000 / btcPrice) : 0;
 
   return (
@@ -128,7 +134,7 @@ export function Topbar({
           <div className="avatar-menu-wrap">
             <div className="avatar-peachid" onClick={(e) => { e.stopPropagation(); setShowAvatarMenu(v => !v); }}>
               <span className="peach-id">{getTopbarPeachId()}</span>
-              <div className="avatar">PW<div className="avatar-badge">2</div></div>
+              <div className="avatar">PW{unreadTotal > 0 && <div className="avatar-badge">{unreadTotal > 99 ? "99+" : unreadTotal}</div>}</div>
             </div>
             {showAvatarMenu && (
               <div className="avatar-menu">

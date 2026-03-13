@@ -2,12 +2,13 @@
 // Extracted from peach-trades-dashboard.jsx
 // Sub-components live in ./components.jsx, popup in ./MatchesPopup.jsx
 // ─────────────────────────────────────────────────────────────────────────────
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { SideNav, Topbar } from "../../components/Navbars.jsx";
 import { SatsAmount, IcoBtc } from "../../components/BitcoinAmount.jsx";
 import { useAuth } from "../../hooks/useAuth.js";
 import { useApi, getCached, setCache, clearCache } from "../../hooks/useApi.js";
+import { useUnread } from "../../hooks/useUnread.js";
 import {
   extractPMsFromProfile, isApiError,
   generateSymmetricKey, encryptForRecipients,
@@ -406,6 +407,7 @@ export default function TradesDashboard() {
 
   const [userPMs, setUserPMs] = useState(null); // Decrypted user payment methods for match acceptance
 
+  const { byContract: liveUnread } = useUnread();
   const { isLoggedIn, handleLogin, handleLogout, showAvatarMenu, setShowAvatarMenu } = useAuth();
   useEffect(() => {
     if (!showAvatarMenu) return;
@@ -658,7 +660,11 @@ export default function TradesDashboard() {
   const trades = liveItems ?? (auth ? [] : MOCK_TRADES);
 
   // Split items into active (unfinished) vs history (finished)
-  const allItems = liveItems ?? (auth ? [] : MOCK_TRADES);
+  // Merge live unread counts from background polling into trade items
+  const rawItems = liveItems ?? (auth ? [] : MOCK_TRADES);
+  const allItems = useMemo(() => rawItems.map(i =>
+    i.kind === "contract" && liveUnread[i.id] != null ? { ...i, unread: liveUnread[i.id] } : i
+  ), [rawItems, liveUnread]);
   const activeItems = allItems.filter(i => !FINISHED_STATUSES.has(i.tradeStatus) && !PENDING_STATUSES.has(i.tradeStatus));
   const historyItems = allItems.filter(i => FINISHED_STATUSES.has(i.tradeStatus));
   const pendingItems = livePending ?? (auth ? [] : MOCK_PENDING);
