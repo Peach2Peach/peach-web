@@ -492,3 +492,43 @@ export async function extractPMsFromProfile(profile, armoredPrivKey) {
     return null;
   }
 }
+
+// ── QR Auth helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Generate an ephemeral PGP keypair for the QR auth handshake.
+ * Uses ed25519Legacy curve (same as the mobile app).
+ * @returns {Promise<{ publicKeyArmored: string, privateKeyArmored: string }>}
+ */
+export async function generateEphemeralKeyPair() {
+  const { privateKey, publicKey } = await openpgp.generateKey({
+    type: "ecc",
+    curve: "ed25519Legacy",
+    userIDs: [{ name: "ephemeral" }],
+  });
+  return { publicKeyArmored: publicKey, privateKeyArmored: privateKey };
+}
+
+/**
+ * Verify a detached PGP signature against a known public key.
+ * Used to verify the server signed the desktop connection ID.
+ * @param {string} data - the plaintext that was signed
+ * @param {string} signatureArmored - armored detached signature
+ * @param {string} publicKeyArmored - armored public key of the signer
+ * @returns {Promise<boolean>}
+ */
+export async function verifyDetachedSignature(data, signatureArmored, publicKeyArmored) {
+  try {
+    const publicKey = await openpgp.readKey({ armoredKey: publicKeyArmored });
+    const signature = await openpgp.readSignature({ armoredSignature: signatureArmored });
+    const verified = await openpgp.verify({
+      message: await openpgp.createMessage({ text: data }),
+      signature,
+      verificationKeys: publicKey,
+    });
+    return await verified.signatures[0].verified;
+  } catch (err) {
+    console.warn("[PGP] verifyDetachedSignature failed:", err.message);
+    return false;
+  }
+}

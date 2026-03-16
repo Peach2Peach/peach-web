@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { QRCodeSVG } from "qrcode.react";
+import { useQRAuth } from "../hooks/useQRAuth.js";
 
 // ─── LOGO ─────────────────────────────────────────────────────────────────────
 const PeachIcon = ({ size = 28 }) => (
@@ -18,29 +20,18 @@ const PeachIcon = ({ size = 28 }) => (
   </svg>
 );
 
-// ─── MOCK QR ──────────────────────────────────────────────────────────────────
-const MockQR = () => {
-  const seed = [
-    "111111101001101111111","100000101100101000001","101110100011101011101",
-    "101110101001001011101","101110100110101011101","100000101010001000001",
-    "111111101010101111111","000000001101100000000","110101110110011010110",
-    "001011001001101001011","110100110100011110100","010110001011001101010",
-    "101001110010110100111","000000001010001011010","111111101101110100101",
-    "100000100110001010011","101110101001110110100","101110100110101001011",
-    "101110111010011101100","100000101101100010010","111111101011011100111",
-  ];
-  const cells = [];
-  seed.forEach((row,r) => [...row].forEach((ch,c) => { if(ch==="1") cells.push([r,c]); }));
-  const cell=9, pad=14, sz=21, total=sz*cell+pad*2;
-  return (
-    <svg width={total} height={total} viewBox={`0 0 ${total} ${total}`}>
-      <rect width={total} height={total} fill="white" rx="6"/>
-      {cells.map(([r,c]) => (
-        <rect key={`${r}-${c}`} x={pad+c*cell} y={pad+r*cell}
-          width={cell} height={cell} fill="#2B1911" rx={1}/>
-      ))}
-    </svg>
-  );
+// ─── QR CODE DISPLAY ─────────────────────────────────────────────────────────
+const QRDisplay = ({ qrPayload, size = 189 }) => {
+  if (!qrPayload) {
+    return (
+      <div style={{width:size,height:size,display:"flex",alignItems:"center",justifyContent:"center",
+        background:"white",borderRadius:6}}>
+        <div style={{width:32,height:32,borderRadius:"50%",border:"3px solid #EAE3DF",
+          borderTopColor:"#F56522",animation:"spin .8s linear infinite"}}/>
+      </div>
+    );
+  }
+  return <QRCodeSVG value={qrPayload} size={size} level="L" bgColor="white" fgColor="#2B1911"/>;
 };
 
 // ─── COUNTDOWN RING ───────────────────────────────────────────────────────────
@@ -110,13 +101,39 @@ const NAV_ROUTES = { home:"/home", market:"/market", trades:"/trades", create:"/
 export default function PeachAuth() {
   const navigate = useNavigate();
   const TOTAL = 180;
-  const [phase,     setPhase]     = useState("waiting"); // waiting|scanning|success|expired
-  const [secsLeft,  setSecsLeft]  = useState(TOTAL);
   const [allPrices,           setAllPrices]           = useState({ EUR: 87432 });
   const [availableCurrencies, setAvailableCurrencies] = useState(["EUR","CHF","GBP"]);
   const [selectedCurrency,    setSelectedCurrency]    = useState("EUR");
   const btcPrice = Math.round(allPrices[selectedCurrency] ?? 87432);
   const [isMobile,  setIsMobile]  = useState(false);
+
+  // ─── QR AUTH (real handshake) ──────────────────────────────────────────────
+  const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+  const regtestBase = isLocal ? "/api-regtest" : (import.meta.env.VITE_API_BASE || "");
+  const { phase: qrPhase, qrPayload, connectionId, secsLeft, error: qrError, profile: qrProfile, restart: qrRestart } = useQRAuth({ baseUrl: regtestBase });
+
+  // Map hook phases to UI display
+  const phase = qrPhase === "success" ? "success"
+    : (qrPhase === "decrypting" || qrPhase === "validating" || qrPhase === "verifying") ? "scanning"
+    : qrPhase === "error" ? "error"
+    : "waiting";
+
+  // Navigate to home on successful QR auth
+  useEffect(() => {
+    if (qrPhase === "success") {
+      const timer = setTimeout(() => navigate("/home"), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [qrPhase, navigate]);
+
+  // Connection ID copy state
+  const [connIdCopied, setConnIdCopied] = useState(false);
+  function handleCopyConnId() {
+    if (!connectionId) return;
+    navigator.clipboard.writeText(connectionId).catch(()=>{});
+    setConnIdCopied(true);
+    setTimeout(() => setConnIdCopied(false), 2000);
+  }
 
   useEffect(() => {
     async function fetchPrices() {
@@ -134,15 +151,9 @@ export default function PeachAuth() {
     return () => clearInterval(iv);
   }, []);
 
-  // Mobile paste flow
-  const [pasteVal,  setPasteVal]  = useState("");
-  const [pastePhase,setPastePhase]= useState("idle"); // idle|error|success
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
-  const [mobileTab, setMobileTab] = useState("qr"); // "qr" | "paste"
   const [desktopShowCode, setDesktopShowCode] = useState(false);
-  const [desktopPasteVal, setDesktopPasteVal] = useState("");
-  const [desktopPastePhase, setDesktopPastePhase] = useState("idle"); // idle|error|validating|success
   // ─── DEV AUTH (regtest) ────────────────────────────────────────────────────
   const [devAuthOpen, setDevAuthOpen] = useState(false);
   const [devAuthJson, setDevAuthJson] = useState("");
@@ -187,8 +198,7 @@ export default function PeachAuth() {
       setDevAuthProfile(profile);
       setDevAuthPhase("success");
       try { localStorage.setItem("peach_logged_in", "true"); } catch {}
-      setTimeout(() => { setPhase("success"); }, 1200);
-      setTimeout(() => { navigate("/home"); }, 2200);
+      setTimeout(() => { navigate("/home"); }, 1500);
     } catch (err) {
       setDevAuthError(err.message);
       setDevAuthPhase("error");
@@ -203,15 +213,6 @@ export default function PeachAuth() {
     window.__PEACH_AUTH__ = null;
   }
 
-  const MOCK_AUTH_CODE = "PEACH-A3F7-B2D9-4E1C-8K6M";
-  const [codeCopied, setCodeCopied] = useState(false);
-  function handleCopyCode() {
-    navigator.clipboard.writeText(MOCK_AUTH_CODE).catch(()=>{});
-    setCodeCopied(true);
-    setTimeout(() => setCodeCopied(false), 2000);
-  }
-  const timerRef = useRef(null);
-
   // Detect mobile
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
@@ -220,57 +221,9 @@ export default function PeachAuth() {
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  // QR countdown (desktop only)
-  useEffect(() => {
-    if (isMobile) return;
-    if (phase!=="waiting" && phase!=="scanning") return;
-    timerRef.current = setInterval(() => {
-      setSecsLeft(s => {
-        if (s<=1) { setPhase("expired"); clearInterval(timerRef.current); return 0; }
-        return s-1;
-      });
-    }, 1000);
-    return () => clearInterval(timerRef.current);
-  }, [phase, isMobile]);
-
-  // Price is fetched via the API useEffect above
-
-  function resetQR() { clearInterval(timerRef.current); setSecsLeft(TOTAL); setPhase("waiting"); }
-
-  function handleDesktopCodeSubmit() {
-    if (!desktopPasteVal.trim()) { setDesktopPastePhase("error"); return; }
-    setDesktopPastePhase("validating");
-    setTimeout(() => {
-      if (desktopPasteVal.trim().toUpperCase().startsWith("ERR")) setDesktopPastePhase("error");
-      else { setDesktopPastePhase("success"); try { localStorage.setItem("peach_logged_in", "true"); } catch {} setTimeout(() => navigate("/home"), 1500); }
-    }, 1200);
-  }
-
-  // Demo: click QR cycles states
-  function handleQRClick() {
-    if (phase==="waiting")  { setPhase("scanning"); return; }
-    if (phase==="scanning") { setPhase("success"); try { localStorage.setItem("peach_logged_in", "true"); } catch {} setTimeout(() => navigate("/home"), 500); return; }
-    if (phase==="success")  { resetQR();             return; }
-    if (phase==="expired")  { resetQR();             return; }
-  }
-
-  // Mobile paste submit
-  function handlePaste(e) { setPasteVal(e.target.value); setPastePhase("idle"); }
-  function handleSubmit() {
-    if (!pasteVal.trim()) { setPastePhase("error"); return; }
-    // Simulate: any non-empty input "works" for demo
-    setPastePhase("validating");
-    setTimeout(() => {
-      // Mock: codes starting with "ERR" fail
-      if (pasteVal.trim().toUpperCase().startsWith("ERR")) setPastePhase("error");
-      else { setPastePhase("success"); try { localStorage.setItem("peach_logged_in", "true"); } catch {} setTimeout(() => navigate("/home"), 1500); }
-    }, 1200);
-  }
-  function handlePasteReset() { setPasteVal(""); setPastePhase("idle"); }
-
   const mins   = String(Math.floor(secsLeft/60)).padStart(2,"0");
-  const secs   = String(secsLeft%60).padStart(2,"0");
-  const urgent = secsLeft<=30 && (phase==="waiting"||phase==="scanning");
+  const secs_  = String(secsLeft%60).padStart(2,"0");
+  const urgent = secsLeft<=30 && phase==="waiting";
 
   // ─── SHARED TOPBAR ────────────────────────────────────────────────────────
   const Topbar = () => (
@@ -394,7 +347,7 @@ export default function PeachAuth() {
           <div style={{flex:1,display:"flex",flexDirection:"column",
             padding:"28px 20px 32px",gap:24,animation:"fadeUp .4s ease both"}}>
 
-            {pastePhase !== "success" ? (
+            {phase !== "success" ? (
               <>
                 {/* Header */}
                 <div style={{textAlign:"center"}}>
@@ -411,76 +364,39 @@ export default function PeachAuth() {
                   </h1>
                 </div>
 
-                {/* Tab toggle */}
-                <div style={{display:"flex",background:"#F4EEEB",borderRadius:10,padding:3,gap:2}}>
-                  {[["qr","📷 Scan QR"],["paste","🔑 Auth code"]].map(([id,label])=>(
-                    <button key={id} onClick={()=>setMobileTab(id)} style={{
-                      flex:1,padding:"8px 0",borderRadius:8,border:"none",
-                      fontFamily:"'Baloo 2',cursive",fontSize:".8rem",fontWeight:700,
-                      cursor:"pointer",transition:"all .15s",
-                      background: mobileTab===id ? "#FFFFFF" : "transparent",
-                      color: mobileTab===id ? "#2B1911" : "#7D675E",
-                      boxShadow: mobileTab===id ? "0 1px 4px rgba(0,0,0,.08)" : "none",
-                    }}>{label}</button>
-                  ))}
+                {/* Instructions — connect from mobile app */}
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:16}}>
+                  <div style={{width:56,height:56,borderRadius:"50%",
+                    background:"linear-gradient(135deg,#FF7A50,#FFA24C)",
+                    display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="5" y="1" width="14" height="22" rx="3"/>
+                      <line x1="12" y1="18" x2="12" y2="18.01"/>
+                    </svg>
+                  </div>
+                  <div style={{textAlign:"center"}}>
+                    <div style={{fontSize:".95rem",fontWeight:800,color:"#2B1911",marginBottom:4}}>
+                      Connect from your Peach app
+                    </div>
+                    <div style={{fontSize:".76rem",color:"#7D675E",fontWeight:500,lineHeight:1.55}}>
+                      Since you're on mobile, open the Peach app directly to connect your web session.
+                    </div>
+                  </div>
                 </div>
 
-                {mobileTab === "qr" ? (<>
-                  {/* QR panel */}
-                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:16}}>
-                    <div style={{position:"relative",display:"inline-flex",cursor:"pointer"}}
-                         onClick={handleQRClick}>
-                      <div style={{borderRadius:16,overflow:"hidden",border:"1px solid #EAE3DF",
-                        opacity:phase==="expired"?.25:1,transition:"opacity .3s"}}>
-                        <MockQR/>
-                      </div>
-                      <CountdownRing secondsLeft={phase==="expired"?0:secsLeft} total={TOTAL} size={220}/>
-                      {phase==="expired" && (
-                        <div style={{position:"absolute",inset:0,display:"flex",
-                          flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}>
-                          <span style={{fontSize:".82rem",fontWeight:800,color:"#DF321F"}}>Expired</span>
-                          <span style={{fontSize:".7rem",fontWeight:600,color:"#7D675E"}}>Tap to refresh</span>
-                        </div>
-                      )}
-                      {phase==="success" && (
-                        <div style={{position:"absolute",inset:0,display:"flex",
-                          alignItems:"center",justifyContent:"center",
-                          background:"rgba(255,249,246,.85)",borderRadius:16}}>
-                          <span style={{fontSize:"2.5rem"}}>✓</span>
-                        </div>
-                      )}
-                    </div>
-                    <div style={{textAlign:"center"}}>
-                      <div style={{fontSize:".88rem",fontWeight:700,marginBottom:2,
-                        color:phase==="expired"?"#DF321F":phase==="success"?"#65A519":"#2B1911"}}>
-                        {phase==="expired" ? "Code expired" : phase==="success" ? "Signed in!" : "Scan with Peach"}
-                      </div>
-                      <div style={{fontSize:".72rem",color:"#7D675E",fontWeight:500}}>
-                        {phase==="expired" ? "Tap to generate a new code"
-                          : phase==="success" ? "Redirecting…"
-                          : `${mins}:${secs} remaining · tap to demo`}
-                      </div>
-                    </div>
-                  </div>
-                  {/* Steps */}
-                  <div style={{display:"flex",flexDirection:"column",gap:10,
-                    background:"#FFFFFF",borderRadius:14,border:"1px solid #EAE3DF",padding:"16px 14px"}}>
-                    <Step n="1"><strong style={{color:"#2B1911"}}>Open</strong> the Peach app on another device</Step>
-                    <Step n="2">Tap the <strong style={{color:"#2B1911"}}>QR icon</strong> in the app's top nav</Step>
-                    <Step n="3"><strong style={{color:"#2B1911"}}>Scan</strong> this code to sign in instantly</Step>
-                  </div>
-                </>) : (<>
-                  {/* Auth code panel */}
-                  <div style={{display:"flex",flexDirection:"column",gap:12,
-                    background:"#FFFFFF",borderRadius:14,border:"1px solid #EAE3DF",padding:"18px 16px"}}>
-                    <Step n="1"><strong style={{color:"#2B1911"}}>Copy</strong> the auth code below</Step>
-                    <Step n="2"><strong style={{color:"#2B1911"}}>Open</strong> the Peach app on this phone</Step>
-                    <Step n="3">Go to <strong style={{color:"#2B1911"}}>Settings → Connect web browser</strong></Step>
-                    <Step n="4"><strong style={{color:"#2B1911"}}>Paste</strong> the code into the app to sign in</Step>
-                  </div>
+                {/* Steps */}
+                <div style={{display:"flex",flexDirection:"column",gap:10,
+                  background:"#FFFFFF",borderRadius:14,border:"1px solid #EAE3DF",padding:"16px 14px"}}>
+                  <Step n="1"><strong style={{color:"#2B1911"}}>Open</strong> the Peach app</Step>
+                  <Step n="2">Go to <strong style={{color:"#2B1911"}}>Settings → Desktop Connection</strong></Step>
+                  <Step n="3"><strong style={{color:"#2B1911"}}>Follow</strong> the instructions to link your session</Step>
+                </div>
+
+                {/* Connection ID (if available) */}
+                {connectionId && (
                   <div style={{display:"flex",flexDirection:"column",gap:8}}>
                     <label style={{fontSize:".78rem",fontWeight:700,color:"#624D44",
-                      letterSpacing:".02em",textTransform:"uppercase"}}>Your auth code</label>
+                      letterSpacing:".02em",textTransform:"uppercase"}}>Connection ID</label>
                     <div style={{
                       display:"flex",alignItems:"center",justifyContent:"space-between",
                       padding:"14px 16px",borderRadius:12,
@@ -489,29 +405,41 @@ export default function PeachAuth() {
                       <span style={{
                         fontFamily:"monospace",fontSize:".95rem",fontWeight:700,
                         color:"#2B1911",letterSpacing:".08em",wordBreak:"break-all"
-                      }}>{MOCK_AUTH_CODE}</span>
-                      <button onClick={handleCopyCode} style={{
+                      }}>{connectionId}</span>
+                      <button onClick={handleCopyConnId} style={{
                         flexShrink:0,padding:"8px 14px",borderRadius:999,
-                        background: codeCopied ? "#65A519" : "linear-gradient(90deg,#FF4D42,#FF7A50,#FFA24C)",
+                        background: connIdCopied ? "#65A519" : "linear-gradient(90deg,#FF4D42,#FF7A50,#FFA24C)",
                         color:"white",border:"none",cursor:"pointer",
                         fontFamily:"'Baloo 2',cursive",fontSize:".78rem",fontWeight:800,
                         letterSpacing:".02em",transition:"background .2s",
                         display:"flex",alignItems:"center",gap:6
                       }}>
-                        {codeCopied ? "✓ Copied" : "Copy"}
+                        {connIdCopied ? "✓ Copied" : "Copy"}
                       </button>
                     </div>
                   </div>
-                </>)}
+                )}
+
+                {/* Error state */}
+                {qrPhase === "error" && (
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:10,
+                    padding:"16px 14px",borderRadius:12,background:"#FFF0EE",border:"1.5px solid #FFCBC4"}}>
+                    <span style={{fontSize:".8rem",fontWeight:700,color:"#DF321F"}}>{qrError || "Connection failed"}</span>
+                    <button onClick={qrRestart} style={{
+                      padding:"8px 18px",borderRadius:999,
+                      background:"linear-gradient(90deg,#FF4D42,#FF7A50,#FFA24C)",
+                      color:"white",border:"none",cursor:"pointer",
+                      fontFamily:"'Baloo 2',cursive",fontSize:".76rem",fontWeight:800
+                    }}>Try again</button>
+                  </div>
+                )}
 
                 {/* Security note */}
                 <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"12px 14px",
                   borderRadius:12,background:"#F4EEEB",border:"1px solid #EAE3DF"}}>
                   <span style={{fontSize:".95rem",flexShrink:0}}>🔒</span>
                   <span style={{fontSize:".72rem",color:"#7D675E",fontWeight:500,lineHeight:1.5}}>
-                    {mobileTab==="qr"
-                      ? <><strong style={{color:"#2B1911"}}>QR codes</strong> are single-use and expire after <strong style={{color:"#2B1911"}}>3 minutes</strong>. Your keys never leave your device.</>
-                      : <><strong style={{color:"#2B1911"}}>Auth codes</strong> are single-use and expire after <strong style={{color:"#2B1911"}}>3 minutes</strong>. Copy it and paste it into your Peach app to sign in.</>}
+                    <strong style={{color:"#2B1911"}}>Connection codes</strong> are single-use and expire after <strong style={{color:"#2B1911"}}>3 minutes</strong>. Your keys never leave your device.
                   </span>
                 </div>
 
@@ -658,8 +586,6 @@ export default function PeachAuth() {
                   <div style={{fontSize:"1.4rem",fontWeight:800,color:"#65A519",marginBottom:6}}>Signed in!</div>
                   <div style={{fontSize:".85rem",color:"#7D675E",fontWeight:500}}>Redirecting to the market…</div>
                 </div>
-                <span style={{fontSize:".72rem",color:"#C4B5AE",cursor:"pointer",marginTop:8}}
-                      onClick={handlePasteReset}>(tap to reset demo)</span>
               </div>
             )}
           </div>
@@ -999,59 +925,56 @@ export default function PeachAuth() {
               <>
                 <div style={{textAlign:"center"}}>
                   <div style={{fontSize:".92rem",fontWeight:800,color:"#2B1911",marginBottom:4}}>
-                    {phase==="expired" ? "Code expired" : "Scan with Peach"}
+                    {qrPhase==="error" ? "Connection failed" : "Scan with Peach"}
                   </div>
                   <div style={{fontSize:".73rem",color:"#C4B5AE",fontWeight:500}}>
-                    {phase==="expired" ? "Tap to generate a new code" : "Valid for 3 minutes"}
+                    {qrPhase==="error" ? "Something went wrong" : "Valid for 3 minutes"}
                   </div>
                 </div>
 
-                <div style={{position:"relative",cursor:"pointer"}} onClick={handleQRClick}
-                     title="Click to demo states">
-                  <CountdownRing secondsLeft={phase==="expired"?0:secsLeft} total={TOTAL} size={220}/>
-                  <div style={{width:204,height:204,borderRadius:14,overflow:"hidden",
-                    position:"relative",boxShadow:"0 4px 24px rgba(43,25,17,.1)",
-                    opacity:phase==="expired"?.25:1,transition:"opacity .3s"}}>
-                    <MockQR/>
-                    {phase==="scanning" && (
-                      <div style={{position:"absolute",inset:0,background:"rgba(255,249,246,.85)",
-                        display:"flex",flexDirection:"column",alignItems:"center",
-                        justifyContent:"center",gap:10,animation:"fadeIn .2s ease",borderRadius:14}}>
-                        <div style={{width:32,height:32,borderRadius:"50%",
-                          border:"3px solid #EAE3DF",borderTopColor:"#F56522",
-                          animation:"spin .8s linear infinite"}}/>
-                        <span style={{fontSize:".78rem",fontWeight:700,color:"#624D44"}}>Connecting…</span>
-                      </div>
-                    )}
+                {qrPhase === "error" ? (
+                  <div style={{width:204,height:204,borderRadius:14,
+                    background:"#FFF0EE",border:"1.5px solid #FFCBC4",
+                    display:"flex",flexDirection:"column",alignItems:"center",
+                    justifyContent:"center",gap:12,padding:20}}>
+                    <span style={{fontSize:".8rem",fontWeight:700,color:"#DF321F",textAlign:"center"}}>
+                      {qrError || "Connection failed"}
+                    </span>
+                    <button onClick={qrRestart} style={{
+                      padding:"8px 20px",borderRadius:999,
+                      background:"linear-gradient(90deg,#FF4D42,#FF7A50,#FFA24C)",
+                      color:"white",border:"none",cursor:"pointer",
+                      fontFamily:"'Baloo 2',cursive",fontSize:".78rem",fontWeight:800,
+                      letterSpacing:".02em"
+                    }}>Try again</button>
                   </div>
-                  {phase==="expired" && (
-                    <div style={{position:"absolute",inset:0,borderRadius:14,
-                      background:"rgba(255,249,246,.7)",display:"flex",flexDirection:"column",
-                      alignItems:"center",justifyContent:"center",gap:8,animation:"fadeIn .3s ease"}}>
-                      <span style={{fontSize:"1.6rem"}}>⏰</span>
-                      <span style={{fontSize:".75rem",fontWeight:700,color:"#7D675E",textAlign:"center"}}>
-                        Tap to refresh
-                      </span>
+                ) : (
+                  <div style={{position:"relative"}}>
+                    <CountdownRing secondsLeft={secsLeft} total={TOTAL} size={320}/>
+                    <div style={{width:304,height:304,borderRadius:14,overflow:"hidden",
+                      position:"relative",boxShadow:"0 4px 24px rgba(43,25,17,.1)"}}>
+                      <QRDisplay qrPayload={qrPayload} size={288}/>
+                      {phase==="scanning" && (
+                        <div style={{position:"absolute",inset:0,background:"rgba(255,249,246,.85)",
+                          display:"flex",flexDirection:"column",alignItems:"center",
+                          justifyContent:"center",gap:10,animation:"fadeIn .2s ease",borderRadius:14}}>
+                          <div style={{width:32,height:32,borderRadius:"50%",
+                            border:"3px solid #EAE3DF",borderTopColor:"#F56522",
+                            animation:"spin .8s linear infinite"}}/>
+                          <span style={{fontSize:".78rem",fontWeight:700,color:"#624D44"}}>Connecting…</span>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
 
-                {(phase==="waiting"||phase==="scanning") && (
+                {(phase==="waiting"||phase==="scanning") && qrPhase !== "error" && (
                   <div style={{display:"flex",alignItems:"center",gap:6,fontSize:".73rem",
                     fontWeight:600,color:urgent?"#DF321F":"#C4B5AE",transition:"color .3s"}}>
                     <span>Expires in</span>
                     <span style={{fontWeight:800,fontSize:".82rem",fontVariantNumeric:"tabular-nums",
-                      letterSpacing:".04em",color:urgent?"#DF321F":"#7D675E"}}>{mins}:{secs}</span>
+                      letterSpacing:".04em",color:urgent?"#DF321F":"#7D675E"}}>{mins}:{secs_}</span>
                   </div>
-                )}
-                {phase==="expired" && (
-                  <button onClick={resetQR} style={{
-                    background:"linear-gradient(90deg,#FF4D42,#FF7A50,#FFA24C)",
-                    color:"white",border:"none",cursor:"pointer",
-                    fontFamily:"'Baloo 2',cursive",fontSize:".82rem",fontWeight:800,
-                    padding:"8px 22px",borderRadius:999,letterSpacing:".02em",
-                    boxShadow:"0 2px 12px rgba(245,101,34,.35)",animation:"pulse 2s infinite"
-                  }}>↻ New QR Code</button>
                 )}
               </>
             )}
@@ -1074,13 +997,11 @@ export default function PeachAuth() {
                     animation:"successPop .4s cubic-bezier(.175,.885,.32,1.275) both"}}>✓</div>
                   <div style={{fontSize:".8rem",fontWeight:700,color:"#65A519"}}>Account linked</div>
                 </div>
-                <span style={{fontSize:".7rem",color:"#C4B5AE",cursor:"pointer"}}
-                      onClick={resetQR}>(click to reset demo)</span>
               </div>
             )}
 
-            {/* Auth code fallback — always shown except on success */}
-            {phase !== "success" && (
+            {/* Connection ID fallback — always shown except on success */}
+            {phase !== "success" && qrPhase !== "error" && (
               <div style={{width:"100%",borderTop:"1px solid #EAE3DF",paddingTop:14}}>
                 <button onClick={() => setDesktopShowCode(c => !c)} style={{
                   background:"none",border:"none",cursor:"pointer",
@@ -1095,7 +1016,7 @@ export default function PeachAuth() {
                     style={{transform:desktopShowCode?"rotate(90deg)":"rotate(0deg)",transition:"transform .2s"}}>
                     <polyline points="4,2 8,6 4,10"/>
                   </svg>
-                  Can't scan? Use auth code instead
+                  Can't scan? Use connection ID instead
                 </button>
 
                 {desktopShowCode && (
@@ -1112,16 +1033,16 @@ export default function PeachAuth() {
                       <span style={{
                         fontFamily:"monospace",fontSize:".88rem",fontWeight:700,
                         color:"#2B1911",letterSpacing:".08em",wordBreak:"break-all"
-                      }}>{MOCK_AUTH_CODE}</span>
-                      <button onClick={handleCopyCode} style={{
+                      }}>{connectionId || "..."}</span>
+                      <button onClick={handleCopyConnId} style={{
                         flexShrink:0,padding:"7px 14px",borderRadius:999,
-                        background: codeCopied ? "#65A519" : "linear-gradient(90deg,#FF4D42,#FF7A50,#FFA24C)",
+                        background: connIdCopied ? "#65A519" : "linear-gradient(90deg,#FF4D42,#FF7A50,#FFA24C)",
                         color:"white",border:"none",cursor:"pointer",
                         fontFamily:"'Baloo 2',cursive",fontSize:".78rem",fontWeight:800,
                         letterSpacing:".02em",transition:"background .2s",
                         display:"flex",alignItems:"center",gap:6
                       }}>
-                        {codeCopied ? "✓ Copied" : "Copy"}
+                        {connIdCopied ? "✓ Copied" : "Copy"}
                       </button>
                     </div>
                   </div>

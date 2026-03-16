@@ -1009,7 +1009,9 @@ export default function TradeExecution() {
                   </p>
                 )}
                 <p style={{ fontSize:".83rem", color:"#DF321F", fontWeight:600, marginBottom:10 }}>
-                  Make sure to include the reference with your payment
+                  {role === "buyer"
+                    ? "Make sure to include the reference with your payment"
+                    : "make sure the payment you'll receive comes from the provenance announced below."}
                 </p>
                 <PaymentDetailsCard details={paymentDetails}/>
               </div>

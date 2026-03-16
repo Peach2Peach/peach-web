@@ -25,6 +25,12 @@ These are completed and kept for reference.
 - ✅ **1.6 Dispute Acknowledgment + Outcome** — `DisputeBanner` component handles 3 states: counterparty dispute with email input (`POST /contract/:id/dispute/acknowledge`), active dispute info banner, and outcome display with acknowledge button (`POST /contract/:id/dispute/acknowledgeOutcome`). Supports all 5 mediator outcomes (buyerWins, sellerWins, none, cancelTrade, payOutBuyer). Payment deadline timer hidden during dispute. (`trade-execution/index.jsx`)
 - ✅ **2.1 Contract Cancellation Flow** — request/confirm/reject cancellation via `POST /contract/:id/cancel`, `/confirmCancelation`, `/rejectCancelation`. (`trade-execution/index.jsx`)
 - ✅ **2.2 Unread Message Counts** — wired from contract summaries `unreadMessages` field. (`trades-dashboard/index.jsx`)
+- ✅ **2.3 Rating** — wired via mobile signing pending tasks. `createTask("rate", ...)` + `MobileSigningModal`. Maps UI rating (5→1, 1→-1). Pending state persisted in localStorage. (`trade-execution/index.jsx`, `components.jsx`)
+- ✅ **2.4 Seller Payment Release** — wired via mobile signing pending tasks. `createTask("release", ...)` + `MobileSigningModal`. Pending state shown on release slider. (`trade-execution/index.jsx`, `components.jsx`)
+- ✅ **2b.1–2b.3 Notification System** — bell icon in topbar with unread badge, dropdown panel with chronological event list (trade requests, messages, status changes, matches, disputes). `useNotifications` hook polls existing API endpoints, persists read/unread in localStorage. Browser tab title shows `(●) Peach` when unread. (`Navbars.jsx`, `NotificationPanel.jsx`, `useNotifications.js`, `global.css`)
+- ✅ **3.5 Pre-Contract Chat (v069)** — full chat UI in MatchesPopup and SentRequestPopup. Send/receive encrypted messages via `POST/GET /v069/{buyOffer|sellOffer}/:id/tradeRequestPerformed/chat`. Chat bubbles, input field, unread message counts on sent trade requests. (`trades-dashboard/MatchesPopup.jsx`, `trades-dashboard/index.jsx`)
+- ✅ **5.1 Mobile Signing Modal + createTask helper** — `MobileSigningModal` component (phone icon, spinner, "Confirm later in mobile" button). Mock `createTask()` in `useApi.js`. localStorage persistence for pending tasks across navigation. (`MobileSigningModal.jsx`, `useApi.js`)
+- ✅ **5.2 Wire signing into trade execution** — 3 action handlers (release, refund, rating) create pending tasks + show signing modal. Pending state buttons (dashed orange, tappable to re-open modal). Contract polling detects status change and clears pending state. Cancel Trade button hidden for seller. (`trade-execution/index.jsx`, `components.jsx`)
 
 ---
 
@@ -45,39 +51,16 @@ These are completed and kept for reference.
 
 ### ~~2.2 Unread Message Counts~~ ✅
 
-### 2.3 Rating
-- **File**: `src/screens/peach-trade-execution.jsx` → `RatingPanel`
-- **Endpoint**: `POST /v1/contract/:id/rate`
-- **Body**: `{ rating: 1|-1, signature }`
-- **Question**: Mobile app uses Bitcoin message signature. Check if PGP signature is accepted. If Bitcoin sig required → move to Phase 5 (mobile-assist).
-
-### 2.4 Seller Payment Confirmation / Release
-- **File**: `src/screens/peach-trade-execution.jsx`
-- **Note**: "I've received the payment" slider logs to console. Wire to the release endpoint.
-- **Likely requires signing relay (Phase 5)** — seller must sign a release transaction (PSBT).
+### ~~2.3 Rating~~ ✅
+### ~~2.4 Seller Payment Release~~ ✅
 
 ---
 
-## Phase 2b: Notifications & Activity Feed
+## Phase 2b: Notifications & Activity Feed ✅ COMPLETE
 
-### 2b.1 Notification Bell + Dropdown
-- **Files**: `src/components/Navbars.jsx`, new `src/components/NotificationPanel.jsx`
-- **UI**: Bell icon in the topbar, left of the PeachID and avatar. Unread dot/count badge. Clicking opens a dropdown panel (not a full page) showing a scrollable activity log.
-- **Panel contents**: Chronological list of events with timestamp, icon per type, and click-to-navigate action.
-
-### 2b.2 Wire Notification Events
-- **Data sources**: Poll existing API endpoints for state changes.
-- **Event types to track**:
-  - **Trade requests** — new trade request received on your offer (`v069 tradeRequestReceived`)
-  - **Messages** — new chat messages (`unreadMessages` from contract summaries)
-  - **Trade status changes** — escrow funded, payment sent, payment confirmed, trade completed, trade cancelled
-  - **Matches** — new matches available on your offer
-  - **Disputes** — dispute opened, dispute outcome
-  - **Offer expiry** — offer expired or funding expired
-- **Implementation**: Background polling (reuse existing fetch intervals), compare with previous state, push new events into a notification list stored in React state. Persist read/unread state in localStorage so it survives refresh.
-
-### 2b.3 Browser Tab Indicator
-- **UI**: Change document title to `(●) Peach` when unread notifications exist. Reset on panel open.
+~~2b.1 Notification Bell + Dropdown~~ ✅
+~~2b.2 Wire Notification Events~~ ✅
+~~2b.3 Browser Tab Indicator~~ ✅
 
 ---
 
@@ -111,12 +94,7 @@ These are completed and kept for reference.
   - `POST /v069/{buyOffer|sellOffer}/:id/instantTrade`
 - **UI**: Show "Instant Trade" badge/button when available
 
-### 3.5 Pre-Contract Chat (v069)
-- **Endpoints**:
-  - `GET /v069/buyOffer/:id/tradeRequestPerformed/chat`
-  - `POST /v069/buyOffer/:id/tradeRequestPerformed/chat`
-- **UI**: Display chat history in the **MatchesPopup** (trade request acceptance stage, `trades-dashboard/MatchesPopup.jsx`) so the user can see messages exchanged before the match happened. Also add a chat panel in the trade request view for sending/receiving messages before a contract is created.
-- **Files**: `src/screens/trades-dashboard/MatchesPopup.jsx`, `src/screens/trades-dashboard/index.jsx`
+### ~~3.5 Pre-Contract Chat (v069)~~ ✅
 
 ### 3.6 Sell Offer Submission
 - **File**: `src/screens/peach-offer-creation.jsx`
@@ -197,27 +175,42 @@ These are completed and kept for reference.
 
 ---
 
-## Phase 5: Mobile-Assist Signing Relay (Architectural)
+## Phase 5: Mobile-Assist Signing via Pending Tasks
 
-This unlocks features that need a Bitcoin signature from the mobile app.
+Architecture confirmed with backend dev. No QR code for signing — server links browser and mobile by userId via JWT `isDesktop` flag.
 
-### 5.1 Design the Signing Relay Protocol
-- Desktop shows a QR code containing: `{ action, data_to_sign, contract_id }`
-- Mobile scans, signs with Bitcoin key, returns signature via server relay (same Desktop Connection pattern from auth)
-- Desktop receives signature, completes the API call
+### ~~5.1 MobileSigningModal + createTask helper~~ ✅
+### ~~5.2 Wire signing into trade execution (release, refund, rating)~~ ✅
 
-### 5.2 Features Unlocked by Signing Relay
-| Feature | What Mobile Signs |
-|---------|------------------|
-| Sell offer creation | `escrowPublicKey` derivation + `returnAddress` |
-| Seller payment confirm | `releaseTransaction` (signed PSBT) |
-| Buyer payment confirm (if needed) | `releaseAddressMessageSignature` |
-| Rating | Bitcoin message signature over rating |
+### 5.3 Backend endpoints (backend team)
+- `POST /v1/task/create` (browser-exclusive) — create a signing task
+- `GET /v1/pendingTasks` (mobile-exclusive) — mobile fetches tasks to sign
+- `POST /v1/task/:id/sign` (mobile-exclusive) — mobile submits signature
+- Server auto-applies signature (releases escrow, submits rating, etc.)
+- Push notification sent to mobile when task is created
+- **Status**: Waiting on backend team to implement. Web side uses mock `createTask()` for now.
 
-### 5.3 Implementation
-- **New component**: `SigningRelay.jsx` — generic QR display + polling component
-- **Server endpoint**: Reuse Desktop Connection or create `/v1/signing-request`
-- **Mobile app change needed**: Add "scan to sign" feature
+### 5.4 Mobile pending tasks UI (mobile team)
+- Poll or receive push for `/pendingTasks`
+- Confirmation UI per task type
+- Sign + submit using existing mobile signing code
+
+### 5.5 Swap mock for real endpoint
+- Replace mock `createTask()` in `useApi.js` with real `POST /v1/task/create`
+- End-to-end testing on regtest
+
+### 5.6 Sell Offer Signing
+- Sell offer creation needs `escrowPublicKey` + `returnAddress` from mobile
+- Same pending task flow, but wired into `offer-creation/index.jsx`
+- Deferred — needs separate design pass (different screen, no existing polling)
+
+### Features unlocked by pending tasks
+| Feature | Task type | What mobile signs | Server auto-applies |
+|---------|-----------|-------------------|---------------------|
+| Seller payment release | `release` | Signs release PSBT with escrow key | Broadcasts release tx |
+| Refund | `refund` | Signs refund PSBT with escrow key | Broadcasts refund tx |
+| Rating | `rate` | Bitcoin message signature over counterparty userId | Submits rating to contract |
+| Sell offer creation | `escrow` | Derives escrow keypair from offer | Registers escrow pubkey + return address |
 
 ---
 
@@ -240,12 +233,12 @@ This unlocks features that need a Bitcoin signature from the mobile app.
 
 ## Phase 7: Blocked / Deferred
 
-| Feature | Blocker | Decision Needed |
-|---------|---------|-----------------|
-| Refund flow | PSBT signing in mobile app |relay to mobile |
+| Feature | Blocker | Status |
+|---------|---------|--------|
+| ~~Refund flow~~ | ~~PSBT signing~~ | ✅ Browser-side wired (mock). Waiting on backend endpoints (Phase 5.3) |
 | Wallet visualization | xpub not in auth object yet | Wait for auth protocol to include xpub (it's in the PDF spec) |
-| Sell offer submission | Needs escrowPublicKey from mobile | Requires signing relay (Phase 5) |
-| Seller release TX | Needs PSBT signing | Requires signing relay (Phase 5) |
+| Sell offer submission | Needs escrowPublicKey from mobile | Browser-side deferred (Phase 5.6). Waiting on backend endpoints |
+| ~~Seller release TX~~ | ~~Needs PSBT signing~~ | ✅ Browser-side wired (mock). Waiting on backend endpoints (Phase 5.3) |
 
 ---
 
@@ -295,18 +288,21 @@ Items that don't add new API wiring but improve existing screens.
 | ~~5b~~ | ~~1.6 Dispute ack + outcome~~ | ✅ Done | |
 | ~~6~~ | ~~2.1 Contract cancellation~~ | ✅ Done | |
 | ~~7~~ | ~~2.2 Unread counts~~ | ✅ Done | |
-| 7b | 2b.1–2b.3 Notifications & activity feed | ~2-3 sessions | Core UX |
-| 8 | 3.1–3.2 Reject + edit/withdraw | ~1 session | Offer management |
-| 9 | 4.1–4.2 Contact + About | ~1 session | Easy settings wins |
-| 10 | 4.3–4.4 Block users + fee save | ~1 session | Settings completion |
-| 11 | 4.10 Dark mode | ~1-2 sessions | User experience |
-| 12 | 4.5–4.9 Remaining settings | ~2-3 sessions | Settings completion |
-| 13 | 3.3–3.5 Republish, instant trade, pre-chat | ~2 sessions | Advanced offer features |
-| ~~14~~ | ~~6.1 Notifications feed~~ | → Phase 2b | |
-| 15 | 2.3 Rating | ~1 session | If PGP sig works; else Phase 5 |
-| 16 | 6.2 Auth handshake | ~3-4 sessions | Requires server endpoints |
-| 17 | 5.x Signing relay | ~3-4 sessions | Unlocks sell-side |
-| 18 | 4.11 Referrals | ~1 session | Nice-to-have |
+| ~~7b~~ | ~~2b.1–2b.3 Notifications & activity feed~~ | ✅ Done | |
+| ~~8~~ | ~~2.3 Rating~~ | ✅ Done (via mobile signing) | |
+| ~~9~~ | ~~2.4 Seller payment release~~ | ✅ Done (via mobile signing) | |
+| ~~10~~ | ~~3.5 Pre-contract chat~~ | ✅ Done | |
+| ~~11~~ | ~~5.1–5.2 Mobile signing (browser side)~~ | ✅ Done | |
+| 12 | 3.1–3.2 Reject + edit/withdraw | ~1 session | Offer management |
+| 13 | 4.1–4.2 Contact + About | ~1 session | Easy settings wins |
+| 14 | 4.3–4.4 Block users + fee save | ~1 session | Settings completion |
+| 15 | 4.10 Dark mode | ~1-2 sessions | User experience |
+| 16 | 4.5–4.9 Remaining settings | ~2-3 sessions | Settings completion |
+| 17 | 3.3–3.4 Republish, instant trade | ~1 session | Advanced offer features |
+| 18 | 6.2 Auth handshake | ~3-4 sessions | Requires server endpoints |
+| 19 | 5.3–5.5 Backend endpoints + end-to-end | Backend team | Unlocks real signing |
+| 20 | 5.6 Sell offer signing | ~1 session | After backend endpoints land |
+| 21 | 4.11 Referrals | ~1 session | Nice-to-have |
 | — | UI fixes & polish | Ongoing | Sprinkle between phases |
 
 ---
@@ -323,7 +319,7 @@ Items that don't add new API wiring but improve existing screens.
 
 | File | Changes |
 |------|---------|
-| `src/screens/trade-execution/index.jsx` | Wire remaining trade actions, cancellation, rating |
+| `src/screens/trade-execution/index.jsx` | Wrong amount escrow modal, escrow timers |
 | `src/screens/trades-dashboard/index.jsx` | Reject, republish, unread counts, instant trade |
 | `src/screens/peach-market-view.jsx` | Edit/withdraw own offers, filter parity |
 | `src/screens/offer-creation/index.jsx` | Sell offer, "no new users" flag, PM validators |
@@ -332,4 +328,5 @@ Items that don't add new API wiring but improve existing screens.
 | `src/screens/peach-auth.jsx` | Full auth handshake (when server ready) |
 | `src/styles/global.css` | Dark mode theme variables |
 | `src/utils/pgp.js` | Already complete — reuse existing functions |
-| `src/hooks/useApi.js` | Already complete — consider v069 param addition |
+| `src/components/MobileSigningModal.jsx` | Swap mock createTask for real endpoint when backend ready |
+| `src/hooks/useApi.js` | Swap mock createTask, consider v069 param addition |

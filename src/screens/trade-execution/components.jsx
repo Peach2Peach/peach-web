@@ -981,6 +981,50 @@ function DisputeBanner({ scenario, onAction }) {
   );
 }
 
+// ─── SELLER COUNTDOWN ─────────────────────────────────────────────────────────
+function SellerPaymentCountdown({ deadline, onExtend }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const ms = deadline ? deadline - now : null;
+  const expired = ms !== null && ms <= 0;
+  const urgent = ms !== null && ms > 0 && ms < 5 * 60_000; // < 5 min
+
+  let timeStr = null;
+  if (ms !== null) {
+    if (ms <= 0) {
+      timeStr = "Expired";
+    } else {
+      const totalSec = Math.floor(ms / 1000);
+      const h = Math.floor(totalSec / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      const s = totalSec % 60;
+      timeStr = h > 0
+        ? `${h}h ${m}m remaining.`
+        : `${m}m ${s}s remaining.`;
+    }
+  }
+
+  return <>
+    <div style={{
+      display:"flex", alignItems:"center", gap:8,
+      background:"#FEEDE5", border:"1px solid rgba(196,81,4,.15)",
+      borderRadius:8, padding:"10px 12px",
+      fontSize:".83rem", color:"#C45104", fontWeight:600, lineHeight:1.5,
+    }}>
+      <IconClock/>
+      <span>
+        Waiting for the buyer to send payment.
+        {timeStr && <span style={{ color: expired || urgent ? "#DF321F" : "#C45104" }}> {timeStr}</span>}
+      </span>
+    </div>
+    {expired && <Btn label="⏱  Extend Deadline (+12h)" bg="#D7F2FE" color="#037DB5" onClick={onExtend}/>}
+  </>;
+}
+
 // ─── ACTION BUTTONS ───────────────────────────────────────────────────────────
 export function ActionPanel({ scenario, onAction, showPostCancel = false, pendingTask = null, onPendingClick = null }) {
   const { tradeStatus: status, role } = scenario;
@@ -1082,31 +1126,17 @@ export function ActionPanel({ scenario, onAction, showPostCancel = false, pendin
         </>}
 
         {/* Seller: waiting for buyer to send payment */}
-        {status === "paymentRequired" && role === "seller" && (() => {
-          const deadline = scenario.contract.paymentExpectedBy;
-          const hoursLeft = deadline ? Math.floor((deadline - Date.now()) / 3600_000) : null;
-          const nearDeadline = hoursLeft !== null && hoursLeft < 3;
-          return <>
-            <div style={{
-              display:"flex", alignItems:"center", gap:8,
-              background:"#FEEDE5", border:"1px solid rgba(196,81,4,.15)",
-              borderRadius:8, padding:"10px 12px",
-              fontSize:".83rem", color:"#C45104", fontWeight:600, lineHeight:1.5,
-            }}>
-              <IconClock/>
-              <span>
-                Waiting for the buyer to send payment.
-                {hoursLeft !== null && <span style={{ color: nearDeadline ? "#DF321F" : "#C45104" }}> {hoursLeft}h remaining.</span>}
-              </span>
-            </div>
-            {nearDeadline && <Btn label="⏱  Extend Deadline (+12h)" bg="#D7F2FE" color="#037DB5" onClick={() => onAction("extend_time")}/>}
-            {/* Greyed-out — seller cannot confirm payment yet */}
-            <SlideToConfirm
-              label="I've received the payment"
-              disabled={true}
-            />
-          </>;
-        })()}
+        {status === "paymentRequired" && role === "seller" && <>
+          <SellerPaymentCountdown
+            deadline={scenario.contract.paymentExpectedBy}
+            onExtend={() => onAction("extend_time")}
+          />
+          {/* Greyed-out — seller cannot confirm payment yet */}
+          <SlideToConfirm
+            label="I've received the payment"
+            disabled={true}
+          />
+        </>}
 
         {/* Seller: confirm receipt → releases bitcoin */}
         {(status === "confirmPaymentRequired" || status === "releaseEscrow") && role === "seller" && <>

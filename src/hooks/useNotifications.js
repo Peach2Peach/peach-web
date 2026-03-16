@@ -2,6 +2,12 @@ import { useState, useEffect } from "react";
 import { STATUS_CONFIG } from "../data/statusConfig.js";
 import { formatTradeId } from "../utils/format.js";
 
+// ── Seller-specific overrides (keyed by status) ─────────────────────────────
+const SELLER_OVERRIDE = {
+  paymentRequired:        { title: "Waiting for buyer",      body: "Wait for buyer to mark the payment as done." },
+  confirmPaymentRequired: { title: "Payment marked as sent", body: "Check your account and confirm receipt." },
+};
+
 // ── Status → notification mapping ────────────────────────────────────────────
 const STATUS_NOTIF = {
   hasMatchesAvailable:          { title: "New matches available",   body: "Review and select a match.",             type: "match" },
@@ -132,6 +138,8 @@ async function _poll(auth, base) {
       const status = c.tradeStatus;
       const unread = c.unreadMessages ?? 0;
       const fmtId = formatTradeId(c.id);
+      const isSeller = c.seller?.id === auth.peachId || (c.buyer?.id && c.buyer.id !== auth.peachId);
+      const sellerOv = isSeller ? SELLER_OVERRIDE[status] : null;
 
       if (prev) {
         // Status changed
@@ -139,7 +147,7 @@ async function _poll(auth, base) {
           const sn = STATUS_NOTIF[status];
           events.push(_makeNotif(
             `c-${c.id}-${status}-${now}`, sn.type,
-            `${sn.title}: contract ${fmtId}`, sn.body, c.id, null
+            `${sellerOv?.title ?? sn.title}: contract ${fmtId}`, sellerOv?.body ?? sn.body, c.id, null
           ));
         }
         // New unread messages
@@ -157,7 +165,7 @@ async function _poll(auth, base) {
           const sn = STATUS_NOTIF[status];
           events.push(_makeNotif(
             `c-${c.id}-${status}-${now}`, sn.type,
-            `${sn.title}: contract ${fmtId}`, sn.body, c.id, null
+            `${sellerOv?.title ?? sn.title}: contract ${fmtId}`, sellerOv?.body ?? sn.body, c.id, null
           ));
         }
       }
