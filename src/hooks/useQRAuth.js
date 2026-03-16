@@ -144,12 +144,7 @@ export function useQRAuth({ baseUrl }) {
           { signal: ac.signal }
         );
 
-        if (res.status === 401) {
-          // Connection expired server-side — auto-refresh
-          stopPolling();
-          if (mountedRef.current) init();
-          return;
-        }
+        if (res.status === 401) return; // not ready yet — mobile hasn't responded
 
         if (!res.ok) return; // transient error, keep polling
 

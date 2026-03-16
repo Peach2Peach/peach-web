@@ -31,6 +31,7 @@ These are completed and kept for reference.
 - ✅ **3.5 Pre-Contract Chat (v069)** — full chat UI in MatchesPopup and SentRequestPopup. Send/receive encrypted messages via `POST/GET /v069/{buyOffer|sellOffer}/:id/tradeRequestPerformed/chat`. Chat bubbles, input field, unread message counts on sent trade requests. (`trades-dashboard/MatchesPopup.jsx`, `trades-dashboard/index.jsx`)
 - ✅ **5.1 Mobile Signing Modal + createTask helper** — `MobileSigningModal` component (phone icon, spinner, "Confirm later in mobile" button). Mock `createTask()` in `useApi.js`. localStorage persistence for pending tasks across navigation. (`MobileSigningModal.jsx`, `useApi.js`)
 - ✅ **5.2 Wire signing into trade execution** — 3 action handlers (release, refund, rating) create pending tasks + show signing modal. Pending state buttons (dashed orange, tappable to re-open modal). Contract polling detects status change and clears pending state. Cancel Trade button hidden for seller. (`trade-execution/index.jsx`, `components.jsx`)
+- ✅ **6.2 QR Auth Handshake** — real QR-based web-to-mobile authentication. Ephemeral PGP keypair → POST to `/v069/desktop/desktopConnection` → display QR → poll for mobile response → decrypt credentials → validate → PGP key verification → set `window.__PEACH_AUTH__`. Auto-refresh on expiry. Mobile view shows app instructions. "Can't scan?" shows connection ID. Dev auth kept as fallback. (`peach-auth.jsx`, `useQRAuth.js`, `pgp.js`)
 
 ---
 
@@ -218,16 +219,7 @@ Architecture confirmed with backend dev. No QR code for signing — server links
 
 ### ~~6.1 Notifications / Activity Feed~~ → Moved to Phase 2b
 
-### 6.2 Auth Handshake Implementation
-- **File**: `src/screens/peach-auth.jsx`
-- **Implement the 6-step protocol** from `PEACH DESKTOP AUTH.pdf`:
-  1. Generate PGP keypair (D1, D2) — `pgp.js` can do this
-  2. Request Desktop Connection from server
-  3. Display QR with connection ID + D2
-  4. Poll server for PACKAGE_1
-  5. Decrypt, show user confirmation (xpub address + PM data)
-  6. Send ValidationPassword, receive auth token
-- **Dependencies**: Server must implement the Desktop Connection endpoints
+### ~~6.2 Auth Handshake Implementation~~ ✅
 
 ---
 
@@ -236,7 +228,7 @@ Architecture confirmed with backend dev. No QR code for signing — server links
 | Feature | Blocker | Status |
 |---------|---------|--------|
 | ~~Refund flow~~ | ~~PSBT signing~~ | ✅ Browser-side wired (mock). Waiting on backend endpoints (Phase 5.3) |
-| Wallet visualization | xpub not in auth object yet | Wait for auth protocol to include xpub (it's in the PDF spec) |
+| Wallet visualization | Needs UI design + bitcoinjs-lib for address derivation | xpub now available in `window.__PEACH_AUTH__.xpub` via QR auth |
 | Sell offer submission | Needs escrowPublicKey from mobile | Browser-side deferred (Phase 5.6). Waiting on backend endpoints |
 | ~~Seller release TX~~ | ~~Needs PSBT signing~~ | ✅ Browser-side wired (mock). Waiting on backend endpoints (Phase 5.3) |
 
@@ -293,13 +285,13 @@ Items that don't add new API wiring but improve existing screens.
 | ~~9~~ | ~~2.4 Seller payment release~~ | ✅ Done (via mobile signing) | |
 | ~~10~~ | ~~3.5 Pre-contract chat~~ | ✅ Done | |
 | ~~11~~ | ~~5.1–5.2 Mobile signing (browser side)~~ | ✅ Done | |
-| 12 | 3.1–3.2 Reject + edit/withdraw | ~1 session | Offer management |
-| 13 | 4.1–4.2 Contact + About | ~1 session | Easy settings wins |
-| 14 | 4.3–4.4 Block users + fee save | ~1 session | Settings completion |
-| 15 | 4.10 Dark mode | ~1-2 sessions | User experience |
-| 16 | 4.5–4.9 Remaining settings | ~2-3 sessions | Settings completion |
-| 17 | 3.3–3.4 Republish, instant trade | ~1 session | Advanced offer features |
-| 18 | 6.2 Auth handshake | ~3-4 sessions | Requires server endpoints |
+| ~~12~~ | ~~6.2 QR Auth handshake~~ | ✅ Done | |
+| 13 | 3.1–3.2 Reject + edit/withdraw | ~1 session | Offer management |
+| 14 | 4.1–4.2 Contact + About | ~1 session | Easy settings wins |
+| 15 | 4.3–4.4 Block users + fee save | ~1 session | Settings completion |
+| 16 | 4.10 Dark mode | ~1-2 sessions | User experience |
+| 17 | 4.5–4.9 Remaining settings | ~2-3 sessions | Settings completion |
+| 18 | 3.3–3.4 Republish, instant trade | ~1 session | Advanced offer features |
 | 19 | 5.3–5.5 Backend endpoints + end-to-end | Backend team | Unlocks real signing |
 | 20 | 5.6 Sell offer signing | ~1 session | After backend endpoints land |
 | 21 | 4.11 Referrals | ~1 session | Nice-to-have |
@@ -325,7 +317,7 @@ Items that don't add new API wiring but improve existing screens.
 | `src/screens/offer-creation/index.jsx` | Sell offer, "no new users" flag, PM validators |
 | `src/screens/peach-settings.jsx` | 7 empty sub-screens + fee save + block users + referrals |
 | `src/screens/peach-home.jsx` | Profile card, price card |
-| `src/screens/peach-auth.jsx` | Full auth handshake (when server ready) |
+| `src/screens/peach-auth.jsx` | ✅ QR auth done. Future: production CORS via Cloudflare Worker |
 | `src/styles/global.css` | Dark mode theme variables |
 | `src/utils/pgp.js` | Already complete — reuse existing functions |
 | `src/components/MobileSigningModal.jsx` | Swap mock createTask for real endpoint when backend ready |

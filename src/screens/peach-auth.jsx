@@ -109,7 +109,7 @@ export default function PeachAuth() {
 
   // ─── QR AUTH (real handshake) ──────────────────────────────────────────────
   const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
-  const regtestBase = isLocal ? "/api-regtest" : (import.meta.env.VITE_API_BASE || "");
+  const regtestBase = isLocal ? "/api-regtest" : (import.meta.env.VITE_API_BASE || "") + "/regtest";
   const { phase: qrPhase, qrPayload, connectionId, secsLeft, error: qrError, profile: qrProfile, restart: qrRestart } = useQRAuth({ baseUrl: regtestBase });
 
   // Map hook phases to UI display

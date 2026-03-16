@@ -138,11 +138,54 @@ export function Topbar({
     setShowNotifPanel(v => !v);
     setShowAvatarMenu(false);
   };
+  const [regtestLoading, setRegtestLoading] = useState(false);
+  const [regtestError, setRegtestError] = useState("");
+
   const openAvatarMenu = (e) => {
     e.stopPropagation();
     setShowAvatarMenu(v => !v);
     setShowNotifPanel(false);
+    setRegtestError("");
   };
+
+  async function handleAutoRegtest() {
+    setRegtestLoading(true);
+    setRegtestError("");
+    try {
+      const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+      const regtestBase = isLocal
+        ? "/api-regtest"
+        : (import.meta.env.VITE_API_BASE || "") + "/regtest";
+
+      const authRes = await fetch(regtestBase + "/nuxDesktopAuth");
+      if (!authRes.ok) throw new Error("Failed to reach regtest auth");
+      const { token, pgpPrivKey } = await authRes.json();
+      if (!token) throw new Error("No token in response");
+
+      const profileRes = await fetch(regtestBase + "/v1/user/me", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!profileRes.ok) throw new Error(`API ${profileRes.status}`);
+      const profile = await profileRes.json();
+
+      window.__PEACH_AUTH__ = {
+        token,
+        pgpPrivKey: pgpPrivKey || null,
+        peachId: profile.id || profile.publicKey || null,
+        baseUrl: regtestBase + "/v1",
+        profile,
+      };
+      try { localStorage.setItem("peach_logged_in", "true"); } catch {}
+      setShowAvatarMenu(false);
+      navigate("/home");
+      // Force re-render across all components reading isLoggedIn
+      window.dispatchEvent(new Event("peach-auth-change"));
+    } catch (err) {
+      setRegtestError(err.message);
+    } finally {
+      setRegtestLoading(false);
+    }
+  }
   const handleNotifNavigate = (n) => {
     setShowNotifPanel(false);
     if (n.contractId) navigate(`/trade/${n.contractId}`);
@@ -210,11 +253,26 @@ export function Topbar({
             )}
           </div>
         ) : (
-          <div className="avatar-login-btn" onClick={handleLogin}>
-            <div className="avatar" style={{background:"var(--black-10)",color:"var(--black-25)"}}>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><circle cx="8" cy="5.5" r="3"/><path d="M2.5 14c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/></svg>
+          <div className="avatar-menu-wrap">
+            <div className="avatar-login-btn" onClick={openAvatarMenu}>
+              <div className="avatar" style={{background:"var(--black-10)",color:"var(--black-25)"}}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><circle cx="8" cy="5.5" r="3"/><path d="M2.5 14c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/></svg>
+              </div>
+              <span className="avatar-login-label">Log in</span>
             </div>
-            <span className="avatar-login-label">Log in</span>
+            {showAvatarMenu && (
+              <div className="avatar-menu">
+                <button className="avatar-menu-item" onClick={handleAutoRegtest} disabled={regtestLoading}>
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M2 8a6 6 0 0112 0A6 6 0 012 8z"/><path d="M8 5v3l2 1.5"/></svg>
+                  {regtestLoading ? "Logging in…" : "Log in to default regtest"}
+                </button>
+                {regtestError && <div style={{padding:"4px 12px",fontSize:".72rem",color:"var(--error)"}}>{regtestError}</div>}
+                <button className="avatar-menu-item" onClick={() => { setShowAvatarMenu(false); handleLogin(); }}>
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 8h6M8 5v6"/></svg>
+                  Log in with QR code
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
