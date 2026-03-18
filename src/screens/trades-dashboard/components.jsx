@@ -360,7 +360,7 @@ export function HistorySatsAmount({ sats }) {
 
 export const CURRENCY_SYMBOLS = { EUR: "€", CHF: "CHF ", GBP: "£", USD: "$", SEK: "kr ", NOK: "kr ", DKK: "kr ", PLN: "zł", CZK: "Kč " };
 
-export function HistoryTable({ rows, onTradeSelect, selectedCurrency, tab }) {
+export function HistoryTable({ rows, onTradeSelect, selectedCurrency, tab, onRefresh, isLoading }) {
   const navigate = useNavigate();
   const [sortKey, setSortKey] = useState("createdAt");
   const [sortDir, setSortDir] = useState(-1);
@@ -478,6 +478,16 @@ export function HistoryTable({ rows, onTradeSelect, selectedCurrency, tab }) {
           onChange={e => setHistSearch(e.target.value)}
         />
         <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+          {onRefresh && <button
+            onClick={onRefresh}
+            disabled={isLoading}
+            title="Refresh trades"
+            style={{border:"1.5px solid var(--black-10)",borderRadius:8,background:"var(--surface)",
+              padding:"6px 10px",cursor:"pointer",fontSize:"1rem",fontFamily:"var(--font)",
+              color:"var(--black-65)",opacity:isLoading?0.5:1,flexShrink:0}}
+          >
+            ↻
+          </button>}
           <select
             value={dirFilter}
             onChange={e => setDirFilter(e.target.value)}
@@ -496,9 +506,9 @@ export function HistoryTable({ rows, onTradeSelect, selectedCurrency, tab }) {
             <option value="completed">Completed</option>
             <option value="cancelled">Cancelled</option>
           </select>}
-          <button onClick={exportCSV} className="hist-export-btn">
+          {isHistory && <button onClick={exportCSV} className="hist-export-btn">
             ↓ Export CSV
-          </button>
+          </button>}
         </div>
       </div>
 

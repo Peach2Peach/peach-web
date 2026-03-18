@@ -8,6 +8,12 @@ import { extractPMsFromProfile, isApiError } from "../utils/pgp.js";
 import { getCached, setCache, clearCache } from "../hooks/useApi.js";
 import { MOCK_OFFERS, MOCK_USER_PMS as USER_PMS, MOCK_ALL_METHODS as ALL_METHODS } from "../data/mockData.js";
 import { BTC_PRICE_FALLBACK as BTC_PRICE, fmtPct, fmtFiat } from "../utils/format.js";
+import { PeachRating } from "./trades-dashboard/components.jsx";
+
+/** Convert API rating (-1…+1) to Peach scale (0…5) */
+function toPeaches(apiRating) {
+  return (apiRating + 1) / 2 * 5;
+}
 
 const ALL_CURRENCIES = ["EUR","CHF","GBP"];
 
@@ -156,6 +162,8 @@ const css = `
   .own-label{font-size:.62rem;font-weight:800;color:var(--primary-dark);
     background:var(--primary-mild);border:1px solid rgba(245,101,34,.25);
     padding:1px 7px;border-radius:999px;white-space:nowrap;letter-spacing:.03em}
+  .offer-id-label{font-size:.62rem;font-weight:600;color:var(--black-50);
+    font-family:monospace;white-space:nowrap;letter-spacing:.02em}
   /* mobile own card */
   .offer-card.own-card{border-left:3px solid var(--primary);background:linear-gradient(135deg,rgba(245,101,34,.04),var(--surface))}
   .my-offers-btn{padding:7px 16px;border-radius:999px;background:var(--surface);
@@ -615,7 +623,7 @@ function RepCell({ offer }) {
       </div>
       <div className="rep-info">
         <div className="rep-row">
-          <span className="rep-stars"><span className="star">★</span>{offer.rep.toFixed(1)}</span>
+          <PeachRating rep={offer.rep} size={14}/>
           <span className="rep-trades">({offer.trades})</span>
         </div>
         {offer.badges.length > 0 && (
@@ -673,7 +681,7 @@ export default function PeachMarket() {
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
 
   // ── AUTH + API ──
-  const { get, post, auth } = useApi();
+  const { get, post, patch, auth } = useApi();
   const [liveOffers,   setLiveOffers]   = useState(() => getCached("market-offers")?.data ?? null);
   const [liveUserPMs,  setLiveUserPMs]  = useState(null); // null = use mock
   const [pmError,      setPmError]      = useState(false);
@@ -695,6 +703,17 @@ export default function PeachMarket() {
   const [undoAnim,       setUndoAnim]       = useState(null);   // offer id being undone
   const [localRequested, setLocalRequested] = useState(() => new Set()); // track requested state locally
 
+  // ── Own-offer edit / withdraw state ──
+  const [editingPremium,   setEditingPremium]   = useState(false);   // toggle edit mode
+  const [editPremiumVal,   setEditPremiumVal]   = useState("");      // input value
+  const [editSaving,       setEditSaving]       = useState(false);
+  const [editError,        setEditError]        = useState(null);
+  const [withdrawConfirm,  setWithdrawConfirm]  = useState(false);   // show confirm step
+  const [withdrawing,      setWithdrawing]       = useState(false);
+  const [withdrawError,    setWithdrawError]    = useState(null);
+  const [signingModal,     setSigningModal]     = useState(null);    // { offerId } for sell offer cancel
+  const [toast,            setToast]            = useState(null);
+
   const isSellTab = tab === "sell";
 
   // Derive current BTC price in selected currency
@@ -704,6 +723,8 @@ export default function PeachMarket() {
   function openPopup(offer) {
     setSelectedPM(null);
     setPopupCurrency(offer.currencies.length === 1 ? offer.currencies[0] : null);
+    setEditingPremium(false); setEditError(null);
+    setWithdrawConfirm(false); setWithdrawError(null);
     setPopupOffer(offer);
   }
   function closePopup() {
@@ -711,6 +732,61 @@ export default function PeachMarket() {
     setSelectedPM(null);
     setPopupCurrency(null);
     setRequestAnim(false);
+    setEditingPremium(false); setEditError(null);
+    setWithdrawConfirm(false); setWithdrawError(null);
+  }
+
+  // ── Own-offer handlers ──
+  async function handleSavePremium(offer) {
+    const val = parseFloat(editPremiumVal);
+    if (isNaN(val)) { setEditError("Enter a valid number"); return; }
+    setEditSaving(true); setEditError(null);
+    try {
+      const res = await patch(`/offer/${offer.id}`, { premium: val });
+      if (!res.ok) {
+        const d = await res.json().catch(() => null);
+        throw new Error(d?.error || d?.message || `Server error ${res.status}`);
+      }
+      // Update offer in local state
+      setPopupOffer(prev => ({ ...prev, premium: val }));
+      if (liveOffers) {
+        setLiveOffers(prev => prev.map(o => o.id === offer.id ? { ...o, premium: val } : o));
+      }
+      setEditingPremium(false);
+      setToast("Premium updated"); setTimeout(() => setToast(null), 3000);
+    } catch (err) {
+      setEditError(err.message || "Failed to save");
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  async function handleWithdraw(offer) {
+    setWithdrawing(true); setWithdrawError(null);
+    try {
+      const res = await post(`/offer/${offer.id}/cancel`, {});
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.error || data?.message || `Server error ${res.status}`);
+      }
+      // Sell offers return a PSBT → needs mobile signing
+      if (data?.psbt) {
+        setSigningModal({ offerId: offer.id });
+        closePopup();
+        // Remove from list
+        if (liveOffers) setLiveOffers(prev => prev.filter(o => o.id !== offer.id));
+        setToast("Refund sent to mobile for signing"); setTimeout(() => setToast(null), 4000);
+        return;
+      }
+      // Buy offers — done
+      closePopup();
+      if (liveOffers) setLiveOffers(prev => prev.filter(o => o.id !== offer.id));
+      setToast("Offer withdrawn"); setTimeout(() => setToast(null), 3000);
+    } catch (err) {
+      setWithdrawError(err.message || "Failed to withdraw");
+    } finally {
+      setWithdrawing(false);
+    }
   }
 
   // Find which of the user's PMs match the offer's methods
@@ -776,7 +852,7 @@ export default function PeachMarket() {
       premium: o.premium ?? 0,
       methods,
       currencies,
-      rep: o.user?.rating ?? 0,
+      rep: toPeaches(o.user?.rating ?? 0),
       trades: o.user?.trades ?? 0,
       badges: o.user?.medals ?? o.user?.badges ?? [],
       auto: false,
@@ -795,7 +871,7 @@ export default function PeachMarket() {
       premium: o.premium ?? 0,
       methods: [...new Set(methods)],
       currencies,
-      rep: auth?.profile?.rating ?? 0,
+      rep: toPeaches(auth?.profile?.rating ?? 0),
       trades: auth?.profile?.trades ?? 0,
       badges: auth?.profile?.medals ?? [],
       auto: false,
@@ -1048,6 +1124,7 @@ export default function PeachMarket() {
           <div className="popup-header">
             <span className="popup-title">
               {isOwn ? "Your offer" : isReq ? "Trade requested" : "Offer details"}
+              <span className="offer-id-label" style={{marginLeft:8}}>#{offer.id.slice(0,8)}</span>
             </span>
             <button className="popup-close" onClick={closePopup}>✕</button>
           </div>
@@ -1062,7 +1139,7 @@ export default function PeachMarket() {
               </div>
               <div style={{flex:1}}>
                 <div style={{display:"flex",alignItems:"center",gap:5}}>
-                  <span className="rep-stars"><span className="star">★</span>{offer.rep.toFixed(1)}</span>
+                  <PeachRating rep={offer.rep} size={16}/>
                   <span className="rep-trades">({offer.trades} trades)</span>
                 </div>
                 <div style={{display:"flex",gap:3,marginTop:3}}>
@@ -1237,16 +1314,67 @@ export default function PeachMarket() {
             )}
 
             {/* ── Own offer ── */}
-            {isOwn && (
-              <div style={{display:"flex",gap:8,width:"100%"}}>
-                <button className="popup-btn popup-btn-edit" style={{opacity:.45,cursor:"not-allowed"}}
-                  title="Coming soon" disabled>
-                  ✏ Edit offer
-                </button>
-                <button className="popup-btn popup-btn-withdraw" style={{opacity:.45,cursor:"not-allowed"}}
-                  title="Coming soon" disabled>
-                  Withdraw
-                </button>
+            {isOwn && !withdrawConfirm && (
+              <>
+                {/* Premium edit */}
+                {editingPremium ? (
+                  <div style={{display:"flex",gap:8,width:"100%",alignItems:"center"}}>
+                    <input type="number" step="0.1" value={editPremiumVal}
+                      onChange={e => setEditPremiumVal(e.target.value)}
+                      style={{flex:1,padding:"10px 14px",borderRadius:10,border:"1.5px solid var(--black-10)",
+                        fontFamily:"var(--font)",fontSize:".88rem",fontWeight:700,outline:"none"}}
+                      placeholder="e.g. 5.0" autoFocus/>
+                    <span style={{fontSize:".82rem",fontWeight:700,color:"var(--black-50)"}}>%</span>
+                    <button className="popup-btn popup-btn-edit" onClick={() => handleSavePremium(offer)}
+                      disabled={editSaving} style={{flex:"none",width:"auto",padding:"10px 20px"}}>
+                      {editSaving ? "Saving…" : "Save"}
+                    </button>
+                    <button className="popup-btn popup-btn-withdraw" onClick={() => { setEditingPremium(false); setEditError(null); }}
+                      style={{flex:"none",width:"auto",padding:"10px 16px"}}>
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{display:"flex",gap:8,width:"100%"}}>
+                    <button className="popup-btn popup-btn-edit"
+                      onClick={() => { setEditPremiumVal(String(offer.premium ?? 0)); setEditingPremium(true); setEditError(null); }}>
+                      Edit premium
+                    </button>
+                    <button className="popup-btn popup-btn-withdraw"
+                      onClick={() => { setWithdrawConfirm(true); setWithdrawError(null); }}>
+                      Withdraw
+                    </button>
+                  </div>
+                )}
+                {editError && (
+                  <div style={{color:"var(--error)",fontSize:".78rem",fontWeight:600,marginTop:6}}>{editError}</div>
+                )}
+              </>
+            )}
+            {/* ── Withdraw confirmation ── */}
+            {isOwn && withdrawConfirm && (
+              <div style={{width:"100%"}}>
+                <div style={{fontSize:".84rem",fontWeight:600,color:"var(--black)",marginBottom:10}}>
+                  Withdraw this offer?
+                </div>
+                <div style={{fontSize:".78rem",color:"var(--black-65)",lineHeight:1.5,marginBottom:12}}>
+                  {offer.type === "ask"
+                    ? "The escrow funds will be returned via your mobile app."
+                    : "This action cannot be undone."}
+                </div>
+                {withdrawError && (
+                  <div style={{color:"var(--error)",fontSize:".78rem",fontWeight:600,marginBottom:8}}>{withdrawError}</div>
+                )}
+                <div style={{display:"flex",gap:8}}>
+                  <button className="popup-btn popup-btn-edit"
+                    onClick={() => { setWithdrawConfirm(false); setWithdrawError(null); }}>
+                    Keep offer
+                  </button>
+                  <button className="popup-btn popup-btn-withdraw" style={{background:"var(--error)",color:"white",borderColor:"var(--error)"}}
+                    onClick={() => handleWithdraw(offer)} disabled={withdrawing}>
+                    {withdrawing ? "Withdrawing…" : "Yes, withdraw"}
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -1268,6 +1396,11 @@ export default function PeachMarket() {
           <div className="undo-toast">
             <span>↩ Trade request undone</span>
           </div>
+        )}
+
+        {/* ── TOAST ── */}
+        {toast && (
+          <div className="undo-toast">{toast}</div>
         )}
 
         {/* ── TOP BAR ── */}
@@ -1409,7 +1542,7 @@ export default function PeachMarket() {
               <table className="offer-table">
                 <thead>
                   <tr>
-                    <SortTh col="rep"     label="Reputation" />
+                    <SortTh col="rep"     label="User" />
                     <SortTh col="amount"  label="Amount" />
                     <th>Price (€ / BTC)</th>
                     <SortTh col="premium" label="Premium" />
@@ -1442,6 +1575,7 @@ export default function PeachMarket() {
                       </td>
                       <td>
                         <div className="action-cell">
+                          <span className="offer-id-label">#{offer.id.slice(0,8)}</span>
                           {offer.isOwn && <span className="own-label">Your offer</span>}
                           {offer.auto && <span className="auto-badge">⚡ Instant Match</span>}
                           {offer.isOwn
@@ -1486,13 +1620,14 @@ export default function PeachMarket() {
                     {offer.online && <span className="online-dot"/>}
                   </div>
                   <div style={{flex:1,display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
-                    <span className="rep-stars"><span className="star">★</span>{offer.rep.toFixed(1)}</span>
+                    <PeachRating rep={offer.rep} size={14}/>
                     <span className="rep-trades">({offer.trades})</span>
                     {offer.isOwn && <span className="own-label">Your offer</span>}
                     {offer.badges.includes("supertrader")&&<span className="badge badge-super">🏆</span>}
                     {offer.badges.includes("fast")&&<span className="badge badge-fast">⚡</span>}
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                    <span className="offer-id-label">#{offer.id.slice(0,8)}</span>
                     {offer.auto&&<span className="auto-badge">⚡ Instant Match</span>}
                     {offer.isOwn
                       ? <button className="action-btn edit-btn">✏ Edit</button>

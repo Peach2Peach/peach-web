@@ -2,7 +2,7 @@
 // Extracted from peach-trades-dashboard.jsx
 // Sub-components live in ./components.jsx, popup in ./MatchesPopup.jsx
 // ─────────────────────────────────────────────────────────────────────────────
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { SideNav, Topbar } from "../../components/Navbars.jsx";
 import { SatsAmount, IcoBtc } from "../../components/BitcoinAmount.jsx";
@@ -34,7 +34,7 @@ const CSS = `
   /* Page layout */
   .page-wrap{margin-top:var(--topbar);margin-left:68px;padding:32px 28px;min-height:calc(100vh - 56px)}
   @media(max-width:767px){
-    .page-wrap{margin-left:0;padding:20px 16px}
+    .page-wrap{margin-left:0;padding:20px 16px;overflow-x:hidden}
     .tabs-action-row{flex-wrap:wrap;gap:8px}
     .tabs-action-row .urgent-banner{flex:none;width:100%;order:3}
     .tabs-action-row .btn-cta{order:2}
@@ -378,6 +378,20 @@ const CSS = `
     padding:12px 20px;cursor:pointer;transition:border-color .15s,color .15s;
   }
   .match-btn-skip:hover{border-color:var(--primary);color:var(--primary-dark)}
+  .match-btn-reject{
+    flex:1;background:none;border:1.5px solid var(--error);border-radius:999px;
+    font-family:var(--font);font-size:.88rem;font-weight:700;color:var(--error);
+    padding:12px 20px;cursor:pointer;transition:background .15s,color .15s;
+  }
+  .match-btn-reject:hover{background:var(--error);color:white}
+  .toast-bar{
+    position:fixed;bottom:28px;left:50%;transform:translateX(-50%);
+    background:var(--black);color:white;padding:10px 28px;border-radius:999px;
+    font-family:var(--font);font-size:.84rem;font-weight:700;
+    box-shadow:0 4px 20px rgba(0,0,0,.25);z-index:9999;
+    animation:toastIn .3s ease both;pointer-events:none;
+  }
+  @keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(12px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
   @media(max-width:500px){
     .matches-popup{max-width:100%;border-radius:16px}
   }
@@ -455,6 +469,28 @@ export default function TradesDashboard() {
 
   const [userPMs, setUserPMs] = useState(null); // Decrypted user payment methods for match acceptance
 
+  // ── Tab scaling: shrink tabs proportionally to fit viewport ──
+  const tabsRef = useRef(null);
+  const tabsWrapRef = useRef(null);
+  const [tabScale, setTabScale] = useState(1);
+
+  useEffect(() => {
+    const tabsEl = tabsRef.current;
+    const wrapEl = tabsWrapRef.current;
+    if (!tabsEl || !wrapEl) return;
+    function measure() {
+      tabsEl.style.transform = "none";
+      const natural = tabsEl.scrollWidth;
+      const available = wrapEl.clientWidth;
+      const s = available < natural ? available / natural : 1;
+      setTabScale(s);
+      tabsEl.style.transform = s < 1 ? `scale(${s})` : "none";
+    }
+    const ro = new ResizeObserver(measure);
+    ro.observe(wrapEl);
+    return () => ro.disconnect();
+  }, []);
+
   const { byContract: liveUnread } = useUnread();
   const { isLoggedIn, handleLogin, handleLogout, showAvatarMenu, setShowAvatarMenu } = useAuth();
   useEffect(() => {
@@ -514,8 +550,8 @@ export default function TradesDashboard() {
       const offerMethods = [...new Set(Object.values(mop).flat())];
       // Amount: v069 uses amountSats, v1 uses amount (can be array)
       const amt = o.amountSats ?? (Array.isArray(o.amount) ? o.amount[0] : (o.amount ?? 0));
-      // Status: v069 buy offers use tradeStatusNew, sell offers use tradeStatus
-      const status = o.tradeStatus ?? o.tradeStatusNew ?? o.status ?? "unknown";
+      // Status: tradeStatusNew overrides tradeStatus when present (matches mobile app)
+      const status = o.tradeStatusNew ?? o.tradeStatus ?? o.status ?? "unknown";
       return {
         id: o.id,
         tradeId: formatTradeId(o.id, "offer"),
@@ -867,6 +903,7 @@ export default function TradesDashboard() {
   const [matchConfirm, setMatchConfirm]   = useState(null);   // match pending confirmation or null
   const [localMatches, setLocalMatches]   = useState({});      // tradeId → remaining matches
   const [matchError, setMatchError]       = useState(null);    // error message shown in popup
+  const [toast, setToast]                 = useState(null);    // bottom toast message
   const [matchesLoading, setMatchesLoading] = useState(false);  // loading matches on demand
   const [sentRequestPopup, setSentRequestPopup] = useState(null); // sent trade request detail/chat popup
 
@@ -990,6 +1027,40 @@ export default function TradesDashboard() {
         setLocalMatches(prev => ({ ...prev, [trade.id]: previousMatches }));
         setMatchesPopup(trade);
         setMatchError("Network error — could not decline this request.");
+      }
+    }
+  }
+
+  // ── REJECT trade request (v069 DELETE) ──
+  async function handleRejectRequest(trade, match) {
+    setMatchError(null);
+    const previousMatches = getMatchesForTrade(trade);
+    const remaining = previousMatches.filter(m => m.offerId !== match.offerId);
+    setLocalMatches(prev => ({ ...prev, [trade.id]: remaining }));
+    setMatchDetail(null);
+    if (remaining.length === 0) setMatchesPopup(null);
+
+    if (auth) {
+      try {
+        const userId = match._raw?.tradeRequestUserId;
+        const offerType = trade.direction === "buy" ? "buyOffer" : "sellOffer";
+        const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
+        const res = await fetch(`${v069Base}/${offerType}/${trade.id}/tradeRequestReceived/${userId}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${auth.token}` },
+        });
+        if (!res.ok) {
+          setLocalMatches(prev => ({ ...prev, [trade.id]: previousMatches }));
+          setMatchesPopup(trade);
+          setMatchError("Could not reject this request. Please try again.");
+        } else {
+          setToast("Trade request rejected");
+          setTimeout(() => setToast(null), 3000);
+        }
+      } catch {
+        setLocalMatches(prev => ({ ...prev, [trade.id]: previousMatches }));
+        setMatchesPopup(trade);
+        setMatchError("Network error — could not reject this request.");
       }
     }
   }
@@ -1245,29 +1316,21 @@ export default function TradesDashboard() {
         {/* Tabs + urgent banner + New Offer button — all one row */}
         {/* Badge is orange only if at least one item in that tab has action:true */}
         <div className="tabs-action-row">
-          <div className="main-tabs" style={{margin:0}}>
-            <button className={`main-tab${mainTab === "pending" ? " active" : ""}`} onClick={() => setMainTab("pending")}>
-              <span className="tab-label-full">Pending Offers</span><span className="tab-label-short">Pending</span>
-              {pendingItems.length > 0 && <span className="tab-badge" data-has-action={pendingItems.some(i => STATUS_CONFIG[i.tradeStatus]?.action)}>{pendingItems.length}</span>}
-            </button>
-            <button className={`main-tab${mainTab === "active" ? " active" : ""}`} onClick={() => setMainTab("active")}>
-              <span className="tab-label-full">Active Trades</span><span className="tab-label-short">Active</span>
-              {activeItems.length > 0 && <span className="tab-badge" data-has-action={activeItems.some(i => STATUS_CONFIG[i.tradeStatus]?.action)}>{activeItems.length}</span>}
-            </button>
-            <button className={`main-tab${mainTab === "history" ? " active" : ""}`} onClick={() => setMainTab("history")}>
-              <span className="tab-label-full">Trade History</span><span className="tab-label-short">History</span>
-              {historyItems.length > 0 && <span className="tab-badge" data-has-action={historyItems.some(i => i.unread > 0)}>{historyItems.length}</span>}
-            </button>
-            <button
-              onClick={handleRefreshTrades}
-              disabled={tradesLoading}
-              title="Refresh trades"
-              style={{border:"1.5px solid var(--black-10)",borderRadius:8,background:"var(--surface)",
-                padding:"6px 10px",cursor:"pointer",fontSize:"1rem",fontFamily:"var(--font)",
-                color:"var(--black-65)",opacity:tradesLoading?0.5:1,flexShrink:0}}
-            >
-              ↻
-            </button>
+          <div ref={tabsWrapRef} style={{flex:"1 1 auto",minWidth:0,height:tabScale < 1 && tabsRef.current ? tabsRef.current.offsetHeight * tabScale : "auto",overflow:"hidden"}}>
+            <div className="main-tabs" ref={tabsRef} style={{margin:0,transformOrigin:"left top",transform:tabScale < 1 ? `scale(${tabScale})` : "none"}}>
+              <button className={`main-tab${mainTab === "pending" ? " active" : ""}`} onClick={() => setMainTab("pending")}>
+                <span className="tab-label-full">Pending Offers</span><span className="tab-label-short">Pending</span>
+                {pendingItems.length > 0 && <span className="tab-badge" data-has-action={pendingItems.some(i => STATUS_CONFIG[i.tradeStatus]?.action)}>{pendingItems.length}</span>}
+              </button>
+              <button className={`main-tab${mainTab === "active" ? " active" : ""}`} onClick={() => setMainTab("active")}>
+                <span className="tab-label-full">Active Trades</span><span className="tab-label-short">Active</span>
+                {activeItems.length > 0 && <span className="tab-badge" data-has-action={activeItems.some(i => STATUS_CONFIG[i.tradeStatus]?.action)}>{activeItems.length}</span>}
+              </button>
+              <button className={`main-tab${mainTab === "history" ? " active" : ""}`} onClick={() => setMainTab("history")}>
+                <span className="tab-label-full">Trade History</span><span className="tab-label-short">History</span>
+                {historyItems.length > 0 && <span className="tab-badge" data-has-action={historyItems.some(i => i.unread > 0)}>{historyItems.length}</span>}
+              </button>
+            </div>
           </div>
           {urgentCount > 0 && (
             <div className="urgent-banner" style={{margin:0}}>
@@ -1292,7 +1355,7 @@ export default function TradesDashboard() {
               <p>No pending offers.</p>
             </div>
           ) : (
-            <HistoryTable rows={pendingItems} onTradeSelect={handleTradeSelect} selectedCurrency={selectedCurrency} tab="pending"/>
+            <HistoryTable rows={pendingItems} onTradeSelect={handleTradeSelect} selectedCurrency={selectedCurrency} tab="pending" onRefresh={handleRefreshTrades} isLoading={tradesLoading}/>
           )
         )}
 
@@ -1304,13 +1367,13 @@ export default function TradesDashboard() {
               <p>No active trades yet.</p>
             </div>
           ) : (
-            <HistoryTable rows={activeItems} onTradeSelect={handleTradeSelect} selectedCurrency={selectedCurrency} tab="active"/>
+            <HistoryTable rows={activeItems} onTradeSelect={handleTradeSelect} selectedCurrency={selectedCurrency} tab="active" onRefresh={handleRefreshTrades} isLoading={tradesLoading}/>
           )
         )}
 
         {/* ── TRADE HISTORY ── */}
         {mainTab === "history" && (
-          <HistoryTable rows={historyItems} selectedCurrency={selectedCurrency} tab="history"/>
+          <HistoryTable rows={historyItems} selectedCurrency={selectedCurrency} tab="history" onRefresh={handleRefreshTrades} isLoading={tradesLoading}/>
         )}
         </>)}
       </main>
@@ -1328,6 +1391,7 @@ export default function TradesDashboard() {
           setMatchConfirm={setMatchConfirm}
           onClose={closeMatchesPopup}
           onSkip={handleSkipMatch}
+          onReject={handleRejectRequest}
           onAccept={handleAcceptMatch}
           onConfirmAccept={handleConfirmAccept}
         />
@@ -1353,6 +1417,11 @@ export default function TradesDashboard() {
             <button className="auth-popup-btn" onClick={handleLogin}>Log in</button>
           </div>
         </div>
+      )}
+
+      {/* ── TOAST ── */}
+      {toast && (
+        <div className="toast-bar">{toast}</div>
       )}
     </>
   );

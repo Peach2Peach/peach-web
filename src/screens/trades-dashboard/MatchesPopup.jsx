@@ -142,13 +142,14 @@ export function transformTradeRequest(tr, offer, userProfile) {
 //   setMatchDetail  — setter
 //   setMatchConfirm — setter
 //   onClose         — close popup handler
-//   onSkip          — (trade, match) handler
+//   onSkip          — (trade, match) handler (system matches)
+//   onReject        — (trade, match) handler (v069 trade requests)
 //   onAccept        — (trade, match) handler
 //   onConfirmAccept — (trade, match) handler
 // ─────────────────────────────────────────────────────────────────────────────
 export default function MatchesPopup({
   trade, matches, matchDetail, matchConfirm, matchError, matchesLoading,
-  setMatchDetail, setMatchConfirm, onClose, onSkip, onAccept, onConfirmAccept,
+  setMatchDetail, setMatchConfirm, onClose, onSkip, onReject, onAccept, onConfirmAccept,
 }) {
   const auth = window.__PEACH_AUTH__ ?? null;
   const isBuy = trade.direction === "buy";
@@ -510,7 +511,11 @@ export default function MatchesPopup({
             )}
             {/* Actions */}
             <div style={{display:"flex",gap:10,marginTop:12}}>
-              <button className="match-btn-skip" onClick={() => onSkip(trade, m)}>Skip</button>
+              {m._raw?.isTradeRequest ? (
+                <button className="match-btn-reject" onClick={() => onReject(trade, m)}>Reject</button>
+              ) : (
+                <button className="match-btn-skip" onClick={() => onSkip(trade, m)}>Skip</button>
+              )}
               <button className="match-btn-accept" onClick={() => onAccept(trade, m)}>Accept trade</button>
             </div>
           </div>

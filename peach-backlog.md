@@ -258,11 +258,13 @@ Items that don't add new API wiring but improve existing screens.
 ### Home (`peach-home.jsx`)
 - **My Profile card improvements** — distinguish public info (trade count, rating, badges) from private info (referral, daily limits). Use Peach standard Bitcoin format for all amounts. Details TBD.
 - **Peach Bitcoin price card** — average and highest Bitcoin price on Peach over 24h, 7d, 30d, and all time.
+- **Wire Top Payment Methods & Top Currencies cards** — these cards currently show mock/static data. Wire them to live API data so they reflect real platform activity when logged in.
 
 ### Trades Dashboard (`trades-dashboard/MatchesPopup.jsx`)
 - **MatchesPopup — avatars, reputation & trades not wired** — match cards currently show placeholder/missing data for counterparty avatars, reputation scores, and trade counts. Wire these from the match/user data returned by the API.
 
 ### Market View (`peach-market-view.jsx`)
+- **Own offers not visible** — own offers don't appear in the market view when logged in. v069 own-offers fetch may be returning unexpected data, or the `isOwn` / `type` mapping may be off. Debug with browser console (check `[MarketView]` logs and v069 response shape).
 - **Filter parity with mobile app** — implement same filter set as mobile. Exact filter list TBD.
 
 ### Offer Creation (`offer-creation/index.jsx`)
