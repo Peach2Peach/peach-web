@@ -31,7 +31,10 @@ These are completed and kept for reference.
 - ✅ **3.5 Pre-Contract Chat (v069)** — full chat UI in MatchesPopup and SentRequestPopup. Send/receive encrypted messages via `POST/GET /v069/{buyOffer|sellOffer}/:id/tradeRequestPerformed/chat`. Chat bubbles, input field, unread message counts on sent trade requests. (`trades-dashboard/MatchesPopup.jsx`, `trades-dashboard/index.jsx`)
 - ✅ **5.1 Mobile Signing Modal + createTask helper** — `MobileSigningModal` component (phone icon, spinner, "Confirm later in mobile" button). Mock `createTask()` in `useApi.js`. localStorage persistence for pending tasks across navigation. (`MobileSigningModal.jsx`, `useApi.js`)
 - ✅ **5.2 Wire signing into trade execution** — 3 action handlers (release, refund, rating) create pending tasks + show signing modal. Pending state buttons (dashed orange, tappable to re-open modal). Contract polling detects status change and clears pending state. Cancel Trade button hidden for seller. (`trade-execution/index.jsx`, `components.jsx`)
-- ✅ **3.6 Sell Offer Submission** — `POST /v1/offer` + `POST /v1/offer/:id/escrow` with version 2 non-hardened key derivation from xpub. Escrow key at `m/84'/{coin}'/3/{offerId}`, return address at `m/84'/{coin}'/1/{index}` (P2WPKH). Uses `@scure/bip32` + `@scure/btc-signer`. Blocked on `GET /v1/user/returnAddressIndex` endpoint. (`offer-creation/index.jsx`, `utils/escrow.js`)
+- ✅ **3.1 Trade Request Rejection** — reject button wired on match cards. (`trades-dashboard/index.jsx`)
+- ✅ **3.2 Offer Edit / Withdraw** — edit/withdraw buttons on own offers. (`peach-market-view.jsx`)
+- ✅ **3.6 Sell Offer Submission** — `POST /v1/offer` + `POST /v1/offer/:id/escrow` with version 2 non-hardened key derivation from xpub. Escrow key at `m/84'/{coin}'/3/{offerId}`, return address at `m/84'/{coin}'/1/{index}` (P2WPKH). Uses `@scure/bip32` + `@scure/btc-signer`. `derivationPathVersion: 2` sent in escrow creation call. Blocked on `GET /v1/user/returnAddressIndex` endpoint. (`offer-creation/index.jsx`, `utils/escrow.js`)
+- ✅ **3.7 Escrow Funding Status Polling** — polls `GET /v1/offer/:id/escrow` every 10s. Detects `MEMPOOL` (tx detected) → `FUNDED` (confirmed, transitions to "Offer is live!") → `WRONG_FUNDING_AMOUNT` (shows mismatch + "Accept anyway" button via `POST /offer/:id/escrow/confirm`). (`offer-creation/index.jsx`)
 - ✅ **6.2 QR Auth Handshake** — real QR-based web-to-mobile authentication. Ephemeral PGP keypair → POST to `/v069/desktop/desktopConnection` → display QR → poll for mobile response → decrypt credentials → validate → PGP key verification → set `window.__PEACH_AUTH__`. Auto-refresh on expiry. Mobile view shows app instructions. "Can't scan?" shows connection ID. Dev auth kept as fallback. (`peach-auth.jsx`, `useQRAuth.js`, `pgp.js`)
 
 ---
@@ -68,21 +71,9 @@ These are completed and kept for reference.
 
 ## Phase 3: Offer Management Completion
 
-### 3.1 Trade Request Rejection
-- **File**: `src/screens/peach-trades-dashboard.jsx`
-- **Endpoints**:
-  - `POST /v069/buyOffer/:id/rejectTradeRequest`
-  - `POST /v069/sellOffer/:id/rejectTradeRequest`
-- **UI**: Add "Reject" button next to "Accept" on match cards
+### ~~3.1 Trade Request Rejection~~ ✅
 
-### 3.2 Offer Edit / Withdraw
-- **File**: `src/screens/peach-market-view.jsx` (offer detail popup for own offers)
-- **Endpoints**:
-  - `PATCH /v1/offer/:id` (edit premium, PMs, online status)
-  - `DELETE /v1/offer/:id` (cancel/withdraw offer)
-  - `DELETE /v069/buyOffer/:id` (cancel v069 buy offer)
-- **UI**: Add edit/withdraw buttons to offer detail popup when `offer.user === self`
-- **Backlog note**: Offer detail view (unmatched) is 🟡 mostly done. Remaining: full offer card (amount · premium · methods · currencies · rep), offer status/expiry, counterparty profile link.
+### ~~3.2 Offer Edit / Withdraw~~ ✅
 
 ### 3.3 Offer Republish
 - **File**: `src/screens/peach-trades-dashboard.jsx`
@@ -102,16 +93,12 @@ These are completed and kept for reference.
 - **File**: `src/screens/offer-creation/index.jsx`, `src/utils/escrow.js`
 - **Endpoint**: `POST /v1/offer` (type: "ask") → `POST /v1/offer/:id/escrow` (two-step)
 - **Library**: `@scure/bip32` (key derivation), `@scure/btc-signer` (P2WPKH address encoding)
-- **Escrow key**: derived from xpub at `m/84'/{coin}'/3/{offerId}` (non-hardened, version 2 path). `version: 2` sent in escrow creation call so backend knows the derivation path.
+- **Escrow key**: derived from xpub at `m/84'/{coin}'/3/{offerId}` (non-hardened, version 2 path). `derivationPathVersion: 2` sent in escrow creation call so backend knows the derivation path.
 - **Return address**: derived from xpub at `m/84'/{coin}'/1/{index}` (non-hardened, P2WPKH). Index must increment per offer to avoid address reuse.
 - **Return address index**: currently derived by counting total sell offers (active from `GET /v069/sellOffer?ownOffers=true` + historical from `GET /v1/offers/summary` filtered to `type:"ask"`). Monotonically increasing, server-derived, no localStorage. ⚠️ Should eventually be replaced with `GET /v1/user/returnAddressIndex` (dedicated backend endpoint) for robustness — the count approach assumes the server never purges offer history.
 - **Network handling**: xpub prefix auto-detected (`xpub` → mainnet `bc1q`, `tpub` → regtest `bcrt1q`)
 
-### 3.7 Escrow Funding (sell offers) ✅ (partially)
-- **File**: `src/screens/offer-creation/index.jsx`
-- Real escrow address + real QR code (bitcoin: URI with amount) now shown after offer + escrow creation.
-- Clipboard copy wired. "Simulate funding" button only shows when logged out.
-- **TODO**: Escrow funding status polling (`GET /v1/offer/:id/escrow`) — not yet wired. Currently the "Waiting for confirmation" spinner is static.
+### ~~3.7 Escrow Funding (sell offers)~~ ✅
 
 ### 3.8 Create Multiple Offers
 - **File**: `src/screens/offer-creation/index.jsx`
@@ -268,7 +255,8 @@ Items that don't add new API wiring but improve existing screens.
 - **Filter parity with mobile app** — implement same filter set as mobile. Exact filter list TBD.
 
 ### Offer Creation (`offer-creation/index.jsx`)
-- **"No new users" filter** — wire the checkbox end-to-end: include flag in offer payload, reflect that traders with <3 completed trades are excluded.
+- ~~**"No new users" filter**~~ ✅ — `noNewUsers` checkbox sends `minReputation: 0.5` on buy offers + inside `instantTradeCriteria` on sell offers.
+- ~~**"Instant Match" checkbox**~~ ✅ — `instantMatch` checkbox sends `instantTradeCriteria: { minReputation, minTrades, badges }` on both buy and sell offers.
 - **Wire validators into PM add flow** — mini PM-add modal accepts IBAN/phone/holder with zero validation. Inline validators from `peach-validators.js` + add `onBlur` validation.
 
 ### Trade Execution (`trade-execution/index.jsx`)
@@ -298,7 +286,7 @@ Items that don't add new API wiring but improve existing screens.
 | ~~10~~ | ~~3.5 Pre-contract chat~~ | ✅ Done | |
 | ~~11~~ | ~~5.1–5.2 Mobile signing (browser side)~~ | ✅ Done | |
 | ~~12~~ | ~~6.2 QR Auth handshake~~ | ✅ Done | |
-| 13 | 3.1–3.2 Reject + edit/withdraw | ~1 session | Offer management |
+| ~~13~~ | ~~3.1–3.2 Reject + edit/withdraw~~ | ✅ Done | |
 | 14 | 4.1–4.2 Contact + About | ~1 session | Easy settings wins |
 | 15 | 4.3–4.4 Block users + fee save | ~1 session | Settings completion |
 | 16 | 4.10 Dark mode | ~1-2 sessions | User experience |

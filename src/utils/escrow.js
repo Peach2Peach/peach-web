@@ -4,6 +4,14 @@ import { NETWORK, TEST_NETWORK } from "@scure/btc-signer/utils.js";
 
 const REGTEST_NETWORK = { ...TEST_NETWORK, bech32: "bcrt" };
 
+// BIP32 version bytes — needed so HDKey accepts both xpub (mainnet) and tpub (testnet/regtest)
+const MAINNET_VERSIONS = { private: 0x0488ADE4, public: 0x0488B21E };
+const TESTNET_VERSIONS = { private: 0x04358394, public: 0x043587CF };
+
+function getVersions(xpub) {
+  return xpub.startsWith("tpub") ? TESTNET_VERSIONS : MAINNET_VERSIONS;
+}
+
 function toHex(bytes) {
   return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
 }
@@ -27,7 +35,7 @@ function getNetwork(xpub) {
  * @returns {string} Compressed public key as hex (33 bytes)
  */
 export function deriveEscrowPubKey(xpub, offerId) {
-  const node = HDKey.fromExtendedKey(xpub);
+  const node = HDKey.fromExtendedKey(xpub, getVersions(xpub));
   const child = node.deriveChild(3).deriveChild(offerId);
   return toHex(child.publicKey);
 }
@@ -44,7 +52,7 @@ export function deriveEscrowPubKey(xpub, offerId) {
  */
 export function deriveReturnAddress(xpub, index) {
   const network = getNetwork(xpub);
-  const node = HDKey.fromExtendedKey(xpub);
+  const node = HDKey.fromExtendedKey(xpub, getVersions(xpub));
   const child = node.deriveChild(1).deriveChild(index);
   return p2wpkh(child.publicKey, network).address;
 }

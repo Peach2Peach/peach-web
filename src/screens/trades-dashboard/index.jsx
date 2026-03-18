@@ -15,7 +15,7 @@ import {
   encryptSymmetric, signPGPMessage, hashPaymentFields,
 } from "../../utils/pgp.js";
 import { MOCK_PENDING, MOCK_TRADES, AVATAR_COLORS } from "../../data/mockData.js";
-import { SAT, BTC_PRICE_FALLBACK as BTC_PRICE } from "../../utils/format.js";
+import { SAT, BTC_PRICE_FALLBACK as BTC_PRICE, satsToFiatRaw, fmtFiat } from "../../utils/format.js";
 import { STATUS_CONFIG, FINISHED_STATUSES, PENDING_STATUSES } from "../../data/statusConfig.js";
 
 // Local sub-components
@@ -396,6 +396,75 @@ const CSS = `
     .matches-popup{max-width:100%;border-radius:16px}
   }
 
+  /* ── Offer detail popup ── */
+  .offer-detail-body{padding:16px 24px 8px}
+  .offer-detail-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--black-5)}
+  .offer-detail-row:last-child{border-bottom:none}
+  .offer-detail-label{font-size:.8rem;color:var(--black-50);font-weight:600}
+  .offer-detail-value{font-size:.84rem;font-weight:700;color:var(--black);text-align:right}
+  .offer-detail-chips{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end}
+  .method-chip{padding:2px 7px;border-radius:999px;font-size:.69rem;font-weight:600;background:var(--black-5);color:var(--black-65);border:1px solid var(--black-10)}
+  .currency-chip{padding:2px 7px;border-radius:4px;font-size:.69rem;font-weight:700;background:var(--primary-mild);color:var(--primary-dark);letter-spacing:.04em}
+  .offer-detail-footer{padding:12px 24px 20px;display:flex;flex-direction:column;gap:8px}
+  .offer-detail-btn{flex:1;padding:12px;border-radius:999px;border:none;font-family:var(--font);font-size:.88rem;font-weight:800;cursor:pointer;letter-spacing:.02em;transition:all .14s}
+  .offer-detail-btn:disabled{opacity:.4;cursor:not-allowed}
+  .offer-detail-btn-edit{background:var(--primary-mild);color:var(--primary-dark)}
+  .offer-detail-btn-edit:hover:not(:disabled){background:var(--primary);color:white}
+  .offer-detail-btn-withdraw{background:var(--error-bg, #FFF0EE);color:var(--error)}
+  .offer-detail-btn-withdraw:hover:not(:disabled){background:var(--error);color:white}
+
+  /* ── Premium editor (mobile-inspired) ── */
+  .premium-editor{display:flex;flex-direction:column;align-items:center;gap:14px;padding:16px 24px 0}
+  .premium-editor-title{font-size:.95rem;font-weight:800;color:var(--black);text-align:center}
+  .premium-editor-subtitle{font-size:.8rem;font-weight:600;color:var(--black-50);text-align:center}
+  .premium-editor-controls{display:flex;align-items:center;gap:12px;width:100%;justify-content:center}
+  .premium-circle-btn{
+    width:36px;height:36px;border-radius:50%;border:2px solid var(--black-10);
+    background:var(--surface);display:flex;align-items:center;justify-content:center;
+    cursor:pointer;font-size:1.1rem;font-weight:700;color:var(--black-65);
+    transition:border-color .15s,color .15s,background .15s;flex-shrink:0;
+  }
+  .premium-circle-btn:hover{border-color:var(--success, #1B8A2A);color:var(--success, #1B8A2A)}
+  .premium-circle-btn:disabled{opacity:.3;cursor:not-allowed}
+  .premium-input-group{display:flex;align-items:center;gap:6px}
+  .premium-input-label{font-size:.82rem;font-weight:700;color:var(--primary-dark)}
+  .premium-input-field{
+    width:72px;padding:8px 10px;border-radius:10px;border:1.5px solid var(--black-10);
+    font-family:var(--font);font-size:.92rem;font-weight:700;text-align:center;outline:none;
+    transition:border-color .15s;
+  }
+  .premium-input-field:focus{border-color:var(--primary)}
+  .premium-pct{font-size:.82rem;font-weight:700;color:var(--black-50)}
+  .premium-slider-wrap{width:100%;padding:0 4px}
+  .premium-slider{
+    -webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:3px;
+    background:linear-gradient(90deg, var(--error) 0%, var(--black-10) 50%, var(--success, #1B8A2A) 100%);
+    outline:none;cursor:pointer;
+  }
+  .premium-slider::-webkit-slider-thumb{
+    -webkit-appearance:none;appearance:none;width:20px;height:20px;border-radius:50%;
+    background:var(--primary);border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.2);cursor:pointer;
+  }
+  .premium-slider::-moz-range-thumb{
+    width:20px;height:20px;border-radius:50%;
+    background:var(--primary);border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.2);cursor:pointer;
+  }
+  .premium-fiat-line{font-size:.78rem;font-weight:600;color:var(--black-50);text-align:center}
+  .premium-actions{display:flex;gap:8px;width:100%}
+  .premium-btn-save{
+    flex:1;padding:12px;border-radius:999px;border:none;font-family:var(--font);
+    font-size:.88rem;font-weight:800;cursor:pointer;
+    background:var(--success, #1B8A2A);color:white;transition:opacity .15s;
+  }
+  .premium-btn-save:hover{opacity:.85}
+  .premium-btn-save:disabled{opacity:.4;cursor:not-allowed}
+  .premium-btn-cancel{
+    flex:1;padding:12px;border-radius:999px;border:1.5px solid var(--black-10);
+    font-family:var(--font);font-size:.88rem;font-weight:700;cursor:pointer;
+    background:var(--surface);color:var(--black-65);transition:border-color .15s,color .15s;
+  }
+  .premium-btn-cancel:hover{border-color:var(--primary);color:var(--primary-dark)}
+
   /* ── Pre-contract chat (inside matches popup) ── */
   .matches-popup-chat{display:flex;flex-direction:column;max-height:85vh;overflow:hidden}
   .precontract-chat-messages{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:10px}
@@ -460,7 +529,7 @@ export default function TradesDashboard() {
   const [mobileOpen, setMobileOpen]     = useState(false);
 
   // ── AUTH + API ──
-  const { get, post, del, auth } = useApi();
+  const { get, post, patch, del, auth } = useApi();
   const [liveItems, setLiveItems] = useState(() => getCached("trades-items")?.data ?? null);
   const [livePending, setLivePending] = useState(() => getCached("trades-pending")?.data ?? null);
   const [liveLimit, setLiveLimit] = useState(null);    // null = use mock
@@ -907,6 +976,90 @@ export default function TradesDashboard() {
   const [matchesLoading, setMatchesLoading] = useState(false);  // loading matches on demand
   const [sentRequestPopup, setSentRequestPopup] = useState(null); // sent trade request detail/chat popup
 
+  // ── Offer detail popup state ──
+  const [offerDetailPopup, setOfferDetailPopup] = useState(null);   // pending offer object or null
+  const [odEditingPremium, setOdEditingPremium] = useState(false);
+  const [odEditPremiumVal, setOdEditPremiumVal] = useState("");
+  const [odEditSaving, setOdEditSaving]         = useState(false);
+  const [odEditError, setOdEditError]           = useState(null);
+  const [odWithdrawConfirm, setOdWithdrawConfirm] = useState(false);
+  const [odWithdrawing, setOdWithdrawing]       = useState(false);
+  const [odWithdrawError, setOdWithdrawError]   = useState(null);
+
+  function openOfferDetail(offer) {
+    setOdEditingPremium(false); setOdEditError(null);
+    setOdWithdrawConfirm(false); setOdWithdrawError(null);
+    setOfferDetailPopup(offer);
+  }
+  function closeOfferDetail() {
+    setOfferDetailPopup(null);
+    setOdEditingPremium(false); setOdEditError(null);
+    setOdWithdrawConfirm(false); setOdWithdrawError(null);
+  }
+
+  async function handleSaveOfferPremium(offer) {
+    const val = parseFloat(odEditPremiumVal);
+    if (isNaN(val)) { setOdEditError("Enter a valid number"); return; }
+    setOdEditSaving(true); setOdEditError(null);
+    try {
+      // v069 offers use PATCH /v069/{buyOffer|sellOffer}/:id (v1 returns 401 for numeric IDs)
+      const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
+      const offerType = offer.direction === "buy" ? "buyOffer" : "sellOffer";
+      const res = await fetch(`${v069Base}/${offerType}/${offer.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.token}` },
+        body: JSON.stringify({ premium: val }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => null);
+        throw new Error(d?.error || d?.message || `Server error ${res.status}`);
+      }
+      setOfferDetailPopup(prev => ({ ...prev, premium: val }));
+      setLivePending(prev => prev?.map(o => String(o.id) === String(offer.id) ? { ...o, premium: val } : o));
+      setOdEditingPremium(false);
+      setToast("Premium updated"); setTimeout(() => setToast(null), 3000);
+    } catch (err) {
+      setOdEditError(err.message || "Failed to save");
+    } finally {
+      setOdEditSaving(false);
+    }
+  }
+
+  async function handleWithdrawOffer(offer) {
+    setOdWithdrawing(true); setOdWithdrawError(null);
+    try {
+      let res;
+      if (offer.direction === "buy") {
+        // Buy offers use v069 DELETE (v1 cancel returns 401 for numeric v069 IDs)
+        const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
+        res = await fetch(`${v069Base}/buyOffer/${offer.id}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${auth.token}` },
+        });
+      } else {
+        // Sell offers use v1 cancel (may return PSBT for escrow refund)
+        res = await post(`/offer/${offer.id}/cancel`, {});
+      }
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.error || data?.message || `Server error ${res.status}`);
+      }
+      if (data?.psbt) {
+        closeOfferDetail();
+        setLivePending(prev => prev?.filter(o => String(o.id) !== String(offer.id)));
+        setToast("Refund sent to mobile for signing"); setTimeout(() => setToast(null), 4000);
+        return;
+      }
+      closeOfferDetail();
+      setLivePending(prev => prev?.filter(o => String(o.id) !== String(offer.id)));
+      setToast("Offer withdrawn"); setTimeout(() => setToast(null), 3000);
+    } catch (err) {
+      setOdWithdrawError(err.message || "Failed to withdraw");
+    } finally {
+      setOdWithdrawing(false);
+    }
+  }
+
   async function handleTradeSelect(trade) {
     // Sent trade requests → show detail/chat popup
     if (trade.kind === "sentRequest") {
@@ -964,7 +1117,10 @@ export default function TradesDashboard() {
     if (trade.kind === "contract") {
       navigate(`/trade/${trade.id}`);
     }
-    // Pending offers (searching, published, fund escrow) → no-op for now
+    // Pending offers → open detail popup with edit/withdraw options
+    if (trade.kind === "offer") {
+      openOfferDetail(trade);
+    }
   }
 
   // ── Auto-open matches popup when navigated with openOfferId state ──
@@ -1404,6 +1560,188 @@ export default function TradesDashboard() {
           onClose={() => setSentRequestPopup(null)}
         />
       )}
+
+      {/* ── OFFER DETAIL POPUP (pending offer edit / withdraw) ── */}
+      {offerDetailPopup && (() => {
+        const o = offerDetailPopup;
+        const statusCfg = STATUS_CONFIG[o.tradeStatus] || {};
+        const isBuy = o.direction === "buy";
+        return (
+          <div className="matches-overlay" onClick={e => { if (e.target === e.currentTarget) closeOfferDetail(); }}>
+            <div className="matches-popup">
+              {/* Header */}
+              <div className="matches-header">
+                <span style={{fontWeight:800,fontSize:".95rem"}}>
+                  {isBuy ? "Buy" : "Sell"} offer
+                </span>
+                <span style={{fontSize:".78rem",color:"var(--black-50)",fontWeight:600}}>{o.tradeId}</span>
+                <button className="matches-close" onClick={closeOfferDetail}>✕</button>
+              </div>
+
+              {/* Body — offer summary */}
+              <div className="offer-detail-body">
+                <div className="offer-detail-row">
+                  <span className="offer-detail-label">Direction</span>
+                  <span className="offer-detail-value" style={{color: isBuy ? "var(--success, #1B8A2A)" : "var(--error)"}}>
+                    {isBuy ? "Buy" : "Sell"}
+                  </span>
+                </div>
+                <div className="offer-detail-row">
+                  <span className="offer-detail-label">Amount</span>
+                  <span className="offer-detail-value"><SatsAmount sats={o.amount}/></span>
+                </div>
+                <div className="offer-detail-row">
+                  <span className="offer-detail-label">Premium</span>
+                  <span className="offer-detail-value" style={{color: (o.premium ?? 0) > 0 ? "var(--success, #1B8A2A)" : (o.premium ?? 0) < 0 ? "var(--error)" : "var(--black)"}}>
+                    {(o.premium ?? 0) > 0 ? "+" : ""}{(o.premium ?? 0).toFixed(1)}%
+                  </span>
+                </div>
+                {o.methods?.length > 0 && (
+                  <div className="offer-detail-row">
+                    <span className="offer-detail-label">Payment methods</span>
+                    <div className="offer-detail-chips">
+                      {o.methods.map(m => <span key={m} className="method-chip">{m}</span>)}
+                    </div>
+                  </div>
+                )}
+                {o.currencies?.length > 0 && (
+                  <div className="offer-detail-row">
+                    <span className="offer-detail-label">Currencies</span>
+                    <div className="offer-detail-chips">
+                      {o.currencies.map(c => <span key={c} className="currency-chip">{c}</span>)}
+                    </div>
+                  </div>
+                )}
+                <div className="offer-detail-row">
+                  <span className="offer-detail-label">Status</span>
+                  <span className="offer-detail-value">{statusCfg.label ?? o.tradeStatus}</span>
+                </div>
+                <div className="offer-detail-row">
+                  <span className="offer-detail-label">Created</span>
+                  <span className="offer-detail-value">{o.createdAt ? new Date(o.createdAt).toLocaleDateString() : "—"}</span>
+                </div>
+              </div>
+
+              {/* Footer — actions */}
+              <div className="offer-detail-footer">
+                {/* Default: Edit + Withdraw buttons */}
+                {!odEditingPremium && !odWithdrawConfirm && (
+                  <div style={{display:"flex",gap:8}}>
+                    <button className="offer-detail-btn offer-detail-btn-edit"
+                      onClick={() => { setOdEditPremiumVal(String(o.premium ?? 0)); setOdEditingPremium(true); setOdEditError(null); }}>
+                      Edit premium
+                    </button>
+                    <button className="offer-detail-btn offer-detail-btn-withdraw"
+                      onClick={() => { setOdWithdrawConfirm(true); setOdWithdrawError(null); }}>
+                      Withdraw
+                    </button>
+                  </div>
+                )}
+
+                {/* Edit premium mode — mobile-inspired layout */}
+                {odEditingPremium && (() => {
+                  const pVal = parseFloat(odEditPremiumVal) || 0;
+                  const dispCur = o.currency || selectedCurrency;
+                  const curPrice = allPrices[dispCur] ?? btcPrice;
+                  const fiatWithPremium = satsToFiatRaw(o.amount, curPrice) * (1 + pVal / 100);
+                  const step = 0.2;
+                  const clamp = (v) => String(Math.round(Math.max(-50, Math.min(50, v)) * 10) / 10);
+                  return (
+                    <div className="premium-editor">
+                      <div className="premium-editor-title">
+                        {pVal >= 0 ? "set your premium" : "set your discount"}
+                      </div>
+                      <div className="premium-editor-subtitle">
+                        for {o.direction === "buy" ? "buying" : "selling"} <SatsAmount sats={o.amount}/>
+                      </div>
+
+                      {/* +/- buttons + input */}
+                      <div className="premium-editor-controls">
+                        <button className="premium-circle-btn"
+                          disabled={pVal <= -50}
+                          onClick={() => setOdEditPremiumVal(clamp(pVal - step))}>
+                          −
+                        </button>
+                        <div className="premium-input-group">
+                          <span className="premium-input-label">premium:</span>
+                          <input type="number" step="0.2" className="premium-input-field"
+                            value={odEditPremiumVal}
+                            onChange={e => setOdEditPremiumVal(e.target.value)}
+                            autoFocus/>
+                          <span className="premium-pct">%</span>
+                        </div>
+                        <button className="premium-circle-btn"
+                          disabled={pVal >= 50}
+                          onClick={() => setOdEditPremiumVal(clamp(pVal + step))}>
+                          +
+                        </button>
+                      </div>
+
+                      {/* Slider */}
+                      <div className="premium-slider-wrap">
+                        <input type="range" className="premium-slider"
+                          min="-50" max="50" step="0.2"
+                          value={pVal}
+                          onChange={e => setOdEditPremiumVal(e.target.value)}/>
+                      </div>
+
+                      {/* Fiat equivalent */}
+                      <div className="premium-fiat-line">
+                        (currently {fmtFiat(fiatWithPremium)} {dispCur})
+                      </div>
+
+                      {/* Error */}
+                      {odEditError && (
+                        <div style={{color:"var(--error)",fontSize:".78rem",fontWeight:600,width:"100%"}}>{odEditError}</div>
+                      )}
+
+                      {/* Cancel + Save buttons */}
+                      <div className="premium-actions">
+                        <button className="premium-btn-cancel"
+                          onClick={() => { setOdEditingPremium(false); setOdEditError(null); }}>
+                          Cancel
+                        </button>
+                        <button className="premium-btn-save"
+                          onClick={() => handleSaveOfferPremium(o)} disabled={odEditSaving}>
+                          {odEditSaving ? "Saving…" : "Save"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Withdraw confirmation */}
+                {odWithdrawConfirm && (
+                  <div>
+                    <div style={{fontSize:".84rem",fontWeight:600,color:"var(--black)",marginBottom:10}}>
+                      Withdraw this offer?
+                    </div>
+                    <div style={{fontSize:".78rem",color:"var(--black-65)",lineHeight:1.5,marginBottom:12}}>
+                      {o.direction === "sell"
+                        ? "The escrow funds will be returned via your mobile app."
+                        : "This action cannot be undone."}
+                    </div>
+                    {odWithdrawError && (
+                      <div style={{color:"var(--error)",fontSize:".78rem",fontWeight:600,marginBottom:8}}>{odWithdrawError}</div>
+                    )}
+                    <div style={{display:"flex",gap:8}}>
+                      <button className="offer-detail-btn offer-detail-btn-edit"
+                        onClick={() => { setOdWithdrawConfirm(false); setOdWithdrawError(null); }}>
+                        Keep offer
+                      </button>
+                      <button className="offer-detail-btn offer-detail-btn-withdraw"
+                        style={{background:"var(--error)",color:"white"}}
+                        onClick={() => handleWithdrawOffer(o)} disabled={odWithdrawing}>
+                        {odWithdrawing ? "Withdrawing…" : "Yes, withdraw"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── AUTH POPUP (when logged out) ── */}
       {!isLoggedIn && (

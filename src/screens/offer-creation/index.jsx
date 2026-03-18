@@ -32,7 +32,9 @@ export default function OfferCreation({ initialType="buy" }) {
   const btcPrice = Math.round(allPrices[selectedCurrency] ?? BTC_PRICE_INIT);
   const [done,         setDone]         = useState(false);
   const [copiedAddr,   setCopiedAddr]   = useState(false);
-  const [escrowFunded, setEscrowFunded] = useState(false);
+  const [escrowFunded,  setEscrowFunded]  = useState(false);
+  const [fundingStatus, setFundingStatus] = useState(null); // null → "MEMPOOL" → "FUNDED" | "WRONG_FUNDING_AMOUNT"
+  const [fundingAmounts, setFundingAmounts] = useState(null); // amounts array from API (for wrong-amount case)
   const [savedMethods, setSavedMethods] = useState(MOCK_SAVED);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPM,    setEditingPM]    = useState(null); // PM object being edited
@@ -146,9 +148,38 @@ export default function OfferCreation({ initialType="buy" }) {
     return () => clearInterval(iv);
   }, []);
 
+  // ── POLL ESCROW FUNDING STATUS ──
+  useEffect(() => {
+    if (step !== 2 || !sellOfferId || !auth || escrowFunded) return;
+    let cancelled = false;
+    async function check() {
+      try {
+        const res = await get('/offer/' + sellOfferId + '/escrow');
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        console.log("[OfferCreation] Escrow status:", data);
+        const s = data?.funding?.status;
+        if (s === "MEMPOOL") {
+          setFundingStatus("MEMPOOL");
+        } else if (s === "FUNDED") {
+          setFundingStatus("FUNDED");
+          setTimeout(() => { if (!cancelled) setEscrowFunded(true); }, 1500);
+        } else if (s === "WRONG_FUNDING_AMOUNT") {
+          setFundingStatus("WRONG_FUNDING_AMOUNT");
+          setFundingAmounts(data.funding.amounts ?? []);
+        }
+      } catch (err) {
+        console.warn("[OfferCreation] Escrow poll error:", err.message);
+      }
+    }
+    check(); // immediate first check
+    const iv = setInterval(check, 10000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [step, sellOfferId, auth, escrowFunded]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function setF(k,v){ setForm(f=>({...f,[k]:v})); }
   function reset(){
-    setStep(0);setDone(false);setEscrowFunded(false);setPublishError(null);setEscrowAddress(null);setSellOfferId(null);setForm(initForm());
+    setStep(0);setDone(false);setEscrowFunded(false);setFundingStatus(null);setFundingAmounts(null);setPublishError(null);setEscrowAddress(null);setSellOfferId(null);setForm(initForm());
   }
   function switchType(t){ setType(t); reset(); }
 
@@ -247,6 +278,7 @@ export default function OfferCreation({ initialType="buy" }) {
             meansOfPayment,
             paymentData,
             returnAddress,
+            ...(form.instantMatch ? { instantTradeCriteria: { minReputation: form.noNewUsers ? 0.5 : -1, minTrades: form.noNewUsers ? 1 : 0, badges: [] } } : {}),
           });
           const offerData = await offerRes.json().catch(()=>null);
           if(!offerRes.ok){
@@ -263,7 +295,7 @@ export default function OfferCreation({ initialType="buy" }) {
           // 3. POST /v1/offer/:id/escrow — register key, get escrow address
           const escrowRes = await post(`/offer/${newOfferId}/escrow`, {
             publicKey: pubKeyHex,
-            version: 2,
+            derivationPathVersion: 2,
           });
           const escrowData = await escrowRes.json().catch(()=>null);
           if(!escrowRes.ok){
@@ -305,6 +337,8 @@ export default function OfferCreation({ initialType="buy" }) {
             meansOfPayment,
             paymentData,
             premium: parseFloat(form.premium) || 0,
+            ...(form.noNewUsers ? { minReputation: 0.5 } : {}),
+            ...(form.instantMatch ? { instantTradeCriteria: { minReputation: form.noNewUsers ? 0.5 : -1, minTrades: form.noNewUsers ? 1 : 0, badges: [] } } : {}),
           }),
         });
 
@@ -793,21 +827,85 @@ export default function OfferCreation({ initialType="buy" }) {
                       ≈ €{fmtEur(satsToFiat(form.amtFixed,effP))}
                     </span>
                   </div>
-                  <div style={{background:"var(--black-5)",borderRadius:12,
-                    border:"1px solid var(--black-10)",padding:"14px 16px",
-                    display:"flex",alignItems:"center",gap:14,marginBottom:18}}>
-                    <div style={{width:26,height:26,borderRadius:"50%",flexShrink:0,
-                      border:"3px solid var(--black-10)",borderTopColor:"var(--primary)",
-                      animation:"spin .9s linear infinite"}}/>
-                    <div>
-                      <div style={{fontSize:".8rem",fontWeight:700,marginBottom:2}}>
-                        Waiting for confirmation<span className="wait-dot"/>
+                  {/* ── Funding status indicator ── */}
+                  {fundingStatus === "WRONG_FUNDING_AMOUNT" ? (
+                    <div style={{background:"var(--error-bg)",borderRadius:12,
+                      border:"1px solid var(--error)",padding:"14px 16px",marginBottom:18}}>
+                      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+                        <span style={{fontSize:"1.1rem"}}>⚠</span>
+                        <span style={{fontSize:".8rem",fontWeight:700,color:"var(--error)"}}>
+                          Wrong amount funded
+                        </span>
                       </div>
-                      <div style={{fontSize:".7rem",color:"var(--black-65)",fontWeight:500}}>
-                        Typically 1–3 confirmations (~10–30 min)
+                      <div style={{fontSize:".75rem",color:"var(--black-65)",fontWeight:500,marginBottom:12,lineHeight:1.5}}>
+                        Expected <strong>{fmt(form.amtFixed)}</strong> sats — received{" "}
+                        <strong>{fmt(fundingAmounts ? fundingAmounts.reduce((a,b)=>a+b,0) : 0)}</strong> sats
+                      </div>
+                      <div style={{display:"flex",gap:8}}>
+                        <button onClick={async()=>{
+                          try {
+                            const res = await post('/offer/'+sellOfferId+'/escrow/confirm');
+                            if(res.ok){ setFundingStatus("FUNDED"); setTimeout(()=>setEscrowFunded(true),1500); }
+                            else { const d=await res.json().catch(()=>null); setPublishError(d?.error||"Failed to confirm escrow"); }
+                          } catch(e){ setPublishError(e.message); }
+                        }} style={{flex:1,padding:"8px 14px",borderRadius:999,background:"var(--grad)",
+                          color:"white",border:"none",cursor:"pointer",fontFamily:"var(--font)",
+                          fontSize:".78rem",fontWeight:700}}>
+                          Accept anyway
+                        </button>
                       </div>
                     </div>
-                  </div>
+                  ) : fundingStatus === "FUNDED" ? (
+                    <div style={{background:"#E8F5E9",borderRadius:12,
+                      border:"1px solid var(--success)",padding:"14px 16px",
+                      display:"flex",alignItems:"center",gap:14,marginBottom:18,
+                      animation:"stepFwd .4s ease both"}}>
+                      <div style={{width:26,height:26,borderRadius:"50%",flexShrink:0,
+                        background:"var(--success)",display:"flex",alignItems:"center",
+                        justifyContent:"center",color:"white",fontSize:".75rem",fontWeight:800}}>✓</div>
+                      <div>
+                        <div style={{fontSize:".8rem",fontWeight:700,color:"var(--success)",marginBottom:2}}>
+                          Confirmed!
+                        </div>
+                        <div style={{fontSize:".7rem",color:"var(--black-65)",fontWeight:500}}>
+                          Your offer is going live...
+                        </div>
+                      </div>
+                    </div>
+                  ) : fundingStatus === "MEMPOOL" ? (
+                    <div style={{background:"#E8F5E9",borderRadius:12,
+                      border:"1px solid var(--success)",padding:"14px 16px",
+                      display:"flex",alignItems:"center",gap:14,marginBottom:18,
+                      animation:"stepFwd .4s ease both"}}>
+                      <div style={{width:26,height:26,borderRadius:"50%",flexShrink:0,
+                        background:"var(--success)",display:"flex",alignItems:"center",
+                        justifyContent:"center",color:"white",fontSize:".75rem",fontWeight:800}}>✓</div>
+                      <div>
+                        <div style={{fontSize:".8rem",fontWeight:700,color:"var(--success)",marginBottom:2}}>
+                          Transaction detected!
+                        </div>
+                        <div style={{fontSize:".7rem",color:"var(--black-65)",fontWeight:500}}>
+                          Waiting for confirmation<span className="wait-dot"/> (~10–30 min)
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{background:"var(--black-5)",borderRadius:12,
+                      border:"1px solid var(--black-10)",padding:"14px 16px",
+                      display:"flex",alignItems:"center",gap:14,marginBottom:18}}>
+                      <div style={{width:26,height:26,borderRadius:"50%",flexShrink:0,
+                        border:"3px solid var(--black-10)",borderTopColor:"var(--primary)",
+                        animation:"spin .9s linear infinite"}}/>
+                      <div>
+                        <div style={{fontSize:".8rem",fontWeight:700,marginBottom:2}}>
+                          Waiting for funding<span className="wait-dot"/>
+                        </div>
+                        <div style={{fontSize:".7rem",color:"var(--black-65)",fontWeight:500}}>
+                          Send the exact amount above to this address
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   {!auth&&(
                     <button onClick={()=>setEscrowFunded(true)} style={{
                       width:"100%",padding:"10px",borderRadius:999,
