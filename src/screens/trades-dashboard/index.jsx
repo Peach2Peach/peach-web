@@ -715,23 +715,22 @@ export default function TradesDashboard() {
       try {
         const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
         const hdrs = { Authorization: `Bearer ${auth.token}` };
-        const [v1Res, v069BuyRes, v069SellRes, browseBuyRes, browseSellRes] = await Promise.all([
+        const [v1Res, ownOffersRes, browseBuyRes, browseSellRes] = await Promise.all([
           get('/offers/summary'),
-          fetch(`${v069Base}/buyOffer?ownOffers=true`, { headers: hdrs }),
-          fetch(`${v069Base}/sellOffer?ownOffers=true`, { headers: hdrs }),
+          fetch(`${v069Base}/user/${peachId}/offers`, { headers: hdrs }),
           fetch(`${v069Base}/buyOffer?ownOffers=false`, { headers: hdrs }),
-          fetch(`${v069Base}/sellOffer?ownOffers=false`, { headers: hdrs }),
+          fetch(`${v069Base}/sellOffer`, { headers: hdrs }),
         ]);
-        const [v1Data, v069BuyData, v069SellData, browseBuyData, browseSellData] = await Promise.all([
+        const [v1Data, ownOffersData, browseBuyData, browseSellData] = await Promise.all([
           v1Res.ok ? v1Res.json() : [],
-          v069BuyRes.ok ? v069BuyRes.json() : [],
-          v069SellRes.ok ? v069SellRes.json() : [],
+          ownOffersRes.ok ? ownOffersRes.json() : {},
           browseBuyRes.ok ? browseBuyRes.json() : [],
           browseSellRes.ok ? browseSellRes.json() : [],
         ]);
         const v1Arr = Array.isArray(v1Data) ? v1Data : (v1Data?.offers ?? []);
-        const v069BuyArr = Array.isArray(v069BuyData) ? v069BuyData : (v069BuyData?.offers ?? []);
-        const v069SellArr = Array.isArray(v069SellData) ? v069SellData : (v069SellData?.offers ?? []);
+        // Own offers from /v069/user/{id}/offers — returns { buyOffers: [...], sellOffers: [...] }
+        const v069BuyArr = ownOffersData?.buyOffers ?? [];
+        const v069SellArr = ownOffersData?.sellOffers ?? [];
         // Tag direction on v069 offers (they don't have a type field)
         v069BuyArr.forEach(o => { o._direction = 'buy'; });
         v069SellArr.forEach(o => { o._direction = 'sell'; });

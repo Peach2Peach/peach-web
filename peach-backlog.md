@@ -36,6 +36,10 @@ These are completed and kept for reference.
 - ✅ **3.6 Sell Offer Submission** — `POST /v1/offer` + `POST /v1/offer/:id/escrow` with version 2 non-hardened key derivation from xpub. Escrow key at `m/84'/{coin}'/3/{offerId}`, return address at `m/84'/{coin}'/1/{index}` (P2WPKH). Uses `@scure/bip32` + `@scure/btc-signer`. `derivationPathVersion: 2` sent in escrow creation call. Blocked on `GET /v1/user/returnAddressIndex` endpoint. (`offer-creation/index.jsx`, `utils/escrow.js`)
 - ✅ **3.7 Escrow Funding Status Polling** — polls `GET /v1/offer/:id/escrow` every 10s. Detects `MEMPOOL` (tx detected) → `FUNDED` (confirmed, transitions to "Offer is live!") → `WRONG_FUNDING_AMOUNT` (shows mismatch + "Accept anyway" button via `POST /offer/:id/escrow/confirm`). (`offer-creation/index.jsx`)
 - ✅ **6.2 QR Auth Handshake** — real QR-based web-to-mobile authentication. Ephemeral PGP keypair → POST to `/v069/desktop/desktopConnection` → display QR → poll for mobile response → decrypt credentials → validate → PGP key verification → set `window.__PEACH_AUTH__`. Auto-refresh on expiry. Mobile view shows app instructions. "Can't scan?" shows connection ID. Dev auth kept as fallback. (`peach-auth.jsx`, `useQRAuth.js`, `pgp.js`)
+- ✅ **4.1 Contact Peach** — full form with topic dropdown (General/Support/Bug/Feedback/Partnership), subject field, message textarea, optional email. `POST /v1/contact/report`. Success card on submit, mock delay when logged out. (`peach-settings.jsx`)
+- ✅ **4.2 About Peach** — static branding header with PeachIcon + version `v0.1.0`, description card, links section (Website, Twitter/X, Telegram, GitHub) opening in new tabs via `SettingsRow` + `IconExternalLink`. (`peach-settings.jsx`)
+- ✅ **4.3 Block/Unblock Users** — PeachID input + Block button, block via `PUT /user/:userId/block`, unblock via `DELETE /user/:userId/block`. List persisted in localStorage (no server-side list endpoint). Mock data when logged out. Added `put()` method to `useApi.js`. (`peach-settings.jsx`, `useApi.js`)
+- ✅ **4.4 Network Fees Save** — wired "Fee Rate Set" button to `PATCH /user` with `{ feeRate }`. Computes rate from selected tier or custom value. Loading state + error handling. (`peach-settings.jsx`)
 
 ---
 
@@ -105,25 +109,13 @@ These are completed and kept for reference.
 
 ## Phase 4: Settings & Secondary Features
 
-### 4.1 Contact Peach
-- **File**: `src/screens/peach-settings.jsx` → `ContactSubScreen`
-- **Endpoint**: `POST /v1/contact/report` (body: `{ message, email? }`)
-- **UI**: Text area + optional email + submit button
+### ~~4.1 Contact Peach~~ ✅
 
-### 4.2 About Peach
-- **File**: `src/screens/peach-settings.jsx` → `AboutSubScreen`
-- **Endpoint**: `GET /v1/system/version`
-- **UI**: Version, links to website/social, licenses, legal
+### ~~4.2 About Peach~~ ✅
 
-### 4.3 Block/Unblock Users
-- **File**: `src/screens/peach-settings.jsx` → `BlockUsersSubScreen`
-- **Endpoints**: `POST /v1/user/:userId/block`, `POST /v1/user/:userId/unblock`
-- **UI**: Already has mock list — wire to real API
+### ~~4.3 Block/Unblock Users~~ ✅
 
-### 4.4 Network Fees Preference Save
-- **File**: `src/screens/peach-settings.jsx` → `NetworkFeesSubScreen`
-- **Endpoint**: `PATCH /v1/user` (body: `{ feeRate }`)
-- **UI**: Dropdown already exists, just wire the save
+### ~~4.4 Network Fees Preference Save~~ ✅
 
 ### 4.5 Language Sub-screen
 - **File**: `src/screens/peach-settings.jsx` → `LanguageSubScreen`
@@ -224,6 +216,8 @@ Remaining items (5.3–5.5) are blocked on backend/mobile teams.
 | Wallet visualization | Needs UI design + bitcoinjs-lib for address derivation | xpub now available in `window.__PEACH_AUTH__.xpub` via QR auth |
 | ~~Sell offer submission~~ | ~~Needs escrowPublicKey from mobile~~ | ✅ Browser-side derivation (version 2 path). Blocked on `GET /v1/user/returnAddressIndex` endpoint |
 | ~~Seller release TX~~ | ~~Needs PSBT signing~~ | ✅ Browser-side wired (mock). Waiting on backend endpoints (Phase 5.3) |
+| Blocked users list sync | Backend team — needs `GET /user/blocked` endpoint | Web + mobile would show consistent blocked users list. Currently block/unblock works server-side, but there's no way to fetch the full list of who you've blocked. |
+| Network Fees preference sync | Backend team (nice-to-have) | `feeRate` is saved server-side via `PATCH /user` and consumed by the mobile app when signing transactions (escrow funding, wallet sends). Web app sets it as a cross-device convenience. Would benefit from loading saved preference on mount via `GET /user/me`. |
 
 ---
 
@@ -253,6 +247,7 @@ Items that don't add new API wiring but improve existing screens. Organized by p
 ### Already done
 - ~~**Offer Creation: "No new users" filter**~~ ✅ — `noNewUsers` checkbox sends `minReputation: 0.5` on buy offers + inside `instantTradeCriteria` on sell offers.
 - ~~**Offer Creation: "Instant Match" checkbox**~~ ✅ — `instantMatch` checkbox sends `instantTradeCriteria: { minReputation, minTrades, badges }` on both buy and sell offers.
+- ~~**Market View: own sell offers not showing in Buy BTC tab**~~ ✅ — `GET /v069/sellOffer?ownOffers=true` is broken (backend ignores the param for sell offers). Fixed by switching all 4 screens to `GET /v069/user/{peachId}/offers` which returns `{ buyOffers, sellOffers }`. Also converted "My Offers" button to checkbox + added info tooltip.
 
 ### To verify (needs regtest)
 - **Trade Execution: rating modal** — `MobileSigningModal` wired to `RatingPanel.onRate`. Mock `createTask("rate", ...)` fires, modal appears. Needs real regtest trade in `rateUser` status to test. Verify: select rating → submit → modal shows → cancel closes it.
@@ -278,8 +273,8 @@ Items that don't add new API wiring but improve existing screens. Organized by p
 | ~~11~~ | ~~5.1–5.2 Mobile signing (browser side)~~ | ✅ Done | |
 | ~~12~~ | ~~6.2 QR Auth handshake~~ | ✅ Done | |
 | ~~13~~ | ~~3.1–3.2 Reject + edit/withdraw~~ | ✅ Done | |
-| 14 | 4.1–4.2 Contact Peach + About Peach | ~1 session | Easy settings wins |
-| 15 | 4.3–4.4 Block/Unblock Users + Network Fees Save | ~1 session | Settings completion |
+| ~~14~~ | ~~4.1–4.2 Contact Peach + About Peach~~ | ✅ Done | |
+| ~~15~~ | ~~4.3–4.4 Block/Unblock Users + Network Fees Save~~ | ✅ Done | |
 | 16 | 4.10 Dark Mode | ~1-2 sessions | High UX impact |
 | 17 | 4.5–4.6 Language + Notification settings | ~1 session | Settings sub-screens |
 | 18 | 4.7–4.8 Account & Sessions + PIN Code | ~1 session | Settings sub-screens |

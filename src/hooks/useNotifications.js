@@ -99,18 +99,19 @@ async function _poll(auth, base) {
   const v069Base = base.replace(/\/v1$/, "/v069");
 
   try {
-    const [contractsRes, buyRes, sellRes] = await Promise.all([
+    const peachId = window.__PEACH_AUTH__?.peachId;
+    const [contractsRes, ownOffersRes] = await Promise.all([
       fetch(`${base}/contracts/summary`, { headers: hdrs }).then(r => r.ok ? r.json() : null).catch(() => null),
-      fetch(`${v069Base}/buyOffer?ownOffers=true`, { headers: hdrs }).then(r => r.ok ? r.json() : null).catch(() => null),
-      fetch(`${v069Base}/sellOffer?ownOffers=true`, { headers: hdrs }).then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch(`${v069Base}/user/${peachId}/offers`, { headers: hdrs }).then(r => r.ok ? r.json() : null).catch(() => null),
     ]);
 
     // ── Parse responses ──
     const contracts = contractsRes
       ? (Array.isArray(contractsRes) ? contractsRes : (contractsRes.contracts ?? []))
       : [];
-    const buyOffers  = buyRes  ? (Array.isArray(buyRes)  ? buyRes  : (buyRes.offers ?? []))  : [];
-    const sellOffers = sellRes ? (Array.isArray(sellRes) ? sellRes : (sellRes.offers ?? [])) : [];
+    // Own offers from /v069/user/{id}/offers — returns { buyOffers: [...], sellOffers: [...] }
+    const buyOffers  = ownOffersRes?.buyOffers ?? [];
+    const sellOffers = ownOffersRes?.sellOffers ?? [];
     const allOffers  = [
       ...buyOffers.map(o => ({ ...o, _dir: "buy" })),
       ...sellOffers.map(o => ({ ...o, _dir: "sell" })),

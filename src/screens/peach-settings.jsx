@@ -609,11 +609,12 @@ function BackupsSubScreen({ onBack }) {
 }
 
 function NetworkFeesSubScreen({ onBack }) {
-  const { get } = useApi();
+  const { get, patch, auth } = useApi();
   const [feeRates, setFeeRates] = useState({ fast:1, medium:1, slow:1 });
   const [selected, setSelected] = useState("medium");
   const [customVal, setCustomVal] = useState("");
   const [saved, setSaved] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState({});
   const handleBlur = makeBlurHandler(setErrors);
 
@@ -645,7 +646,31 @@ function NetworkFeesSubScreen({ onBack }) {
   }
 
   const customValid = selected !== "custom" || (customVal !== "" && validateFeeRate(customVal).valid);
-  const canSave = !saved && customValid;
+  const canSave = !saved && customValid && !submitting;
+
+  async function handleSave() {
+    const feeRate = selected === "custom" ? Number(customVal) : feeRates[selected];
+    setSubmitting(true);
+    setErrors(p => ({ ...p, save: null }));
+    try {
+      if (auth) {
+        const res = await patch('/user', { feeRate });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          setErrors(p => ({ ...p, save: err.message || "Failed to save — try again" }));
+          setSubmitting(false);
+          return;
+        }
+      } else {
+        await new Promise(r => setTimeout(r, 600));
+      }
+      setSubmitting(false);
+      setSaved(true);
+    } catch {
+      setErrors(p => ({ ...p, save: "Network error — check your connection" }));
+      setSubmitting(false);
+    }
+  }
 
   return (
     <SubScreenWrapper title="Network Fees" onBack={onBack}>
@@ -681,7 +706,8 @@ function NetworkFeesSubScreen({ onBack }) {
         ))}
         {errors.fee && <FieldError error={errors.fee}/>}
       </div>
-      <PrimaryBtn label="FEE RATE SET" onClick={() => setSaved(true)} disabled={!canSave}/>
+      {errors.save && <div style={{ marginBottom:12 }}><FieldError error={errors.save}/></div>}
+      <PrimaryBtn label={submitting ? "SAVING…" : "SET FEE RATE"} onClick={handleSave} disabled={!canSave}/>
     </SubScreenWrapper>
   );
 }
@@ -1019,45 +1045,68 @@ function PayoutWalletSubScreen({ onBack }) {
 }
 
 function BlockUsersSubScreen({ onBack }) {
-  const [blocked, setBlocked] = useState([
-    { id:"PEACH8F2A1B3C", since:"2025-01-14" },
-    { id:"PEACH4D9E7F2A", since:"2025-02-28" },
-  ]);
+  const { put, auth } = useApi();
+  const [inputId, setInputId] = useState("");
+  const [blocking, setBlocking] = useState(false);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
+
+  async function handleBlock() {
+    const userId = inputId.trim();
+    if (!userId) return;
+
+    setBlocking(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      if (auth) {
+        const res = await put(`/user/${encodeURIComponent(userId)}/block`);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          setError(err.message || "Failed to block user");
+          setBlocking(false);
+          return;
+        }
+      } else {
+        await new Promise(r => setTimeout(r, 400));
+      }
+      setSuccess(`User blocked successfully`);
+      setInputId("");
+      setBlocking(false);
+    } catch {
+      setError("Network error — check your connection");
+      setBlocking(false);
+    }
+  }
 
   return (
-    <SubScreenWrapper title="Blocked Users" onBack={onBack}>
-      {blocked.length === 0 ? (
-        <div style={{ textAlign:"center", padding:"40px 20px", color:"#7D675E", fontSize:".85rem" }}>
-          <div style={{ fontSize:"2rem", marginBottom:12 }}>🚫</div>
-          You haven't blocked any users.
+    <SubScreenWrapper title="Block Users" onBack={onBack}>
+      <p style={{ fontSize:".82rem", color:"#7D675E", marginBottom:20, lineHeight:1.6 }}>
+        Enter a user's public key to block them. Blocked users will not be able to match with your offers.
+      </p>
+
+      <div style={{ marginBottom:20 }}>
+        <div style={{ fontSize:".75rem", fontWeight:700, color:"#2B1911", marginBottom:6 }}>user public key</div>
+        <div style={{ display:"flex", gap:8 }}>
+          <input value={inputId} onChange={e => { setInputId(e.target.value); setError(null); setSuccess(null); }}
+            onKeyDown={e => { if (e.key === "Enter" && inputId.trim()) handleBlock(); }}
+            placeholder="Public key"
+            style={{ flex:1, padding:"10px 14px", borderRadius:10, border:"1.5px solid #C4B5AE", background:"#FFFFFF", fontFamily:"'Baloo 2',cursive", fontSize:".85rem", color:"#2B1911", outline:"none" }}/>
+          <button onClick={handleBlock} disabled={!inputId.trim() || blocking}
+            style={{ padding:"10px 20px", borderRadius:10, border:"none",
+              background: !inputId.trim() || blocking ? "#C4B5AE" : "#F56522",
+              color:"#FFFFFF", fontFamily:"'Baloo 2',cursive", fontSize:".8rem", fontWeight:700,
+              cursor: !inputId.trim() || blocking ? "not-allowed" : "pointer", whiteSpace:"nowrap" }}>
+            {blocking ? "…" : "Block"}
+          </button>
         </div>
-      ) : (
-        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-          {blocked.map(u => (
-            <div key={u.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 18px", borderRadius:12, background:"#FFFFFF", border:"1px solid #EAE3DF" }}>
-              <div>
-                <div style={{ fontSize:".85rem", fontWeight:700, color:"#2B1911" }}>{u.id}</div>
-                <div style={{ fontSize:".72rem", color:"#7D675E", marginTop:2 }}>
-                  Blocked on {new Date(u.since).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" })}
-                </div>
-                <button style={{ marginTop:4, border:"none", background:"transparent", padding:0, cursor:"pointer", color:"#F56522", fontFamily:"'Baloo 2',cursive", fontSize:".72rem", fontWeight:700, textDecoration:"underline" }}>
-                  See previous trades
-                </button>
-              </div>
-              <button onClick={() => setBlocked(prev => prev.filter(x => x.id !== u.id))}
-                style={{ padding:"7px 16px", borderRadius:999, border:"1.5px solid #EAE3DF", background:"#F4EEEB", fontFamily:"'Baloo 2',cursive", fontSize:".75rem", fontWeight:700, color:"#7D675E", cursor:"pointer" }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor="#F56522"; e.currentTarget.style.color="#F56522"; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor="#EAE3DF"; e.currentTarget.style.color="#7D675E"; }}>
-                Unblock
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-      <div style={{ marginTop:20, padding:"12px 16px", background:"#F4EEEB", borderRadius:10 }}>
-        <p style={{ fontSize:".75rem", color:"#7D675E", lineHeight:1.5, margin:0 }}>
-          Blocked users cannot match with your offers. Unblocking makes them visible in the market again.
-        </p>
+        {error && <FieldError error={error}/>}
+        {success && <div style={{ fontSize:".75rem", fontWeight:700, color:"#65A519", marginTop:6 }}>{success}</div>}
+      </div>
+
+      <div style={{ fontSize:".72rem", fontWeight:700, color:"#C4B5AE", textTransform:"uppercase",
+        letterSpacing:".08em", textAlign:"center", marginTop:32 }}>
+        List of blocked users coming soon
       </div>
     </SubScreenWrapper>
   );
@@ -1389,8 +1438,8 @@ export default function SettingsScreen() {
             description="Back up your account on the mobile app"
             warning={true}
             onClick={() => setCurrentView("backups")}/>
-          <SettingsRow icon="🚫" label="Blocked Users"
-            description="Manage users you've blocked"
+          <SettingsRow icon="🚫" label="Block Users"
+            description="Block a user from matching with your offers"
             onClick={() => setCurrentView("block-users")}
             noBorder/>
         </SettingsSection>

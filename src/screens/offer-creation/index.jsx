@@ -258,13 +258,16 @@ export default function OfferCreation({ initialType="buy" }) {
           // 1. Derive return address from xpub at m/84'/{coin}'/1/{index}
           // Index = total sell offers ever created (active + historical). Monotonically increasing.
           const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
-          const [activeSellRes, historySellRes] = await Promise.all([
-            fetch(`${v069Base}/sellOffer?ownOffers=true`, { headers: { Authorization: `Bearer ${auth.token}` } }),
+          const hdrs = { Authorization: `Bearer ${auth.token}` };
+          const [ownOffersRes, historySellRes] = await Promise.all([
+            fetch(`${v069Base}/user/${auth.peachId}/offers`, { headers: hdrs }),
             get('/offers/summary'),
           ]);
-          const activeSell  = await activeSellRes.json().catch(()=>[]);
+          const ownOffersData = await ownOffersRes.json().catch(() => ({}));
           const historySell = await historySellRes.json().catch(()=>[]);
-          const activeCount  = Array.isArray(activeSell) ? activeSell.length : 0;
+          // Own sell offers from /v069/user/{id}/offers
+          const activeSell = ownOffersData?.sellOffers ?? [];
+          const activeCount = activeSell.length;
           const historyCount = Array.isArray(historySell) ? historySell.filter(o => o.type === "ask").length : 0;
           const addrIdx = activeCount + historyCount;
           const returnAddress = deriveReturnAddress(auth.xpub, addrIdx);

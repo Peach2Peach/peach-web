@@ -7,10 +7,11 @@
  *   - Attach the Bearer token header when logged in.
  *
  * Usage:
- *   const { get, post, patch, del, auth, isLoggedIn } = useApi();
+ *   const { get, post, patch, put, del, auth, isLoggedIn } = useApi();
  *   const res = await get('/market/prices');
  *   const res = await post('/offer/search', { type: 'bid' });
  *   const res = await patch('/user', { payoutAddress: addr });
+ *   const res = await put('/user/abc123/block');
  *   const res = await del('/offer/match', { matchOfferId: '...' });
  */
 
@@ -76,6 +77,14 @@ export function useApi() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify(body),
+      });
+    },
+
+    put(path, body) {
+      return fetch(`${base}${path}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: body ? JSON.stringify(body) : undefined,
       });
     },
 

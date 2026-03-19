@@ -934,21 +934,20 @@ export default function PeachMarket() {
         // Authenticated: use v069 endpoints (same as mobile app)
         const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
         const hdrs = { Authorization: `Bearer ${auth.token}` };
-        const [buyOffersRes, sellOffersRes, ownBuyRes, ownSellRes] = await Promise.all([
+        const [buyOffersRes, sellOffersRes, ownOffersRes] = await Promise.all([
           fetch(`${v069Base}/buyOffer`, { headers: hdrs }),
           fetch(`${v069Base}/sellOffer`, { headers: hdrs }),
-          fetch(`${v069Base}/buyOffer?ownOffers=true`, { headers: hdrs }),
-          fetch(`${v069Base}/sellOffer?ownOffers=true`, { headers: hdrs }),
+          fetch(`${v069Base}/user/${peachId}/offers`, { headers: hdrs }),
         ]);
         const buyOffersJson  = buyOffersRes.ok  ? await buyOffersRes.json()  : {};
         const sellOffersJson = sellOffersRes.ok ? await sellOffersRes.json() : {};
-        const ownBuyJson  = ownBuyRes.ok  ? await ownBuyRes.json()  : {};
-        const ownSellJson = ownSellRes.ok ? await ownSellRes.json() : {};
+        const ownOffersJson  = ownOffersRes.ok  ? await ownOffersRes.json()  : {};
         // v069 response: { offers: [...], stats: {...} }
         const bidsArr = Array.isArray(buyOffersJson) ? buyOffersJson : buyOffersJson?.offers ?? [];
         const asksArr = Array.isArray(sellOffersJson) ? sellOffersJson : sellOffersJson?.offers ?? [];
-        const ownBidsArr = Array.isArray(ownBuyJson) ? ownBuyJson : ownBuyJson?.offers ?? [];
-        const ownAsksArr = Array.isArray(ownSellJson) ? ownSellJson : ownSellJson?.offers ?? [];
+        // Own offers from /v069/user/{id}/offers — returns { buyOffers: [...], sellOffers: [...] }
+        const ownBidsArr = ownOffersJson?.buyOffers ?? [];
+        const ownAsksArr = ownOffersJson?.sellOffers ?? [];
         console.log("[MarketView] v069 bids:", bidsArr.length, "asks:", asksArr.length, "own bids:", ownBidsArr.length, "own asks:", ownAsksArr.length, "own ask IDs:", ownAsksArr.map(o => o.id));
 
         // Merge market + own offers, deduplicating by ID
