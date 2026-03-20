@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//home/steadyprodos/Documents/PROJECTS/PEACH/CODE/peach-app/peach-app/src/components/payment/hooks/**)",
+      "Read(//home/steadyprodos/Documents/PROJECTS/PEACH/CODE/peach-app/peach-app/src/utils/peachAPI/**)",
+      "Read(//home/steadyprodos/Documents/PROJECTS/PEACH/CODE/peach-app/peach-app/peach-api/src/**)",
+      "Read(//home/steadyprodos/Documents/PROJECTS/PEACH/CODE/peach-app/peach-app/node_modules/react-native-fast-openpgp/src/**)"
+    ]
+  }
+}

@@ -260,6 +260,7 @@ export default function TradeExecution() {
   const [chatPage, setChatPage] = useState(0);
   const [chatHasMore, setChatHasMore] = useState(false);
   const [chatLoadingMore, setChatLoadingMore] = useState(false);
+  const [toast, setToast] = useState(null);
   const signingStatusRef = useRef(null); // track the tradeStatus when signing modal opened
 
   // ── Restore pending task state from localStorage on mount ──
@@ -322,6 +323,7 @@ export default function TradeExecution() {
           disputeOutcomeAcknowledgedBy: c.disputeOutcomeAcknowledgedBy ?? prev.disputeOutcomeAcknowledgedBy,
           disputeAcknowledgedByCounterParty: c.disputeAcknowledgedByCounterParty ?? prev.disputeAcknowledgedByCounterParty,
         } : prev);
+        if (newStatus === "refundOrReviveRequired") setShowPostCancel(true);
       } catch {}
     }, 5000);
     return () => clearInterval(iv);
@@ -399,6 +401,7 @@ export default function TradeExecution() {
               online: false,
             };
           })(),
+          releaseAddress: c.releaseAddress ?? null,
           paymentDetails: null, // will be populated below after decryption
           paymentDetailsError: false,
           // Keep raw encrypted fields for dispute re-encryption
@@ -418,7 +421,16 @@ export default function TradeExecution() {
           disputeOutcomeAcknowledgedBy: c.disputeOutcomeAcknowledgedBy ?? [],
           disputeAcknowledgedByCounterParty: c.disputeAcknowledgedByCounterParty ?? false,
           isEmailRequired: c.isEmailRequired ?? false,
+          // Revive/refund guard fields
+          revived: !!c.newOfferId,
+          refunded: !!c.refunded,
+          newOfferId: c.newOfferId ?? null,
         });
+
+        // Auto-show republish/refund panel for refundOrReviveRequired
+        if ((c.tradeStatus ?? c.status) === "refundOrReviveRequired") {
+          setShowPostCancel(true);
+        }
 
         // Decrypt payment data if available
         // As buyer: need seller's payment details (paymentDataEncrypted)
@@ -437,12 +449,19 @@ export default function TradeExecution() {
         }
 
         // Decrypt payment data if available
-        if (encryptedPM && symKey) {
-          try {
-            const pmJson = await decryptSymmetric(encryptedPM, symKey);
-            if (pmJson) {
+        if (encryptedPM) {
+          let pmJson = null;
+          // Try symmetric decryption first (standard trade flow)
+          if (symKey) {
+            try { pmJson = await decryptSymmetric(encryptedPM, symKey); } catch {}
+          }
+          // Fallback to asymmetric decryption (mobile may encrypt with PGP public key)
+          if (!pmJson && auth.pgpPrivKey) {
+            try { pmJson = await decryptPGPMessage(encryptedPM, auth.pgpPrivKey); } catch {}
+          }
+          if (pmJson) {
+            try {
               const pmData = JSON.parse(pmJson);
-              // Map API field names to PaymentDetailsCard expected shape
               setLiveContract(prev => prev ? { ...prev, paymentDetails: {
                 type: pmData.type ?? c.paymentMethod ?? "",
                 bank: pmData.bank ?? pmData.beneficiary ?? "",
@@ -453,15 +472,13 @@ export default function TradeExecution() {
                 phone: pmData.phone ?? "",
                 reference: pmData.reference ?? `PEACH-${c.id}`,
               }} : prev);
-            } else {
+            } catch (err) {
+              console.warn("[Trade] PM JSON parse failed:", err.message);
               setLiveContract(prev => prev ? { ...prev, paymentDetailsError: true } : prev);
             }
-          } catch (err) {
-            console.warn("[Trade] PM decryption failed:", err.message);
+          } else {
             setLiveContract(prev => prev ? { ...prev, paymentDetailsError: true } : prev);
           }
-        } else if (encryptedPM && !symKey) {
-          setLiveContract(prev => prev ? { ...prev, paymentDetailsError: true } : prev);
         }
       } catch {}
       setContractLoading(false);
@@ -916,18 +933,22 @@ export default function TradeExecution() {
                       console.warn("[Trade] Cancel trade error:", e.message);
                     }
                   } else if (action === "republish_offer") {
+                    setActionError(null);
                     try {
                       const offerId = contract.offerId ?? contract.id;
-                      const res = await post('/offer/' + offerId + '/republish');
+                      const res = await post('/offer/' + offerId + '/revive');
                       if (res.ok) {
-                        setLiveContract(prev => prev ? { ...prev, tradeStatus: "refundOrReviveRequired" } : prev);
+                        const data = await res.json().catch(() => ({}));
+                        setLiveContract(prev => prev ? { ...prev, revived: true, newOfferId: data.newOfferId ?? null } : prev);
                         setShowPostCancel(false);
+                        setToast("Offer republished" + (data.newOfferId ? ` — new offer: ${data.newOfferId}` : ""));
+                        setTimeout(() => setToast(null), 4000);
                       } else {
                         const err = await res.json().catch(() => ({}));
-                        console.warn("[Trade] Republish failed:", err.error || res.status);
+                        setActionError("Republish failed: " + (err.error || res.status));
                       }
                     } catch (e) {
-                      console.warn("[Trade] Republish error:", e.message);
+                      setActionError("Republish error: " + e.message);
                     }
                   } else if (action === "refund_escrow") {
                     setActionError(null);
@@ -943,25 +964,13 @@ export default function TradeExecution() {
                   } else if (action === "payment_sent") {
                     setActionError(null);
                     try {
-                      const res = await post('/contract/' + contract.id + '/payment/confirm');
-                      if (res.ok) {
-                        // Refresh contract to get updated status
-                        const cRes = await get('/contract/' + contract.id);
-                        if (cRes.ok) {
-                          const c = await cRes.json();
-                          setLiveContract(prev => prev ? { ...prev, tradeStatus: c.tradeStatus ?? "confirmPaymentRequired" } : prev);
-                        }
-                      } else {
-                        const err = await res.json().catch(() => ({}));
-                        const msg = err.error || err.message || "";
-                        if (msg.toLowerCase().includes("address") || msg.toLowerCase().includes("signature") || res.status === 403) {
-                          setActionError("Payment confirmation requires a payout address with a Bitcoin signature. Please set a payout address in Settings first, or confirm via the mobile app.");
-                        } else {
-                          setActionError("Payment confirmation failed: " + (msg || res.status));
-                        }
-                      }
+                      // Desktop auth tokens cannot call payment/confirm — delegate to mobile app
+                      await createTask(post, "confirmPayment", { contractId: contract.id });
+                      savePendingTask(routeId, "confirmPayment");
+                      setPendingTaskType("confirmPayment");
+                      setSigningModal({ title: "Confirm Payment", description: "Please confirm your payment on the Peach mobile app. Open the trade on your phone and slide to confirm you've sent the payment.", taskType: "confirmPayment" });
                     } catch (e) {
-                      setActionError("Payment confirmation failed: " + e.message);
+                      setActionError("Failed to request confirmation: " + e.message);
                     }
                   } else if (action === "release_bitcoin") {
                     setActionError(null);
@@ -1148,6 +1157,16 @@ export default function TradeExecution() {
         description={signingModal?.description}
         onCancel={() => setSigningModal(null)}
       />
+
+      {/* ── TOAST ── */}
+      {toast && (
+        <div style={{
+          position:"fixed", bottom:80, left:"50%", transform:"translateX(-50%)",
+          background:"var(--black-85)", color:"white", padding:"10px 22px",
+          borderRadius:999, fontSize:".85rem", fontWeight:700, zIndex:9999,
+          boxShadow:"0 4px 18px rgba(0,0,0,.18)", whiteSpace:"nowrap",
+        }}>{toast}</div>
+      )}
     </>
   );
 }

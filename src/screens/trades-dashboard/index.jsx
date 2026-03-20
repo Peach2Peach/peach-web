@@ -884,6 +884,7 @@ export default function TradesDashboard() {
   ), [rawItems, liveUnread]);
   const activeItems = allItems.filter(i => !FINISHED_STATUSES.has(i.tradeStatus) && !PENDING_STATUSES.has(i.tradeStatus));
   const historyItems = allItems.filter(i => FINISHED_STATUSES.has(i.tradeStatus));
+
   const pendingItems = livePending ?? (auth ? [] : MOCK_PENDING);
 
   // Auto-select the best default tab: Active > Pending > History
@@ -1286,6 +1287,13 @@ export default function TradesDashboard() {
           const pmJson = JSON.stringify(cleanData);
           paymentDataEncrypted = await encryptSymmetric(pmJson, symmetricKey);
           paymentDataSignature = await signPGPMessage(pmJson, auth.pgpPrivKey);
+          // Debug: verify round-trip decryption works
+          console.log("[Trades] symmetricKey length:", symmetricKey.length, "first 8:", symmetricKey.slice(0, 8));
+          try {
+            const { decryptSymmetric: testDecrypt } = await import("../../utils/pgp.js");
+            const roundTrip = await testDecrypt(paymentDataEncrypted, symmetricKey);
+            console.log("[Trades] Round-trip decrypt OK:", roundTrip === pmJson);
+          } catch (e) { console.warn("[Trades] Round-trip decrypt FAILED:", e.message); }
         }
 
         const userId = match._raw.tradeRequestUserId;
@@ -1331,6 +1339,7 @@ export default function TradesDashboard() {
           const counterpartyKeys = (match._raw?.pgpPublicKeys ?? [])
             .map(k => typeof k === "string" ? k : k?.publicKey)
             .filter(Boolean);
+          console.log("[Trades] counterpartyKeys count:", counterpartyKeys.length, "| raw pgpPublicKeys:", match._raw?.pgpPublicKeys);
           const keyResult = await encryptForRecipients(symmetricKey, counterpartyKeys, auth.pgpPrivKey);
           if (keyResult) {
             symmetricKeyEncrypted = keyResult.encrypted;

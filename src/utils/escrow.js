@@ -62,6 +62,31 @@ export function deriveEscrowPubKey(multisigXpub, offerId) {
  * @param {number} index  Address index (from server — incremented per offer to avoid reuse)
  * @returns {string} P2WPKH bech32 address
  */
+/**
+ * Derive a release (payout) address for a buy trade.
+ *
+ * Path: m/84'/{coin}'/0/{index}  (non-hardened — derivable from xpub)
+ * Returns a native segwit (P2WPKH) address: bc1q... (mainnet) or bcrt1q... (regtest)
+ *
+ * Uses the original xpub (auth.xpub), NOT the multisigXpub.
+ * This is the external/receive chain (/0/) — where purchased sats are sent.
+ *
+ * @param {string} xpub  Base58-encoded extended public key (the original xpub, not multisigXpub)
+ * @param {number} index  Address index (incremented per use to avoid reuse)
+ * @returns {string} P2WPKH bech32 address
+ */
+export function deriveReleaseAddress(xpub, index) {
+  const network = getNetwork(xpub);
+  const node = HDKey.fromExtendedKey(xpub, getVersions(xpub));
+  const child = node.deriveChild(0).deriveChild(index);
+  const address = p2wpkh(child.publicKey, network).address;
+  console.log("[Escrow] deriveReleaseAddress result:", {
+    address,
+    fullPath: `m/84'/{coin}'/0/${index}`,
+  });
+  return address;
+}
+
 export function deriveReturnAddress(xpub, index) {
   console.log("[Escrow] deriveReturnAddress inputs:", {
     xpub: xpub.slice(0, 20) + "…",

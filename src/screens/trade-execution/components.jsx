@@ -1209,6 +1209,54 @@ export function ActionPanel({ scenario, onAction, showPostCancel = false, pendin
           )}
         </>}
 
+        {/* refundOrReviveRequired — seller POV: republish or refund */}
+        {status === "refundOrReviveRequired" && role === "seller" && !scenario.revived && !scenario.refunded && <>
+          <div style={{
+            display:"flex", alignItems:"center", gap:8,
+            background:"#FEFCE5", border:"1px solid rgba(154,112,0,.15)",
+            borderRadius:8, padding:"10px 12px",
+            fontSize:".83rem", color:"#9A7000", fontWeight:600, lineHeight:1.5,
+          }}>
+            <span>The trade was cancelled. You can republish your offer or request a refund of the escrow.</span>
+          </div>
+          <SlideToConfirm
+            label="Re-publish Offer"
+            onConfirm={() => onAction("republish_offer")}
+          />
+          {pendingTask === "refund" ? (
+            <PendingBtn label="Refund pending in mobile app"/>
+          ) : (
+            <SlideToConfirm
+              label="Refund Escrow"
+              onConfirm={() => onAction("refund_escrow")}
+            />
+          )}
+        </>}
+
+        {/* refundOrReviveRequired — already revived */}
+        {status === "refundOrReviveRequired" && scenario.revived && (
+          <div style={{
+            display:"flex", alignItems:"center", gap:8,
+            background:"#E8F9EE", border:"1px solid rgba(5,168,90,.15)",
+            borderRadius:8, padding:"10px 12px",
+            fontSize:".83rem", color:"#05A85A", fontWeight:600, lineHeight:1.5,
+          }}>
+            <span>Offer has been republished{scenario.newOfferId ? ` (new offer: ${scenario.newOfferId})` : ""}.</span>
+          </div>
+        )}
+
+        {/* refundOrReviveRequired — already refunded */}
+        {status === "refundOrReviveRequired" && scenario.refunded && (
+          <div style={{
+            display:"flex", alignItems:"center", gap:8,
+            background:"#F4F4F4", border:"1px solid rgba(0,0,0,.08)",
+            borderRadius:8, padding:"10px 12px",
+            fontSize:".83rem", color:"var(--black-65)", fontWeight:600, lineHeight:1.5,
+          }}>
+            <span>Escrow has been refunded.</span>
+          </div>
+        )}
+
         {/* Payment too late — buyer POV */}
         {status === "paymentTooLate" && role === "buyer" && (
           <div style={{

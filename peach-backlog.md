@@ -18,7 +18,7 @@ These are completed and kept for reference.
 - ✅ **Refund Address** — CONFIRM calls `PATCH /user` (refundAddress) (`peach-settings.jsx`)
 - ✅ **Custom Payout Wallet** — CONFIRM calls `PATCH /user` (payoutAddress) (`peach-settings.jsx`)
 - ✅ **1.1 Extend Payment Deadline** — `PATCH /contract/:id/extendTime`. Also added seller "Give More Time" + "Cancel Trade" sliders for paymentTooLate status, and buyer "not paid on time" view. (`trade-execution/index.jsx`)
-- ✅ **1.2 Buyer Payment Confirmation** — `POST /contract/:id/payment/confirm` with empty body. Shows fallback error if payout address needed. Seller release shows "requires mobile signing relay" message. (`trade-execution/index.jsx`)
+- ✅ **1.2 Buyer Payment Confirmation** — Desktop auth token lacks write permission for `POST /contract/:id/payment/confirm` (returns 401 UNAUTHORIZED). Wired via `MobileSigningModal` — buyer slides on web, modal prompts to confirm on mobile app, web polls for status change. Blocked on backend granting desktop tokens write access to this endpoint. (`trade-execution/index.jsx`)
 - ✅ **1.3 Chat Send + Decrypt** — `POST /contract/:id/chat` with `encryptSymmetric` + detached `signPGPMessage`. Symmetric key decrypted from contract, used for both send encryption and receive decryption. Optimistic UI. (`trade-execution/index.jsx`)
 - ✅ **1.4 Chat Pagination + Mark Read + Polling** — `GET /contract/:id/chat?page=N` with auto-load on scroll-to-top, deduplication, chronological sort. `POST /contract/:id/chat/received` marks unread messages. 5s polling for real-time incoming messages. (`trade-execution/index.jsx`)
 - ✅ **1.5 Dispute Submission** — `POST /contract/:id/dispute` with role-aware reasons (buyer/seller), conditional form (noPayment needs email+message, others submit immediately). Encrypts symmetric key + both payment data fields for platform PGP key via `encryptForPublicKey`. Decrypts PM fields with symmetric-then-asymmetric fallback. (`trade-execution/index.jsx`, `pgp.js`)
@@ -216,9 +216,10 @@ Remaining items (5.3–5.5) are blocked on backend/mobile teams.
 | Wallet visualization | Needs UI design + bitcoinjs-lib for address derivation | xpub now available in `window.__PEACH_AUTH__.xpub` via QR auth |
 | ~~Sell offer submission~~ | ~~Needs escrowPublicKey from mobile~~ | ✅ Browser-side derivation (version 2 path). Blocked on `GET /v1/user/returnAddressIndex` endpoint |
 | ~~Seller release TX~~ | ~~Needs PSBT signing~~ | ✅ Browser-side wired (mock). Waiting on backend endpoints (Phase 5.3) |
+| Desktop token: payment confirmation | Backend team — desktop connection auth token returns 401 on `POST /v1/contract/:id/payment/confirm` | All 3 variants tested (empty body, with releaseAddress, with/without Bearer prefix) return `{"error":"UNAUTHORIZED"}`. GET endpoints work fine with the same token. The desktop token needs write permission for payment/confirm so buyers can confirm payment from the web app. Currently delegated to mobile via `MobileSigningModal`. |
 | Blocked users list sync | Backend team — needs `GET /user/blocked` endpoint | Web + mobile would show consistent blocked users list. Currently block/unblock works server-side, but there's no way to fetch the full list of who you've blocked. |
 | Network Fees preference sync | Backend team (nice-to-have) | `feeRate` is saved server-side via `PATCH /user` and consumed by the mobile app when signing transactions (escrow funding, wallet sends). Web app sets it as a cross-device convenience. Would benefit from loading saved preference on mount via `GET /user/me`. |
-| ~~PM decryption cross-compatibility~~ | ~~Mobile team investigation~~ | ✅ Fixed — mobile "can't find the private key" bug resolved. PMs encrypted in the browser now decrypt correctly on mobile. |
+| PM decryption cross-compatibility | openpgp.js v6 ↔ GopenPGP v0.38.2 interop | 🟡 In progress — multiple incompatibilities found and partially fixed. Web→mobile PM decryption during trades still fails. See `pgp-interop-debug.md` for full status. |
 
 ---
 
@@ -235,6 +236,7 @@ Items that don't add new API wiring but improve existing screens. Organized by p
 - **Home: wire Top PMs & Top Currencies cards** — currently show mock/static data. Wire to live API so they reflect real platform activity when logged in. (`peach-home.jsx`)
 - **Trade Execution: copy buttons mobile layout** — "Copy Address" and "Copy BTC" buttons don't render well on mobile. (`trade-execution/index.jsx`)
 - **Market View: filter parity with mobile app** — implement same filter set as mobile. Exact filter list TBD. (`peach-market-view.jsx`)
+- **Offer Creation: experience level filter improvements** — currently sell-only with a simple checkbox + two radio options. Two things to do: (1) improve the UI to match mobile app's toggle + slider style, and (2) add `experienceLevelCriteria` to buy offer submission as well (mobile supports it on both sides). (`offer-creation/index.jsx`)
 
 ### Polish (visual/consistency)
 - **Global: Peach Web logo file** — replace inline SVG with a proper logo asset used consistently
@@ -252,6 +254,8 @@ Items that don't add new API wiring but improve existing screens. Organized by p
 
 ### To verify (needs regtest)
 - **Trade Execution: rating modal** — `MobileSigningModal` wired to `RatingPanel.onRate`. Mock `createTask("rate", ...)` fires, modal appears. Needs real regtest trade in `rateUser` status to test. Verify: select rating → submit → modal shows → cancel closes it.
+- **Trade Execution: refundOrReviveRequired status** — 3.3 Republish/Refund UI is implemented but untested. Yellow banner + two sliders (Re-publish Offer / Refund Escrow) should appear when a contract reaches `refundOrReviveRequired` status. Republish calls `POST /v1/offer/:offerId/revive`. Refund goes through MobileSigningModal. Needs a regtest trade that gets cancelled to reach this status.
+- **Sell offer: instantTradeCriteria not taking effect** — `POST /v1/offer` with `type: "ask"` includes `instantTradeCriteria` in the payload (same as mobile app), but the created offer doesn't appear as instant-trade-eligible. Mobile app uses the exact same endpoint and it works. Debug next: inspect the actual request body in Network tab to confirm the field is sent, then check if the created offer has `allowedToInstantTrade: true` when fetched back. Could be a server-side issue on regtest.
 
 ---
 

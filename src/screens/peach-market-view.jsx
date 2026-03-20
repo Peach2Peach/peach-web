@@ -4,7 +4,7 @@ import { SideNav, Topbar } from "../components/Navbars.jsx";
 import { SatsAmount, IcoBtc } from "../components/BitcoinAmount.jsx";
 import { useAuth } from "../hooks/useAuth.js";
 import { useApi } from "../hooks/useApi.js";
-import { extractPMsFromProfile, isApiError } from "../utils/pgp.js";
+import { extractPMsFromProfile, isApiError, generateSymmetricKey, encryptForRecipients, encryptSymmetric, signPGPMessage, hashPaymentFields } from "../utils/pgp.js";
 import { getCached, setCache, clearCache } from "../hooks/useApi.js";
 import { MOCK_OFFERS, MOCK_USER_PMS as USER_PMS, MOCK_ALL_METHODS as ALL_METHODS } from "../data/mockData.js";
 import { BTC_PRICE_FALLBACK as BTC_PRICE, fmtPct, fmtFiat, formatTradeId } from "../utils/format.js";
@@ -848,10 +848,81 @@ export default function PeachMarket() {
     }, 1600);
   }
 
-  function handleInstantTrade(offer) {
-    // Navigate to trade execution
-    navigate(`/trade/${offer.id}`);
-    closePopup();
+  async function handleInstantTrade(offer) {
+    if (!auth?.pgpPrivKey || !selectedPM || !popupCurrency) return;
+
+    // 1. Find the selected PM data
+    const pmObj = userPMs.find(pm => pm.id === selectedPM);
+    if (!pmObj) return;
+
+    // 2. Build clean PM data (same pattern as trades-dashboard match acceptance)
+    const STRUCTURAL = new Set(["id", "methodId", "type", "name", "label", "currencies", "hashes", "details", "data", "country", "anonymous"]);
+    const cleanData = {};
+    const pmDetails = pmObj.details || {};
+    for (const [k, v] of Object.entries(pmDetails)) {
+      if (!STRUCTURAL.has(k) && typeof v !== "object") cleanData[k] = v;
+    }
+
+    // 3. Generate symmetric key and encrypt for counterparty
+    let symmetricKeyEncrypted = null;
+    let symmetricKeySignature = null;
+    let paymentDataEncrypted = null;
+    let paymentDataSignature = null;
+    let paymentDataHashed = null;
+
+    try {
+      const symmetricKey = generateSymmetricKey();
+      const counterpartyKeys = (offer._raw?.user?.pgpPublicKeys ?? [])
+        .map(k => typeof k === "string" ? k : k?.publicKey)
+        .filter(Boolean);
+
+      const keyResult = await encryptForRecipients(symmetricKey, counterpartyKeys, auth.pgpPrivKey);
+      if (keyResult) {
+        symmetricKeyEncrypted = keyResult.encrypted;
+        symmetricKeySignature = keyResult.signature;
+      }
+
+      if (Object.keys(cleanData).length > 0 && symmetricKey) {
+        const pmJson = JSON.stringify(cleanData);
+        paymentDataEncrypted = await encryptSymmetric(pmJson, symmetricKey);
+        paymentDataSignature = await signPGPMessage(pmJson, auth.pgpPrivKey);
+        paymentDataHashed = await hashPaymentFields(pmObj.type, cleanData, pmDetails.country || undefined);
+      }
+
+      // 4. Call performInstantTrade
+      const offerType = offer.type === "bid" ? "buyOffer" : "sellOffer";
+      const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
+      const res = await fetch(`${v069Base}/${offerType}/${offer.id}/performInstantTrade`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${auth.token}`,
+        },
+        body: JSON.stringify({
+          paymentMethod: pmObj.type,
+          currency: popupCurrency,
+          paymentDataHashed,
+          paymentDataEncrypted,
+          paymentDataSignature,
+          symmetricKeyEncrypted,
+          symmetricKeySignature,
+        }),
+      });
+
+      if (res.ok) {
+        const contract = await res.json();
+        const contractId = contract.id ?? contract.contractId;
+        closePopup();
+        if (contractId) navigate(`/trade/${contractId}`);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setToast("Instant trade failed: " + (err.error || "try again"));
+        setTimeout(() => setToast(null), 4000);
+      }
+    } catch (e) {
+      setToast("Instant trade error: " + e.message);
+      setTimeout(() => setToast(null), 4000);
+    }
   }
 
   function handleUndoRequest(offer) {
@@ -900,9 +971,10 @@ export default function PeachMarket() {
       rep: toPeaches(o.user?.rating ?? 0),
       trades: o.user?.trades ?? 0,
       badges: o.user?.medals ?? o.user?.badges ?? [],
-      auto: false,
+      auto: o.allowedToInstantTrade ?? false,
       online: o.user?.online ?? false,
       isOwn: !!peachId && (o.user?.id === peachId || o.user?.id?.toLowerCase?.() === peachId?.toLowerCase?.()),
+      _raw: o,
     };
   }
 
@@ -943,6 +1015,8 @@ export default function PeachMarket() {
         const sellOffersJson = sellOffersRes.ok ? await sellOffersRes.json() : {};
         const ownOffersJson  = ownOffersRes.ok  ? await ownOffersRes.json()  : {};
         // v069 response: { offers: [...], stats: {...} }
+        console.log("[Market] raw buy offers:", buyOffersJson);
+        console.log("[Market] raw sell offers:", sellOffersJson);
         const bidsArr = Array.isArray(buyOffersJson) ? buyOffersJson : buyOffersJson?.offers ?? [];
         const asksArr = Array.isArray(sellOffersJson) ? sellOffersJson : sellOffersJson?.offers ?? [];
         // Own offers from /v069/user/{id}/offers — returns { buyOffers: [...], sellOffers: [...] }

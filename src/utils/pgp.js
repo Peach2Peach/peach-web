@@ -10,6 +10,12 @@ import * as openpgp from "openpgp";
 
 const PGP_HEADER = "-----BEGIN PGP MESSAGE-----";
 
+// GopenPGP (mobile) compatibility — disable openpgp.js v6 features it can't handle
+const GOPENPGP_COMPAT = {
+  preferredHashAlgorithm: openpgp.enums.hash.sha256,
+  nonDeterministicSignaturesViaNotation: false,
+};
+
 // ── All PM detail fields the server knows about (matches mobile app's PaymentDataInfoFields) ──
 const ALL_PAYMENT_FIELDS = [
   "accountNumber", "accountType", "alias", "aliasType", "bankAccountNumber",
@@ -93,14 +99,15 @@ export async function encryptForRecipients(plaintext, armoredPubKeys, armoredPri
     const encrypted = await openpgp.encrypt({
       message,
       encryptionKeys,
-      signingKeys: privateKey,
+      config: GOPENPGP_COMPAT,
     });
 
-    // Also create a detached signature
-    const sigMessage = await openpgp.createMessage({ text: plaintext });
+    // Create cleartext signature (-----BEGIN PGP SIGNED MESSAGE----- format for GopenPGP compatibility)
+    const sigMessage = await openpgp.createCleartextMessage({ text: plaintext });
     const signature = await openpgp.sign({
       message: sigMessage,
       signingKeys: privateKey,
+      config: GOPENPGP_COMPAT,
     });
 
     return { encrypted, signature };
@@ -126,7 +133,7 @@ export async function encryptSymmetric(plaintext, passphrase) {
     const encrypted = await openpgp.encrypt({
       message,
       passwords: [passphrase],
-      config: { preferredSymmetricAlgorithm: openpgp.enums.symmetric.aes256 },
+      config: { ...GOPENPGP_COMPAT, preferredSymmetricAlgorithm: openpgp.enums.symmetric.aes256 },
     });
     return encrypted;
   } catch (err) {
@@ -249,7 +256,7 @@ export async function encryptPGPMessage(plaintext, armoredPrivKey) {
     const encrypted = await openpgp.encrypt({
       message,
       encryptionKeys: publicKey,
-      signingKeys: privateKey,
+      config: GOPENPGP_COMPAT,
     });
     return encrypted;
   } catch (err) {
@@ -269,6 +276,7 @@ export async function encryptForPublicKey(plaintext, armoredPubKey) {
     const encrypted = await openpgp.encrypt({
       message,
       encryptionKeys: publicKey,
+      config: GOPENPGP_COMPAT,
     });
     return encrypted;
   } catch (err) {
@@ -296,12 +304,15 @@ export async function signPGPMessage(plaintext, armoredPrivKey, { detached = fal
       }
     }
 
-    const message = await openpgp.createMessage({ text: plaintext });
     if (detached) {
-      const signature = await openpgp.sign({ message, signingKeys: privateKey, detached: true });
+      const message = await openpgp.createMessage({ text: plaintext });
+      const signature = await openpgp.sign({ message, signingKeys: privateKey, detached: true, config: GOPENPGP_COMPAT });
       return signature;
     }
-    const signature = await openpgp.sign({ message, signingKeys: privateKey });
+    // Use createCleartextMessage to produce -----BEGIN PGP SIGNED MESSAGE----- format
+    // (createMessage produces -----BEGIN PGP MESSAGE----- which GopenPGP can't verify)
+    const cleartextMsg = await openpgp.createCleartextMessage({ text: plaintext });
+    const signature = await openpgp.sign({ message: cleartextMsg, signingKeys: privateKey, config: GOPENPGP_COMPAT });
     return signature;
   } catch (err) {
     console.warn("[PGP] Signing failed:", err.message);

@@ -119,7 +119,7 @@ export default function OfferCreation({ initialType="buy" }) {
   }, [showAvatarMenu]);
 
   const initForm = ()=>({amtFixed:MIN_SATS,
-    selectedMethodIds:[],premium:"0",instantMatch:false,noNewUsers:false});
+    selectedMethodIds:[],premium:"0",instantMatch:false,noNewUsers:false,experienceLevel:""});
   const [form, setForm] = useState(initForm());
 
   const isSell = type==="sell";
@@ -282,6 +282,7 @@ export default function OfferCreation({ initialType="buy" }) {
             paymentData,
             returnAddress,
             ...(form.instantMatch ? { instantTradeCriteria: { minReputation: form.noNewUsers ? 0.5 : -1, minTrades: form.noNewUsers ? 1 : 0, badges: [] } } : {}),
+            ...(form.experienceLevel ? { experienceLevelCriteria: form.experienceLevel } : {}),
           });
           const offerData = await offerRes.json().catch(()=>null);
           if(!offerRes.ok){
@@ -732,7 +733,7 @@ export default function OfferCreation({ initialType="buy" }) {
                     pointerEvents: !form.instantMatch ? "none" : "auto",
                     cursor: !form.instantMatch ? "not-allowed" : "pointer",
                   }}
-                  onClick={()=>setF("noNewUsers",!form.noNewUsers)}>
+                  onClick={()=>setForm(f=>({...f, noNewUsers:!f.noNewUsers, ...((!f.noNewUsers && f.experienceLevel==="newUsersOnly") ? {experienceLevel:""} : {})}))}>
                   <div className="check-box" style={{
                     border:`2px solid ${form.noNewUsers?"var(--primary)":"var(--black-10)"}`,
                     background:form.noNewUsers?"var(--primary-mild)":"var(--surface)"}}>
@@ -746,6 +747,43 @@ export default function OfferCreation({ initialType="buy" }) {
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* ── EXPERIENCE LEVEL FILTER (sell only) ── */}
+          {step===0&&isSell&&(
+            <div className="card" style={{marginBottom:16}}>
+              <div className="check-row"
+                onClick={()=>setForm(f=>({...f, experienceLevel: f.experienceLevel ? "" : "experiencedUsersOnly"}))}>
+                <div className="check-box" style={{
+                  border:`2px solid ${form.experienceLevel?"var(--primary)":"var(--black-10)"}`,
+                  background:form.experienceLevel?"var(--primary-mild)":"var(--surface)"}}>
+                  {form.experienceLevel&&"✓"}
+                </div>
+                <div>
+                  <div style={{fontSize:".8rem",fontWeight:700}}>Filter by experience level</div>
+                  <div style={{fontSize:".7rem",color:"var(--black-65)",fontWeight:500}}>
+                    Only accept trades from buyers matching your criteria
+                  </div>
+                </div>
+              </div>
+              {form.experienceLevel&&(
+                <div style={{marginTop:10,marginLeft:32,display:"flex",flexDirection:"column",gap:8}}>
+                  {[["experiencedUsersOnly","Experienced users only"],["newUsersOnly","New users only (< 4 trades)"]].map(([val,label])=>(
+                    <div key={val} className="check-row" style={{cursor:"pointer"}}
+                      onClick={()=>setForm(f=>({...f, experienceLevel:val, ...(val==="newUsersOnly"&&f.noNewUsers ? {noNewUsers:false} : {})}))}>
+                      <div style={{
+                        width:16,height:16,borderRadius:"50%",
+                        border:`2px solid ${form.experienceLevel===val?"var(--primary)":"var(--black-10)"}`,
+                        background:form.experienceLevel===val?"var(--primary)":"var(--surface)",
+                        display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        {form.experienceLevel===val&&<div style={{width:6,height:6,borderRadius:"50%",background:"#fff"}}/>}
+                      </div>
+                      <span style={{fontSize:".78rem",fontWeight:600}}>{label}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -781,6 +819,7 @@ export default function OfferCreation({ initialType="buy" }) {
                   ["Currencies", offerCurrencies.join(", ")||"—"],
                   ...(!isSell?[["Instant Match", form.instantMatch?"⚡ Enabled":"Off"]]:[] ),
                   ...(form.noNewUsers?[["No new users", "On"]]:[] ),
+                  ...(form.experienceLevel?[["Experience filter", form.experienceLevel==="newUsersOnly"?"New users only":"Experienced users only"]]:[] ),
                 ].map(([k,v])=>(
                   <div key={k} className="review-row">
                     <span className="rk">{k}</span>
