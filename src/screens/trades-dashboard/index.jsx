@@ -537,6 +537,7 @@ export default function TradesDashboard() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const [userPMs, setUserPMs] = useState(null); // Decrypted user payment methods for match acceptance
+  const profileCacheRef = useRef(new Map());   // userId → { data, ts } — avoids re-fetching profiles every cycle
 
   // ── Tab scaling: shrink tabs proportionally to fit viewport ──
   const tabsRef = useRef(null);
@@ -590,112 +591,116 @@ export default function TradesDashboard() {
     return () => clearInterval(iv);
   }, []);
 
-  // ── LIVE TRADES + LIMITS ──
-  useEffect(() => {
-    if (!auth) return;
-    const peachId = auth.peachId;
+  // ── NORMALIZE HELPERS (stable across renders — only depend on auth.peachId) ──
+  const peachId = auth?.peachId;
 
-    function normalizeOffer(o) {
-      // Direction: prefer _direction tag (set from v069 endpoint), fall back to type field
-      const rawType = (o.type ?? o.offerType ?? '').toLowerCase();
-      const isBuy = o._direction === 'buy' || rawType === 'bid' || rawType === 'buy';
-      // Extract first fiat price — v1 uses `prices` object, v069 uses `priceIn{CURRENCY}` fields
-      let pricesObj = o.prices ?? {};
-      if (Object.keys(pricesObj).length === 0) {
-        // Build prices from priceIn{CURRENCY} fields (e.g. priceInEUR, priceInCHF)
-        for (const key of Object.keys(o)) {
-          if (key.startsWith('priceIn')) {
-            const cur = key.slice(7); // "priceInEUR" → "EUR"
-            if (cur && o[key] != null) pricesObj[cur] = o[key];
-          }
+  function normalizeOffer(o) {
+    // Direction: prefer _direction tag (set from v069 endpoint), fall back to type field
+    const rawType = (o.type ?? o.offerType ?? '').toLowerCase();
+    const isBuy = o._direction === 'buy' || rawType === 'bid' || rawType === 'buy';
+    // Extract first fiat price — v1 uses `prices` object, v069 uses `priceIn{CURRENCY}` fields
+    let pricesObj = o.prices ?? {};
+    if (Object.keys(pricesObj).length === 0) {
+      for (const key of Object.keys(o)) {
+        if (key.startsWith('priceIn')) {
+          const cur = key.slice(7);
+          if (cur && o[key] != null) pricesObj[cur] = o[key];
         }
       }
-      const firstCurrency = Object.keys(pricesObj)[0] ?? null;
-      const fiatAmount = firstCurrency ? String(pricesObj[firstCurrency]) : "—";
-      const currency = firstCurrency ?? "";
-      // Extract payment methods and currencies from meansOfPayment
-      const mop = o.meansOfPayment ?? {};
-      const offerCurrencies = Object.keys(mop);
-      const offerMethods = [...new Set(Object.values(mop).flat())];
-      // Amount: v069 uses amountSats, v1 uses amount (can be array)
-      const amt = o.amountSats ?? (Array.isArray(o.amount) ? o.amount[0] : (o.amount ?? 0));
-      // Status: tradeStatusNew overrides tradeStatus when present (matches mobile app)
-      const status = o.tradeStatusNew ?? o.tradeStatus ?? o.status ?? "unknown";
-      return {
-        id: o.id,
-        tradeId: formatTradeId(o.id, "offer"),
-        kind: "offer",
-        direction: isBuy ? "buy" : "sell",
-        amount: amt,
-        premium: o.premium ?? 0,
-        fiatAmount,
-        currency,
-        prices: pricesObj,
-        tradeStatus: status,
-        createdAt: new Date(o.creationDate ?? Date.now()),
-        methods: offerMethods.length > 0 ? offerMethods : (o.paymentMethods ?? []),
-        currencies: offerCurrencies.length > 0 ? offerCurrencies : (o.currencies ?? []),
-      };
     }
+    const firstCurrency = Object.keys(pricesObj)[0] ?? null;
+    const fiatAmount = firstCurrency ? String(pricesObj[firstCurrency]) : "—";
+    const currency = firstCurrency ?? "";
+    const mop = o.meansOfPayment ?? {};
+    const offerCurrencies = Object.keys(mop);
+    const offerMethods = [...new Set(Object.values(mop).flat())];
+    const amt = o.amountSats ?? (Array.isArray(o.amount) ? o.amount[0] : (o.amount ?? 0));
+    const status = o.tradeStatusNew ?? o.tradeStatus ?? o.status ?? "unknown";
+    return {
+      id: o.id,
+      tradeId: formatTradeId(o.id, "offer"),
+      kind: "offer",
+      direction: isBuy ? "buy" : "sell",
+      amount: amt,
+      premium: o.premium ?? 0,
+      fiatAmount,
+      currency,
+      prices: pricesObj,
+      tradeStatus: status,
+      createdAt: new Date(o.creationDate ?? Date.now()),
+      methods: offerMethods.length > 0 ? offerMethods : (o.paymentMethods ?? []),
+      currencies: offerCurrencies.length > 0 ? offerCurrencies : (o.currencies ?? []),
+    };
+  }
 
-    // Normalize a counterparty offer where the current user has performed a trade request
-    function normalizeSentRequest(o, offerType) {
-      // Direction is inverted: if we requested on a buyOffer, we are selling
-      const userDirection = offerType === "buyOffer" ? "sell" : "buy";
-      const mop = o.meansOfPayment ?? {};
-      const offerCurrencies = Object.keys(mop);
-      const offerMethods = [...new Set(Object.values(mop).flat())];
-      const amt = o.amountSats ?? (Array.isArray(o.amount) ? o.amount[0] : (o.amount ?? 0));
-      return {
-        id: o.id,
-        tradeId: formatTradeId(o.id, "offer"),
-        kind: "sentRequest",
-        direction: userDirection,
-        amount: amt,
-        premium: o.premium ?? 0,
-        fiatAmount: "—",
-        currency: offerCurrencies[0] ?? "",
-        tradeStatus: "tradeRequestSent",
-        createdAt: new Date(o.creationDate ?? Date.now()),
-        methods: offerMethods,
-        currencies: offerCurrencies,
-        _offerType: offerType,
-        _offerId: o.id,
-        _tradeRequestData: null, // populated after fetching details
-      };
-    }
+  function normalizeSentRequest(o, offerType) {
+    const userDirection = offerType === "buyOffer" ? "sell" : "buy";
+    const mop = o.meansOfPayment ?? {};
+    const offerCurrencies = Object.keys(mop);
+    const offerMethods = [...new Set(Object.values(mop).flat())];
+    const amt = o.amountSats ?? (Array.isArray(o.amount) ? o.amount[0] : (o.amount ?? 0));
+    return {
+      id: o.id,
+      tradeId: formatTradeId(o.id, "offer"),
+      kind: "sentRequest",
+      direction: userDirection,
+      amount: amt,
+      premium: o.premium ?? 0,
+      fiatAmount: "—",
+      currency: offerCurrencies[0] ?? "",
+      tradeStatus: "tradeRequestSent",
+      createdAt: new Date(o.creationDate ?? Date.now()),
+      methods: offerMethods,
+      currencies: offerCurrencies,
+      _offerType: offerType,
+      _offerId: o.id,
+      _tradeRequestData: null,
+    };
+  }
 
-    function normalizeContract(c) {
-      const rawType = (c.type ?? '').toLowerCase();
-      const isBuyer = rawType === 'bid' || rawType === 'buy'
-        || (c.buyer?.id ?? c.buyerId) === peachId;
-      return {
-        id: c.id,
-        tradeId: formatTradeId(c.id),
-        kind: "contract",
-        direction: isBuyer ? "buy" : "sell",
-        amount: c.amount ?? 0,
-        premium: c.premium ?? 0,
-        fiatAmount: c.price != null ? String(c.price) : "—",
-        currency: c.currency ?? "",
-        tradeStatus: c.tradeStatus ?? c.status ?? "unknown",
-        createdAt: new Date(c.creationDate ?? Date.now()),
-        unread: c.unreadMessages ?? 0,
-      };
-    }
+  function normalizeContract(c) {
+    const rawType = (c.type ?? '').toLowerCase();
+    const isBuyer = rawType === 'bid' || rawType === 'buy'
+      || (c.buyer?.id ?? c.buyerId) === peachId;
+    return {
+      id: c.id,
+      tradeId: formatTradeId(c.id),
+      kind: "contract",
+      direction: isBuyer ? "buy" : "sell",
+      amount: c.amount ?? 0,
+      premium: c.premium ?? 0,
+      fiatAmount: c.price != null ? String(c.price) : "—",
+      currency: c.currency ?? "",
+      tradeStatus: c.tradeStatus ?? c.status ?? "unknown",
+      createdAt: new Date(c.creationDate ?? Date.now()),
+      unread: c.unreadMessages ?? 0,
+    };
+  }
 
-    async function fetchTradesAndLimits() {
+  // ── FAST TIER: Core data (every 15s) ──
+  // Fetches: /offers/summary (once, shared), /contracts/summary,
+  //          /v069/buyOffer?ownOffers=true, /v069/user/{peachId}/offers
+  useEffect(() => {
+    if (!auth) return;
+
+    async function fetchCore() {
+      const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
+      const hdrs = { Authorization: `Bearer ${auth.token}` };
       try {
-        const [offersRes, contractsRes, limitRes] = await Promise.all([
+        const [offersRes, contractsRes, v069BuyRes, ownOffersRes] = await Promise.all([
           get('/offers/summary'),
           get('/contracts/summary'),
-          get('/user/tradingLimit'),
+          fetch(`${v069Base}/buyOffer?ownOffers=true`, { headers: hdrs }),
+          fetch(`${v069Base}/user/${auth.peachId}/offers`, { headers: hdrs }),
         ]);
-        const [offersData, contractsData, limitData] = await Promise.all([
+        const [offersData, contractsData, v069BuyData, ownOffersData] = await Promise.all([
           offersRes.ok ? offersRes.json() : [],
           contractsRes.ok ? contractsRes.json() : [],
-          limitRes.ok ? limitRes.json() : null,
+          v069BuyRes.ok ? v069BuyRes.json() : [],
+          ownOffersRes.ok ? ownOffersRes.json() : null,
         ]);
+
+        // ── Build liveItems (Active + History tabs) from v1 summaries ──
         const offersArr = Array.isArray(offersData) ? offersData : (offersData?.offers ?? []);
         const contractsArr = Array.isArray(contractsData) ? contractsData : (contractsData?.contracts ?? []);
         const items = [
@@ -704,64 +709,135 @@ export default function TradesDashboard() {
         ];
         setCache("trades-items", items);
         setLiveItems(items);
-        if (limitData) setLiveLimit(limitData);
+
+        // ── Build pending (Pending tab) from v069 buy offers + /user/{id}/offers ──
+        const v069BuyArr = Array.isArray(v069BuyData) ? v069BuyData : (v069BuyData?.offers ?? []);
+        v069BuyArr.forEach(o => { o._direction = 'buy'; });
+
+        // Own sell offers from /user/{peachId}/offers (replaces broken sellOffer?ownOffers=true)
+        const ownSellArr = ownOffersData?.sellOffers ?? [];
+        ownSellArr.forEach(o => { o._direction = 'sell'; });
+        // Cross-reference sell offer status from v1 summary (since /user/{id}/offers lacks tradeStatus)
+        const v1StatusById = new Map(offersArr.map(o => [o.id, o.tradeStatusNew ?? o.tradeStatus ?? o.status]));
+        ownSellArr.forEach(o => {
+          if (!o.tradeStatus && !o.tradeStatusNew) {
+            o.tradeStatus = v1StatusById.get(o.id) ?? "searchingForPeer";
+          }
+        });
+
+        // Also pull own buy offers from the /user/{id}/offers response as backup
+        const ownBuyBackup = ownOffersData?.buyOffers ?? [];
+
+        // Merge and deduplicate by ID, preferring v069 buyOffer data (has full tradeStatus)
+        const byId = new Map();
+        offersArr.forEach(o => byId.set(o.id, o));          // v1 base layer
+        ownBuyBackup.forEach(o => { o._direction = 'buy'; byId.set(o.id, o); }); // backup buys
+        ownSellArr.forEach(o => byId.set(o.id, o));         // sell offers (with cross-ref status)
+        v069BuyArr.forEach(o => byId.set(o.id, o));         // v069 buy offers win (best data)
+
+        const all = [...byId.values()].map(normalizeOffer);
+        const pending = all.filter(i => PENDING_STATUSES.has(i.tradeStatus));
+
+        // Merge with existing enrichment data (sent requests, matches) from slow tier
+        setLivePending(prev => {
+          if (!prev) { setCache("trades-pending", pending); return pending; }
+          // Preserve enrichment data (matches, sentRequests) from previous slow-tier fetch
+          const enrichMap = new Map();
+          prev.forEach(p => {
+            if (p.kind === "sentRequest" || p.matches || p.matchCount) enrichMap.set(p.id, p);
+          });
+          const merged = pending.map(p => {
+            const enriched = enrichMap.get(p.id);
+            if (enriched && enriched.kind === "offer") {
+              return { ...p, matches: enriched.matches, matchCount: enriched.matchCount };
+            }
+            return p;
+          });
+          // Re-append sent requests from previous enrichment (they only come from slow tier)
+          const sentRequests = prev.filter(p => p.kind === "sentRequest");
+          const result = [...merged, ...sentRequests];
+          setCache("trades-pending", result);
+          return result;
+        });
       } catch {} finally {
         setTradesLoading(false);
       }
     }
 
-    // Fetch pending offers from both V1 and V069
-    async function fetchPendingOffers() {
+    fetchCore();
+    const iv = setInterval(fetchCore, 15_000);
+    return () => clearInterval(iv);
+  }, [refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── SLOW TIER: Enrichments (every 60s) ──
+  // Fetches: browse endpoints (sent requests), match/trade-request details,
+  //          user profiles (cached), selfUser PMs, tradingLimit
+  useEffect(() => {
+    if (!auth) return;
+
+    // Helper: fetch user profile with 5-minute cache
+    function getCachedProfile(userId) {
+      const cached = profileCacheRef.current.get(userId);
+      if (cached && Date.now() - cached.ts < 5 * 60_000) return Promise.resolve(cached.data);
+      return get(`/user/${userId}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => { profileCacheRef.current.set(userId, { data, ts: Date.now() }); return data; })
+        .catch(() => null);
+    }
+
+    async function fetchEnrichments() {
+      const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
+      const hdrs = { Authorization: `Bearer ${auth.token}` };
+
+      // ── Trading limit + PMs (rarely change) ──
+      const [limitRes] = await Promise.all([
+        get('/user/tradingLimit').catch(() => null),
+        // Fetch PMs in parallel
+        (async () => {
+          if (!auth?.pgpPrivKey) return;
+          try {
+            const res = await fetch(`${v069Base}/selfUser`, { headers: hdrs });
+            if (!res.ok) return;
+            const data = await res.json();
+            const profile = data?.user ?? data;
+            if (!profile || isApiError(profile)) return;
+            const pms = await extractPMsFromProfile(profile, auth.pgpPrivKey);
+            if (pms) setUserPMs(pms);
+          } catch (err) {
+            console.warn("[Trades] PM fetch failed:", err.message);
+          }
+        })(),
+      ]);
+      if (limitRes?.ok) {
+        const limitData = await limitRes.json();
+        if (limitData) setLiveLimit(limitData);
+      }
+
+      // ── Browse marketplace for sent trade requests ──
       try {
-        const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
-        const hdrs = { Authorization: `Bearer ${auth.token}` };
-        const [v1Res, v069BuyRes, v069SellRes, browseBuyRes, browseSellRes] = await Promise.all([
-          get('/offers/summary'),
-          fetch(`${v069Base}/buyOffer?ownOffers=true`, { headers: hdrs }),
-          fetch(`${v069Base}/sellOffer?ownOffers=true`, { headers: hdrs }),
+        const [browseBuyRes, browseSellRes] = await Promise.all([
           fetch(`${v069Base}/buyOffer?ownOffers=false`, { headers: hdrs }),
           fetch(`${v069Base}/sellOffer?ownOffers=false`, { headers: hdrs }),
         ]);
-        const [v1Data, v069BuyData, v069SellData, browseBuyData, browseSellData] = await Promise.all([
-          v1Res.ok ? v1Res.json() : [],
-          v069BuyRes.ok ? v069BuyRes.json() : [],
-          v069SellRes.ok ? v069SellRes.json() : [],
+        const [browseBuyData, browseSellData] = await Promise.all([
           browseBuyRes.ok ? browseBuyRes.json() : [],
           browseSellRes.ok ? browseSellRes.json() : [],
         ]);
-        const v1Arr = Array.isArray(v1Data) ? v1Data : (v1Data?.offers ?? []);
-        const v069BuyArr = Array.isArray(v069BuyData) ? v069BuyData : (v069BuyData?.offers ?? []);
-        const v069SellArr = Array.isArray(v069SellData) ? v069SellData : (v069SellData?.offers ?? []);
-        // Tag direction on v069 offers (they don't have a type field)
-        v069BuyArr.forEach(o => { o._direction = 'buy'; });
-        v069SellArr.forEach(o => { o._direction = 'sell'; });
-        // Merge and deduplicate by ID, preferring V069 data
-        const byId = new Map();
-        v1Arr.forEach(o => byId.set(o.id, o));
-        v069BuyArr.forEach(o => byId.set(o.id, o));
-        v069SellArr.forEach(o => byId.set(o.id, o));
-        const all = [...byId.values()].map(normalizeOffer);
-        // Keep only items with pending statuses
-        const pending = all.filter(i => PENDING_STATUSES.has(i.tradeStatus));
-
-        // ── Sent trade requests (offers where user performed a trade request) ──
         const browseBuyArr = Array.isArray(browseBuyData) ? browseBuyData : (browseBuyData?.offers ?? []);
         const browseSellArr = Array.isArray(browseSellData) ? browseSellData : (browseSellData?.offers ?? []);
         const sentBuy = browseBuyArr.filter(o => o.hasPerformedTradeRequest).map(o => normalizeSentRequest(o, "buyOffer"));
         const sentSell = browseSellArr.filter(o => o.hasPerformedTradeRequest).map(o => normalizeSentRequest(o, "sellOffer"));
         const sentRequests = [...sentBuy, ...sentSell];
 
-        // Fetch trade request details + check unread for each sent request
+        // Fetch trade request details + unread for each sent request
         if (sentRequests.length > 0) {
           await Promise.all(sentRequests.map(async (sr) => {
             try {
-              // Fetch trade request details (for symmetric key etc.)
               const detailRes = await fetch(`${v069Base}/${sr._offerType}/${sr._offerId}/tradeRequestPerformed/`, { headers: hdrs });
               if (detailRes.ok) {
                 const detailData = await detailRes.json();
                 sr._tradeRequestData = Array.isArray(detailData) ? detailData[0] : detailData;
               }
-              // Probe for unread messages from offer owner
               const chatRes = await fetch(`${v069Base}/${sr._offerType}/${sr._offerId}/tradeRequestPerformed/chat`, { headers: hdrs });
               if (chatRes.ok) {
                 const chatData = await chatRes.json();
@@ -771,99 +847,80 @@ export default function TradesDashboard() {
             } catch { /* silent */ }
           }));
         }
-        pending.push(...sentRequests);
 
-        // Fetch matches/trade requests depending on status
-        const matchable = pending.filter(o => o.tradeStatus === "hasMatchesAvailable" || o.tradeStatus === "acceptTradeRequest");
-        if (matchable.length > 0) {
-          const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
-          const matchResults = await Promise.all(
-            matchable.map(async (offer) => {
-              try {
-                if (offer.tradeStatus === "acceptTradeRequest") {
-                  // v069: fetch trade requests received
-                  const offerType = offer.direction === "buy" ? "buyOffer" : "sellOffer";
-                  const res = await fetch(`${v069Base}/${offerType}/${offer.id}/tradeRequestReceived/`, {
-                    headers: { Authorization: `Bearer ${auth.token}` },
-                  });
-                  if (!res.ok) return { offerId: offer.id, matches: [], totalMatches: 0 };
-                  const data = await res.json();
-                  const requests = Array.isArray(data) ? data : (data?.tradeRequests ?? []);
-                  console.log("[Trades] Trade requests for", offer.id, ":", requests);
-                  // Fetch public profiles for each requester
-                  const userProfiles = await Promise.all(
-                    requests.map(tr =>
-                      tr.userId
-                        ? get(`/user/${tr.userId}`).then(r => r.ok ? r.json() : null).catch(() => null)
-                        : Promise.resolve(null)
-                    )
-                  );
-                  return {
-                    offerId: offer.id,
-                    matches: requests.map((tr, i) => transformTradeRequest(tr, offer, userProfiles[i])),
-                    totalMatches: requests.length,
-                  };
-                } else {
-                  // v1: fetch system matches
-                  const res = await get(`/offer/${offer.id}/matches?page=0&size=21&sortBy=bestReputation`);
-                  if (!res.ok) return { offerId: offer.id, matches: [], totalMatches: 0 };
-                  const data = await res.json();
-                  return {
-                    offerId: offer.id,
-                    matches: (data.matches ?? []).map(transformMatch),
-                    totalMatches: data.totalMatches ?? 0,
-                  };
+        // ── Fetch matches/trade requests for matchable pending offers ──
+        // Read current pending state to find matchable offers
+        setLivePending(prev => {
+          const currentPending = prev ?? [];
+          const ownOffers = currentPending.filter(o => o.kind === "offer");
+          const matchable = ownOffers.filter(o => o.tradeStatus === "hasMatchesAvailable" || o.tradeStatus === "acceptTradeRequest");
+
+          if (matchable.length > 0) {
+            // Fire match fetches asynchronously, then update state when done
+            Promise.all(
+              matchable.map(async (offer) => {
+                try {
+                  if (offer.tradeStatus === "acceptTradeRequest") {
+                    const offerType = offer.direction === "buy" ? "buyOffer" : "sellOffer";
+                    const res = await fetch(`${v069Base}/${offerType}/${offer.id}/tradeRequestReceived/`, { headers: hdrs });
+                    if (!res.ok) return { offerId: offer.id, matches: [], totalMatches: 0 };
+                    const data = await res.json();
+                    const requests = Array.isArray(data) ? data : (data?.tradeRequests ?? []);
+                    const userProfiles = await Promise.all(
+                      requests.map(tr => tr.userId ? getCachedProfile(tr.userId) : Promise.resolve(null))
+                    );
+                    return {
+                      offerId: offer.id,
+                      matches: requests.map((tr, i) => transformTradeRequest(tr, offer, userProfiles[i])),
+                      totalMatches: requests.length,
+                    };
+                  } else {
+                    const res = await get(`/offer/${offer.id}/matches?page=0&size=21&sortBy=bestReputation`);
+                    if (!res.ok) return { offerId: offer.id, matches: [], totalMatches: 0 };
+                    const data = await res.json();
+                    return {
+                      offerId: offer.id,
+                      matches: (data.matches ?? []).map(transformMatch),
+                      totalMatches: data.totalMatches ?? 0,
+                    };
+                  }
+                } catch {
+                  return { offerId: offer.id, matches: [], totalMatches: 0 };
                 }
-              } catch {
-                return { offerId: offer.id, matches: [], totalMatches: 0 };
-              }
-            })
-          );
-          const matchMap = new Map(matchResults.map(r => [r.offerId, r]));
-          const enriched = pending.map(o => {
-            const m = matchMap.get(o.id);
-            if (m) return { ...o, matchCount: m.totalMatches, matches: m.matches };
-            return o;
-          });
-          setCache("trades-pending", enriched);
-          setLivePending(enriched);
-        } else {
-          setCache("trades-pending", pending);
-          setLivePending(pending);
-        }
+              })
+            ).then(matchResults => {
+              const matchMap = new Map(matchResults.map(r => [r.offerId, r]));
+              setLivePending(prev2 => {
+                const base = (prev2 ?? []).filter(p => p.kind !== "sentRequest");
+                const enriched = base.map(o => {
+                  const m = matchMap.get(o.id);
+                  if (m) return { ...o, matchCount: m.totalMatches, matches: m.matches };
+                  return o;
+                });
+                const result = [...enriched, ...sentRequests];
+                setCache("trades-pending", result);
+                return result;
+              });
+            });
+
+            // Return current state with sent requests appended (matches will arrive async)
+            const withSent = [...ownOffers, ...sentRequests];
+            setCache("trades-pending", withSent);
+            return withSent;
+          }
+
+          // No matchable offers — just merge sent requests
+          const result = [...ownOffers, ...sentRequests];
+          setCache("trades-pending", result);
+          return result;
+        });
       } catch {}
     }
 
-    // Fetch user's payment methods (needed for match acceptance crypto)
-    async function fetchUserPMs() {
-      if (!auth?.pgpPrivKey) return;
-      try {
-        const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
-        const res = await fetch(`${v069Base}/selfUser`, {
-          headers: { Authorization: `Bearer ${auth.token}` },
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        const profile = data?.user ?? data;
-        if (!profile || isApiError(profile)) return;
-        const pms = await extractPMsFromProfile(profile, auth.pgpPrivKey);
-        if (pms) setUserPMs(pms);
-      } catch (err) {
-        console.warn("[Trades] PM fetch failed:", err.message);
-      }
-    }
-
-    fetchTradesAndLimits();
-    fetchPendingOffers();
-    fetchUserPMs();
-  }, [refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Auto-refresh trades every 15s when logged in ──
-  useEffect(() => {
-    if (!auth) return;
-    const iv = setInterval(() => setRefreshKey(k => k + 1), 15_000);
+    fetchEnrichments();
+    const iv = setInterval(fetchEnrichments, 60_000);
     return () => clearInterval(iv);
-  }, [auth]);
+  }, [refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleRefreshTrades() {
     clearCache("trades-items");

@@ -40,6 +40,7 @@ These are completed and kept for reference.
 - ✅ **4.2 About Peach** — static branding header with PeachIcon + version `v0.1.0`, description card, links section (Website, Twitter/X, Telegram, GitHub) opening in new tabs via `SettingsRow` + `IconExternalLink`. (`peach-settings.jsx`)
 - ✅ **4.3 Block/Unblock Users** — PeachID input + Block button, block via `PUT /user/:userId/block`, unblock via `DELETE /user/:userId/block`. List persisted in localStorage (no server-side list endpoint). Mock data when logged out. Added `put()` method to `useApi.js`. (`peach-settings.jsx`, `useApi.js`)
 - ✅ **4.4 Network Fees Save** — wired "Fee Rate Set" button to `PATCH /user` with `{ feeRate }`. Computes rate from selected tier or custom value. Loading state + error handling. (`peach-settings.jsx`)
+- ✅ **Trades Dashboard fetch optimization** — Two-tier refresh: `fetchCore()` (15s) does 4 parallel calls (`/offers/summary`, `/contracts/summary`, `/v069/buyOffer?ownOffers=true`, `/v069/user/{id}/offers`); `fetchEnrichments()` (60s) handles browse endpoints, sent requests, matches, PMs, tradingLimit. Eliminated redundant `/offers/summary` call, replaced broken `sellOffer?ownOffers=true` with `/user/{id}/offers`, added 5-min profile cache. (`trades-dashboard/index.jsx`)
 
 ---
 
@@ -79,10 +80,7 @@ These are completed and kept for reference.
 
 ### ~~3.2 Offer Edit / Withdraw~~ ✅
 
-### 3.3 Offer Republish
-- **File**: `src/screens/peach-trades-dashboard.jsx`
-- **Endpoint**: `POST /v1/offer/:id/republish`
-- **UI**: Add "Republish" button on expired/cancelled offers in trade history
+### ~~3.3 Offer Republish~~ ✅
 
 ### 3.4 Instant Trade Check + Execute
 - **File**: `src/screens/peach-trades-dashboard.jsx` or `peach-market-view.jsx`
@@ -286,7 +284,7 @@ Items that don't add new API wiring but improve existing screens. Organized by p
 | 19 | 4.9 Custom Node | ~0.5 session | Settings sub-screen |
 | 20 | 4.11 Referrals | ~1 session | Wire mock to real data |
 | 21 | 4.12 My Profile (settings) | ~0.5 session | Wire referral, daily limits, memberSince |
-| 22 | 3.3–3.4 Offer Republish + Instant Trade | ~1 session | Advanced offer features |
+| 22 | ~~3.3~~ + 3.4 Instant Trade | ~0.5 session | Advanced offer features (3.3 done) |
 | 23 | 3.8 Create Multiple Offers | ~1 session | Offer creation enhancement |
 | 24 | `useApi()` v069 param support | ~0.5 session | Engineering cleanup |
 | — | UI fixes & polish | Ongoing | See prioritized tiers below |

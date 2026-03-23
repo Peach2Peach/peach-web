@@ -280,7 +280,10 @@ export default function TradeExecution() {
         const res = await get('/contract/' + routeId);
         if (!res.ok) return;
         const c = await res.json();
-        if (c.tradeStatus && c.tradeStatus !== signingStatusRef.current) {
+        if (c.tradeStatus && c.tradeStatus !== signingStatusRef.current
+            // Don't regress from refundOrReviveRequired back to tradeCanceled
+            && !(signingStatusRef.current === "refundOrReviveRequired"
+              && (c.tradeStatus === "tradeCanceled" || c.tradeStatus === "confirmCancelation"))) {
           setLiveContract(prev => prev ? { ...prev, tradeStatus: c.tradeStatus } : prev);
           setSigningModal(null);
           if (pendingTaskType) {
@@ -303,6 +306,10 @@ export default function TradeExecution() {
         const c = await res.json();
         const newStatus = c.tradeStatus ?? c.status;
         if (!newStatus || newStatus === liveContract.tradeStatus) return;
+        // Don't regress from refundOrReviveRequired back to tradeCanceled —
+        // refundOrReviveRequired is a post-cancellation status, not a separate state
+        if (liveContract.tradeStatus === "refundOrReviveRequired"
+            && (newStatus === "tradeCanceled" || newStatus === "confirmCancelation")) return;
         const isBuyer = (c.buyer?.id ?? c.buyerId) === peachId;
         setLiveContract(prev => prev ? {
           ...prev,
@@ -936,7 +943,7 @@ export default function TradeExecution() {
                   } else if (action === "republish_offer") {
                     setActionError(null);
                     try {
-                      const offerId = contract.offerId ?? contract.id;
+                      const offerId = String(contract.id).split("-")[0];
                       const res = await post('/offer/' + offerId + '/revive');
                       if (res.ok) {
                         const data = await res.json().catch(() => ({}));
@@ -954,7 +961,7 @@ export default function TradeExecution() {
                   } else if (action === "refund_escrow") {
                     setActionError(null);
                     try {
-                      const offerId = contract.offerId ?? contract.id;
+                      const offerId = String(contract.id).split("-")[0];
                       await createTask(post, "refund", { offerId });
                       savePendingTask(routeId, "refund");
                       setPendingTaskType("refund");
@@ -1009,8 +1016,8 @@ export default function TradeExecution() {
               )}
             </div>
 
-            {/* Payment details (buyer sees seller's payment info, or vice versa) */}
-            {paymentDetails && (
+            {/* Payment details (buyer sees seller's payment info, or vice versa) — hidden after cancellation */}
+            {paymentDetails && !["tradeCanceled", "confirmCancelation", "refundOrReviveRequired"].includes(status) && (
               <div className="panel-section">
                 <div className="panel-section-title">Payment Details</div>
                 {status === "paymentRequired" && role === "buyer" && (
@@ -1027,8 +1034,8 @@ export default function TradeExecution() {
               </div>
             )}
 
-            {/* Payment details decryption failed — fallback message */}
-            {!paymentDetails && paymentDetailsError && (
+            {/* Payment details decryption failed — fallback message (hidden after cancellation) */}
+            {!paymentDetails && paymentDetailsError && !["tradeCanceled", "confirmCancelation", "refundOrReviveRequired"].includes(status) && (
               <div className="panel-section">
                 <div className="panel-section-title">Payment Details</div>
                 <div style={{
