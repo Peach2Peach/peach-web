@@ -217,6 +217,7 @@ Remaining items (5.3–5.5) are blocked on backend/mobile teams.
 | Desktop token: payment confirmation | Backend team — desktop connection auth token returns 401 on `POST /v1/contract/:id/payment/confirm` | All 3 variants tested (empty body, with releaseAddress, with/without Bearer prefix) return `{"error":"UNAUTHORIZED"}`. GET endpoints work fine with the same token. The desktop token needs write permission for payment/confirm so buyers can confirm payment from the web app. Currently delegated to mobile via `MobileSigningModal`. |
 | Blocked users list sync | Backend team — needs `GET /user/blocked` endpoint | Web + mobile would show consistent blocked users list. Currently block/unblock works server-side, but there's no way to fetch the full list of who you've blocked. |
 | Network Fees preference sync | Backend team (nice-to-have) | `feeRate` is saved server-side via `PATCH /user` and consumed by the mobile app when signing transactions (escrow funding, wallet sends). Web app sets it as a cross-device convenience. Would benefit from loading saved preference on mount via `GET /user/me`. |
+| `sellOffer?ownOffers=true` fix | Backend team — endpoint ignores `ownOffers` param for sell offers | Resolves sell offer status blind spot, simplifies fetch in 4 screens (`trades-dashboard`, `market-view`, `offer-creation`, `useNotifications`). Full analysis in `trades-dashboard-dual-fetch-report.md`. |
 | PM decryption cross-compatibility | openpgp.js v6 ↔ GopenPGP v0.38.2 interop | 🟡 In progress — multiple incompatibilities found and partially fixed. Web→mobile PM decryption during trades still fails. See `pgp-interop-debug.md` for full status. |
 
 ---
@@ -293,6 +294,7 @@ Items that don't add new API wiring but improve existing screens. Organized by p
 
 | Item | Blocker | What it unlocks |
 |------|---------|-----------------|
+| Fix `GET /v069/sellOffer?ownOffers=true` | Backend team | Eliminates sell offer status blind spot + simplifies fetch logic in 4 screens. See `trades-dashboard-dual-fetch-report.md` |
 | 5.3 Backend endpoints (`task/create`, `pendingTasks`, `task/:id/sign`, `returnAddressIndex`) | Backend team | Real mobile signing + sell offer return address |
 | 5.4 Mobile pending tasks UI | Mobile team | End-to-end signing flow |
 | 5.5 Swap mock `createTask` for real endpoint | Needs 5.3 first | Completes signing integration |

@@ -262,6 +262,7 @@ export default function TradeExecution() {
   const [chatLoadingMore, setChatLoadingMore] = useState(false);
   const [toast, setToast] = useState(null);
   const signingStatusRef = useRef(null); // track the tradeStatus when signing modal opened
+  const sawRefundOrReviveRef = useRef(false); // once true, block regression to tradeCanceled
 
   // ── Restore pending task state from localStorage on mount ──
   useEffect(() => {
@@ -280,10 +281,11 @@ export default function TradeExecution() {
         const res = await get('/contract/' + routeId);
         if (!res.ok) return;
         const c = await res.json();
-        if (c.tradeStatus && c.tradeStatus !== signingStatusRef.current
-            // Don't regress from refundOrReviveRequired back to tradeCanceled
-            && !(signingStatusRef.current === "refundOrReviveRequired"
-              && (c.tradeStatus === "tradeCanceled" || c.tradeStatus === "confirmCancelation"))) {
+        // Block regression once refundOrReviveRequired has been seen
+        if (sawRefundOrReviveRef.current
+            && (c.tradeStatus === "tradeCanceled" || c.tradeStatus === "confirmCancelation")) return;
+        if (c.tradeStatus === "refundOrReviveRequired") sawRefundOrReviveRef.current = true;
+        if (c.tradeStatus && c.tradeStatus !== signingStatusRef.current) {
           setLiveContract(prev => prev ? { ...prev, tradeStatus: c.tradeStatus } : prev);
           setSigningModal(null);
           if (pendingTaskType) {
@@ -306,10 +308,10 @@ export default function TradeExecution() {
         const c = await res.json();
         const newStatus = c.tradeStatus ?? c.status;
         if (!newStatus || newStatus === liveContract.tradeStatus) return;
-        // Don't regress from refundOrReviveRequired back to tradeCanceled —
-        // refundOrReviveRequired is a post-cancellation status, not a separate state
-        if (liveContract.tradeStatus === "refundOrReviveRequired"
+        // Block regression once refundOrReviveRequired has been seen
+        if (sawRefundOrReviveRef.current
             && (newStatus === "tradeCanceled" || newStatus === "confirmCancelation")) return;
+        if (newStatus === "refundOrReviveRequired") sawRefundOrReviveRef.current = true;
         const isBuyer = (c.buyer?.id ?? c.buyerId) === peachId;
         setLiveContract(prev => prev ? {
           ...prev,
@@ -434,8 +436,17 @@ export default function TradeExecution() {
           newOfferId: c.newOfferId ?? null,
         });
 
-        // Auto-show republish/refund panel for refundOrReviveRequired
-        if ((c.tradeStatus ?? c.status) === "refundOrReviveRequired") {
+        // Pin refundOrReviveRequired once seen — prevents flickering from server alternation
+        const initialStatus = c.tradeStatus ?? c.status;
+        if (initialStatus === "refundOrReviveRequired") {
+          sawRefundOrReviveRef.current = true;
+          setShowPostCancel(true);
+        }
+        // Server sometimes returns tradeCanceled even when seller still has escrow to deal with
+        if (!isBuyer && !c.refunded && !c.newOfferId
+            && (initialStatus === "tradeCanceled" || initialStatus === "confirmCancelation")) {
+          sawRefundOrReviveRef.current = true;
+          setLiveContract(prev => prev ? { ...prev, tradeStatus: "refundOrReviveRequired" } : prev);
           setShowPostCancel(true);
         }
 
