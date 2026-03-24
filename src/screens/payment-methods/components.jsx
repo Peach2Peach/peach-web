@@ -1,0 +1,571 @@
+// ─── PAYMENT METHODS — SUB-COMPONENTS, CONSTANTS & HELPERS ──────────────────
+// Extracted from peach-payment-methods.jsx.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { useState } from "react";
+import { validateIBAN, validatePhone } from "../../peach-validators.js";
+
+// ── Local validators (not in peach-validators.js) ────────────────────────────
+
+export function validateHolder(raw) {
+  if (!raw || !raw.trim()) return { valid: false, error: "Account holder name is required" };
+  if (raw.trim().split(/\s+/).length < 2) return { valid: false, error: "Fill out your full name as per your bank details" };
+  return { valid: true, error: null };
+}
+
+export function makeBlurHandler(setErrors) {
+  return (fieldKey, value, validatorFn, ...extraArgs) => {
+    const result = validatorFn(value, ...extraArgs);
+    setErrors(prev => ({ ...prev, [fieldKey]: result.valid ? null : result.error }));
+    return result.valid;
+  };
+}
+
+// ── Icons ────────────────────────────────────────────────────────────────────
+
+export const IconPlus       = () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg>;
+export const IconEdit       = () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M8.5 2.5l3 3M2 9l6-6 3 3-6 6H2V9z"/></svg>;
+export const IconTrash      = () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M3 4h8M5.5 4V3a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1M4 4l.5 8h5l.5-8"/></svg>;
+export const IconCheck      = () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3,7 6,10.5 11,4"/></svg>;
+export const IconBack       = () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="10,3 5,8 10,13"/></svg>;
+
+const IconBank     = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v4M12 14v4M16 14v4"/></svg>;
+const IconWallet   = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>;
+const IconGiftCard = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18"/><path d="M12 8c-2-3-6-3-6 0s4 0 6 0c2-3 6-3 6 0s-4 0-6 0"/></svg>;
+const IconFlag     = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>;
+
+// ── FieldError ───────────────────────────────────────────────────────────────
+
+export const FieldError = ({ error }) => error
+  ? <div style={{ fontSize:".72rem", fontWeight:600, color:"#DF321F", marginTop:4 }}>{error}</div>
+  : null;
+
+// ── Constants ────────────────────────────────────────────────────────────────
+
+export const CATEGORY_META = {
+  bankTransfer:  { label: "Bank Transfer",       icon: IconBank,     description: "Traditional bank transfers" },
+  onlineWallet:  { label: "Online Wallet",        icon: IconWallet,   description: "Digital payment apps" },
+  giftCard:      { label: "Online Gift Card",     icon: IconGiftCard, description: "Prepaid gift cards" },
+  national:      { label: "National Option",      icon: IconFlag,     description: "Country-specific methods" },
+};
+
+export const CURRENCY_REGIONS = {
+  Europe:        ["EUR","CHF","GBP","SEK","NOK","DKK","PLN","CZK","HUF","ISK","RON","BGN","HRK"],
+  Global:        ["USD","DOC","LNURL","USDT","USDC"],
+  Africa:        ["NGN","KES","ZAR","GHS","TZS","UGX","XOF","XAF","EGP","MAD"],
+  Asia:          ["INR","JPY","KRW","THB","IDR","MYR","PHP","VND","SGD","HKD","TWD","BDT","PKR","LKR"],
+  "Latin America":["BRL","ARS","CLP","COP","MXN","PEN","UYU","VES","CRC","DOP","GTQ"],
+  "Middle East": ["TRY","ILS","AED","SAR","QAR","KWD","BHD","OMR","JOD"],
+  "North America":["USD","CAD"],
+  Oceania:       ["AUD","NZD","FJD"],
+};
+const ALL_REGIONS = Object.keys(CURRENCY_REGIONS);
+
+export const FALLBACK_METHODS = {
+  sepa:               { name: "SEPA",                  currencies: ["EUR","CHF"],                        category: "bankTransfer" },
+  fasterPayments:     { name: "Faster Payments",       currencies: ["GBP"],                              category: "bankTransfer" },
+  instantSepa:        { name: "SEPA Instant",          currencies: ["EUR"],                              category: "bankTransfer" },
+  revolut:            { name: "Revolut",               currencies: ["EUR","CHF","GBP","USD","SEK","NOK","DKK","PLN","CZK","HUF"], category: "onlineWallet" },
+  wise:               { name: "Wise",                  currencies: ["EUR","CHF","GBP","USD","SEK","NOK","DKK","PLN","CZK","HUF"], category: "onlineWallet" },
+  paypal:             { name: "PayPal",                currencies: ["EUR","GBP","USD","CHF"],            category: "onlineWallet" },
+  advcash:            { name: "Advcash",               currencies: ["EUR","USD"],                        category: "onlineWallet" },
+  strike:             { name: "Strike",                currencies: ["USD"],                              category: "onlineWallet" },
+  n26:                { name: "N26",                   currencies: ["EUR"],                              category: "onlineWallet" },
+  amazonGiftCard:     { name: "Amazon Gift Card",      currencies: ["EUR","GBP","USD","CHF","SEK"],      category: "giftCard" },
+  dollarOnChain:      { name: "Dollar On Chain (DOC)", currencies: ["DOC"],                              category: "onlineWallet" },
+  lnurlBtcSwap:       { name: "LNURL BTC Swap",        currencies: ["LNURL"],                            category: "onlineWallet" },
+  usdt:               { name: "USDT",                  currencies: ["USDT"],                             category: "onlineWallet" },
+  usdc:               { name: "USDC",                  currencies: ["USDC"],                             category: "onlineWallet" },
+  bizum:              { name: "Bizum",                 currencies: ["EUR"],                              category: "national" },
+  twint:              { name: "Twint",                 currencies: ["CHF"],                              category: "national" },
+  swish:              { name: "Swish",                 currencies: ["SEK"],                              category: "national" },
+  mobilePay:          { name: "MobilePay",             currencies: ["DKK","EUR"],                        category: "national" },
+  vipps:              { name: "Vipps",                 currencies: ["NOK"],                              category: "national" },
+  satispay:           { name: "Satispay",              currencies: ["EUR"],                              category: "national" },
+  mbWay:              { name: "MB Way",                currencies: ["EUR"],                              category: "national" },
+  iris:               { name: "IRIS",                  currencies: ["EUR"],                              category: "national" },
+  paylib:             { name: "Paylib",                currencies: ["EUR"],                              category: "national" },
+  verse:              { name: "Verse",                 currencies: ["EUR"],                              category: "national" },
+  blik:               { name: "BLIK",                  currencies: ["PLN"],                              category: "national" },
+};
+
+export const PHONE_PREFIX_MAP = {
+  bizum:     "+34",
+  twint:     "+41",
+  swish:     "+46",
+  mobilePay: "+45",
+  vipps:     "+47",
+  satispay:  "+39",
+  mbWay:     "+351",
+  iris:      "+30",
+  paylib:    "+33",
+  verse:     "+34",
+  blik:      "+48",
+};
+
+export const METHOD_FIELDS = {
+  sepa:           [{ key:"holder", label:"Account holder name", placeholder:"Full name" },
+                   { key:"iban",   label:"IBAN",                placeholder:"DE89 3704 0044 0532 0130 00" },
+                   { key:"bic",    label:"BIC",                 placeholder:"COBADEFFXXX", optional:true }],
+  instantSepa:    [{ key:"holder", label:"Account holder name", placeholder:"Full name" },
+                   { key:"iban",   label:"IBAN",                placeholder:"DE89 3704 0044 0532 0130 00" },
+                   { key:"bic",    label:"BIC",                 placeholder:"COBADEFFXXX", optional:true }],
+  fasterPayments: [{ key:"holder",    label:"Account holder name", placeholder:"Full name" },
+                   { key:"sortCode",  label:"Sort code",           placeholder:"12-34-56" },
+                   { key:"accountNo", label:"Account number",      placeholder:"12345678" }],
+  revolut:        [{ key:"username", label:"Revolut username or phone", placeholder:"@username or +33..." }],
+  wise:           [{ key:"email",    label:"Email or @handle",         placeholder:"you@example.com" }],
+  paypal:         [{ key:"email",    label:"PayPal email",             placeholder:"you@example.com" }],
+  advcash:        [{ key:"email",    label:"Advcash email",            placeholder:"you@example.com" }],
+  strike:         [{ key:"username", label:"Strike username",          placeholder:"@username" }],
+  n26:            [{ key:"email",    label:"N26 email or IBAN",        placeholder:"you@example.com" }],
+  amazonGiftCard: [{ key:"email",    label:"Email for gift card code", placeholder:"you@example.com" }],
+  dollarOnChain:  [{ key:"address",  label:"Wallet address",           placeholder:"0x... or RSK address" }],
+  lnurlBtcSwap:   [{ key:"lnurl",    label:"LNURL or Lightning address", placeholder:"LNURL1... or user@domain.com" }],
+  usdt:           [{ key:"address",  label:"Wallet address",           placeholder:"Network + address" },
+                   { key:"network",  label:"Network",                  placeholder:"Ethereum, Tron, etc." }],
+  usdc:           [{ key:"address",  label:"Wallet address",           placeholder:"Network + address" },
+                   { key:"network",  label:"Network",                  placeholder:"Ethereum, Solana, etc." }],
+  bizum:          [{ key:"phone",    label:"Phone number",             placeholder:"+34 612 345 678" }],
+  twint:          [{ key:"phone",    label:"Phone number",             placeholder:"+41 79 123 45 67" }],
+  swish:          [{ key:"phone",    label:"Phone number",             placeholder:"+46 70 123 45 67" }],
+  mobilePay:      [{ key:"phone",    label:"Phone number",             placeholder:"+45 12 34 56 78" }],
+  vipps:          [{ key:"phone",    label:"Phone number",             placeholder:"+47 912 34 567" }],
+  satispay:       [{ key:"phone",    label:"Phone number",             placeholder:"+39 312 345 6789" }],
+  mbWay:          [{ key:"phone",    label:"Phone number",             placeholder:"+351 912 345 678" }],
+  iris:           [{ key:"phone",    label:"Phone number",             placeholder:"+30 691 234 5678" }],
+  paylib:         [{ key:"phone",    label:"Phone number",             placeholder:"+33 6 12 34 56 78" }],
+  verse:          [{ key:"phone",    label:"Phone number",             placeholder:"+34 612 345 678" }],
+  blik:           [{ key:"phone",    label:"Phone number",             placeholder:"+48 512 345 678" }],
+};
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+export function methodLabel(pm) {
+  const d = pm.details || {};
+  if (d.iban)      return d.iban.replace(/\s/g,"").replace(/^(.{4})(.*)(.{4})$/, "$1 •••• $3");
+  if (d.email)     return d.email.replace(/(.{2})(.*)(@.*)/, "$1•••$3");
+  if (d.username || d.userName) return d.username || d.userName;
+  if (d.phone)     return d.phone.replace(/(.{5})(.*)(.{3})/, "$1•••$3");
+  if (d.holder || d.beneficiary) return d.holder || d.beneficiary;
+  if (d.sortCode)  return `${d.sortCode} / ${d.accountNo || ""}`;
+  return "—";
+}
+
+// ── ProgressBar ──────────────────────────────────────────────────────────────
+
+const STEP_LABELS = ["Currency", "Category", "Method", "Details"];
+
+function ProgressBar({ step, total = 4 }) {
+  return (
+    <div className="pm-progress">
+      <div className="pm-progress-track">
+        <div className="pm-progress-fill" style={{ width: `${((step + 1) / total) * 100}%` }}/>
+      </div>
+      <div className="pm-progress-labels">
+        {STEP_LABELS.map((label, i) => (
+          <span key={i} className={`pm-progress-label${i <= step ? " active" : ""}${i === step ? " current" : ""}`}>
+            {i < step ? <IconCheck/> : <span className="pm-step-num">{i + 1}</span>}
+            <span className="pm-step-text">{label}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── AddPMFlow ────────────────────────────────────────────────────────────────
+
+export function AddPMFlow({ methods, onSave, onClose, editData }) {
+  const isEdit = !!editData;
+  const [step, setStep] = useState(isEdit ? 3 : 0);
+
+  const [selCurrency, setSelCurrency] = useState(editData?.currencies?.[0] || "");
+  const [selCategory, setSelCategory] = useState(editData ? (methods[editData.methodId]?.category || "") : "");
+  const [selMethodId, setSelMethodId] = useState(editData?.methodId || "");
+  const [details, setDetails] = useState(editData?.details || {});
+  const [selCurrencies, setSelCurrencies] = useState(editData?.currencies || []);
+  const [payRefType, setPayRefType] = useState(editData?.details?._payRefType || "custom");
+  const [payRefCustom, setPayRefCustom] = useState(editData?.details?._payRefCustom || "");
+  const [showPayRefPicker, setShowPayRefPicker] = useState(false);
+  const [errors, setErrors] = useState({});
+  const handleBlur = makeBlurHandler(setErrors);
+  const [selRegion, setSelRegion] = useState("Europe");
+
+  const allCurrencies = [...new Set(Object.values(methods).flatMap(m => m.currencies))].sort();
+  const regionCurrencies = (CURRENCY_REGIONS[selRegion] || [])
+    .filter(c => allCurrencies.includes(c))
+    .sort();
+
+  const catsForCurrency = selCurrency
+    ? [...new Set(Object.values(methods).filter(m => m.currencies.includes(selCurrency)).map(m => m.category))]
+    : [];
+
+  const methodsForCatCurrency = Object.entries(methods)
+    .filter(([, m]) => m.category === selCategory && m.currencies.includes(selCurrency))
+    .sort((a, b) => a[1].name.localeCompare(b[1].name));
+
+  const selMethod = methods[selMethodId] || null;
+  const fields = METHOD_FIELDS[selMethodId] || [{ key:"details", label:"Account details", placeholder:"Enter your details" }];
+  const methodCurrencies = selMethod?.currencies || [];
+
+  const step0Ok = selCurrency !== "";
+  const step1Ok = selCategory !== "";
+  const step2Ok = selMethodId !== "";
+  const step3Ok = fields.every(f => f.optional || (details[f.key] || "").trim().length > 0) && selCurrencies.length > 0
+    && !Object.values(errors).some(e => e);
+
+  function handleSelectCurrency(c) {
+    setSelCurrency(c);
+    setSelCategory("");
+    setSelMethodId("");
+    setDetails({});
+    setSelCurrencies([]);
+    setErrors({});
+    setStep(1);
+  }
+
+  function handleSelectCategory(cat) {
+    setSelCategory(cat);
+    setSelMethodId("");
+    setDetails({});
+    setSelCurrencies([]);
+    setErrors({});
+    setStep(2);
+  }
+
+  function handleSelectMethod(id) {
+    setSelMethodId(id);
+    setDetails({});
+    setErrors({});
+    const m = methods[id];
+    if (m) {
+      setSelCurrencies(m.currencies.includes(selCurrency) ? [selCurrency] : [m.currencies[0]]);
+    }
+    setStep(3);
+  }
+
+  function toggleCurrency(c) {
+    setSelCurrencies(prev =>
+      prev.includes(c)
+        ? prev.length > 1 ? prev.filter(x => x !== c) : prev
+        : [...prev, c]
+    );
+  }
+
+  function handleSave() {
+    const newErrors = {};
+    fields.forEach(f => {
+      if (f.key === "iban") {
+        const r = validateIBAN(details[f.key]);
+        if (!r.valid) newErrors[f.key] = r.error;
+      } else if (f.key === "phone") {
+        const r = validatePhone(details[f.key], PHONE_PREFIX_MAP[selMethodId]);
+        if (!r.valid) newErrors[f.key] = r.error;
+      } else if (f.key === "holder") {
+        const r = validateHolder(details[f.key]);
+        if (!r.valid) newErrors[f.key] = r.error;
+      }
+    });
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(prev => ({ ...prev, ...newErrors }));
+      return;
+    }
+
+    const pm = {
+      id:         editData?.id || `${selMethodId}-${Date.now()}`,
+      methodId:   selMethodId,
+      name:       selMethod?.name || selMethodId,
+      currencies: selCurrencies,
+      details:    { ...details, _payRefType: payRefType, _payRefCustom: payRefCustom },
+    };
+    onSave(pm);
+  }
+
+  function handleBackdrop(e) {
+    if (e.target === e.currentTarget) onClose();
+  }
+
+  return (
+    <div className="modal-overlay" onClick={handleBackdrop}>
+      <div className="modal-card">
+        {/* Header */}
+        <div className="modal-header">
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            {step > 0 && !isEdit && (
+              <button className="modal-back" onClick={() => setStep(s => s - 1)}>
+                <IconBack/>
+              </button>
+            )}
+            <span className="modal-title">
+              {isEdit ? `Edit ${editData.name}` :
+               step === 0 ? "Select currency" :
+               step === 1 ? "Select category" :
+               step === 2 ? "Select method" : "Enter details"}
+            </span>
+          </div>
+          <button className="modal-close" onClick={onClose}>
+            {isEdit && <span className="modal-cancel-text">cancel</span>}✕
+          </button>
+        </div>
+
+        {/* Progress bar */}
+        <div style={{ padding:"12px 22px 0" }}>
+          <ProgressBar step={step}/>
+        </div>
+
+        {/* Body */}
+        <div className="modal-body">
+          {/* ── STEP 0: Currency with region tabs ── */}
+          {step === 0 && (
+            <>
+              <div className="region-tabs">
+                {ALL_REGIONS.map(r => {
+                  const count = (CURRENCY_REGIONS[r] || []).filter(c => allCurrencies.includes(c)).length;
+                  if (count === 0) return null;
+                  return (
+                    <button key={r}
+                      className={`region-tab${selRegion === r ? " active" : ""}`}
+                      onClick={() => setSelRegion(r)}>
+                      {r}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="pm-grid">
+                {regionCurrencies.map(c => (
+                  <button key={c}
+                    className={`pm-option-card${selCurrency === c ? " selected" : ""}`}
+                    onClick={() => handleSelectCurrency(c)}>
+                    <span className="pm-option-name">{c}</span>
+                  </button>
+                ))}
+                {regionCurrencies.length === 0 && (
+                  <div className="pm-empty-msg" style={{ gridColumn:"1/-1" }}>
+                    No payment methods available for this region yet
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* ── STEP 1: Category ── */}
+          {step === 1 && (
+            <div className="pm-cat-list">
+              {catsForCurrency.map(catId => {
+                const cat = CATEGORY_META[catId];
+                if (!cat) return null;
+                const CatIcon = cat.icon;
+                const count = Object.values(methods)
+                  .filter(m => m.category === catId && m.currencies.includes(selCurrency)).length;
+                return (
+                  <button key={catId}
+                    className={`pm-cat-card${selCategory === catId ? " selected" : ""}`}
+                    onClick={() => handleSelectCategory(catId)}>
+                    <span className="pm-cat-icon"><CatIcon/></span>
+                    <div className="pm-cat-text">
+                      <span className="pm-cat-label">{cat.label}</span>
+                      <span className="pm-cat-desc">{count} method{count !== 1 ? "s" : ""} available</span>
+                    </div>
+                    <span className="pm-cat-arrow">→</span>
+                  </button>
+                );
+              })}
+              {catsForCurrency.length === 0 && (
+                <div className="pm-empty-msg">No payment methods available for {selCurrency}</div>
+              )}
+            </div>
+          )}
+
+          {/* ── STEP 2: Method ── */}
+          {step === 2 && (
+            <div className="pm-cat-list">
+              {methodsForCatCurrency.map(([id, m]) => (
+                <button key={id}
+                  className={`pm-cat-card${selMethodId === id ? " selected" : ""}`}
+                  onClick={() => handleSelectMethod(id)}>
+                  <div className="pm-cat-text" style={{ flex:1 }}>
+                    <span className="pm-cat-label">{m.name}</span>
+                    <span className="pm-cat-desc">{m.currencies.join(", ")}</span>
+                  </div>
+                  <span className="pm-cat-arrow">→</span>
+                </button>
+              ))}
+              {methodsForCatCurrency.length === 0 && (
+                <div className="pm-empty-msg">No methods in this category for {selCurrency}</div>
+              )}
+            </div>
+          )}
+
+          {/* ── STEP 3: Details ── */}
+          {step === 3 && selMethod && (
+            <>
+              <div className="pm-detail-header">
+                <span className="pm-detail-tag">{selMethod.name}</span>
+                <span className="pm-detail-curr">{selCurrency}</span>
+              </div>
+
+              {methodCurrencies.length > 1 && (
+                <div style={{ marginBottom:16 }}>
+                  <label className="field-label" style={{ marginBottom:8 }}>
+                    Currencies <span style={{ fontWeight:500, textTransform:"none",
+                      letterSpacing:0, color:"var(--black-25)" }}>— select all that apply</span>
+                  </label>
+                  <div className="curr-check-grid">
+                    {methodCurrencies.map(c => (
+                      <button key={c} className={`curr-check-btn${selCurrencies.includes(c) ? " on" : ""}`}
+                        onClick={() => toggleCurrency(c)}>
+                        {selCurrencies.includes(c) && "✓ "}{c}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {fields.map(f => {
+                const isIBAN = f.key === "iban";
+                const isPhone = f.key === "phone";
+                const isHolder = f.key === "holder";
+                const phonePrefix = isPhone ? PHONE_PREFIX_MAP[selMethodId] : null;
+
+                function handleFieldBlur() {
+                  const val = (details[f.key] || "").trim();
+                  if (!val && f.optional) { setErrors(p => ({ ...p, [f.key]: null })); return; }
+                  if (isIBAN) handleBlur(f.key, details[f.key], validateIBAN);
+                  else if (isPhone) handleBlur(f.key, details[f.key], validatePhone, phonePrefix);
+                  else if (isHolder) handleBlur(f.key, details[f.key], validateHolder);
+                }
+
+                return (
+                  <div key={f.key} style={{ marginBottom:14 }}>
+                    <label className="field-label">
+                      {f.label}
+                      {f.optional && <span style={{ fontWeight:500, textTransform:"none",
+                        letterSpacing:0, color:"var(--black-25)", marginLeft:4 }}>(optional)</span>}
+                    </label>
+                    <input className="modal-input"
+                      placeholder={f.placeholder}
+                      value={details[f.key] || ""}
+                      onChange={e => { setDetails(prev => ({ ...prev, [f.key]: e.target.value })); if (errors[f.key]) setErrors(p => ({ ...p, [f.key]: null })); }}
+                      onBlur={(isIBAN || isPhone || isHolder) ? handleFieldBlur : undefined}
+                      style={errors[f.key] ? { borderColor:"#DF321F" } : {}}
+                    />
+                    {(isIBAN || isPhone || isHolder) && <FieldError error={errors[f.key]}/>}
+                  </div>
+                );
+              })}
+
+              {/* Payment reference */}
+              <div style={{ marginBottom:14 }}>
+                <label className="field-label">Payment reference</label>
+                <div className="payref-row">
+                  <input className="modal-input payref-input"
+                    placeholder={payRefType === "custom" ? "don't mention peach or bitcoin !" : ""}
+                    value={
+                      payRefType === "custom" ? payRefCustom :
+                      payRefType === "peachID" ? "eg: 02v6764d" :
+                      "eg: PC-F4D-1245"
+                    }
+                    disabled={payRefType !== "custom"}
+                    onChange={e => setPayRefCustom(e.target.value)}
+                    style={payRefType !== "custom" ? { background:"var(--black-5)", color:"var(--black-25)", cursor:"not-allowed" } : {}}
+                  />
+                  <button className="payref-type-btn" onClick={() => setShowPayRefPicker(true)}>
+                    {payRefType === "custom" ? "custom" : payRefType === "peachID" ? "buyer peach ID" : "trade ID"}
+                    <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><polyline points="1,1 5,5 9,1"/></svg>
+                  </button>
+                </div>
+                {payRefType === "custom" && (
+                  <div style={{ fontSize:".66rem", color:"var(--black-25)", fontWeight:500, marginTop:4 }}>(optional)</div>
+                )}
+                {payRefType !== "custom" && (
+                  <div style={{ fontSize:".66rem", color:"var(--black-65)", fontWeight:500, marginTop:4 }}>
+                    Auto-filled by Peach at trade time — cannot be edited
+                  </div>
+                )}
+              </div>
+
+              {showPayRefPicker && (
+                <div className="payref-picker-overlay" onClick={e => { if (e.target === e.currentTarget) setShowPayRefPicker(false); }}>
+                  <div className="payref-picker">
+                    <div className="payref-picker-header">
+                      <span className="payref-picker-title">Payment reference</span>
+                      <button className="modal-close" onClick={() => setShowPayRefPicker(false)}>✕</button>
+                    </div>
+                    {[
+                      { id:"custom",  label:"custom (can be empty)" },
+                      { id:"peachID", label:"buyers' peachID (eg: 02v6764d)" },
+                      { id:"tradeID", label:"trade ID (eg: PC-F4D-1245)" },
+                    ].map(opt => (
+                      <button key={opt.id}
+                        className={`payref-option${payRefType === opt.id ? " selected" : ""}`}
+                        onClick={() => { setPayRefType(opt.id); setShowPayRefPicker(false); }}>
+                        <span className="payref-option-label">{opt.label}</span>
+                        <span className={`payref-radio${payRefType === opt.id ? " on" : ""}`}>
+                          {payRefType === opt.id && <span className="payref-radio-dot"/>}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="pm-summary-box">
+                <div className="pm-summary-row">
+                  <span className="pm-summary-label">Method</span>
+                  <span className="pm-summary-value">{selMethod.name}</span>
+                </div>
+                <div className="pm-summary-row">
+                  <span className="pm-summary-label">Currencies</span>
+                  <span className="pm-summary-value">{selCurrencies.join(", ")}</span>
+                </div>
+                {fields.map(f => (
+                  <div key={f.key} className="pm-summary-row">
+                    <span className="pm-summary-label">{f.label}</span>
+                    <span className="pm-summary-value">{details[f.key] || "—"}</span>
+                  </div>
+                ))}
+                <div className="pm-summary-row">
+                  <span className="pm-summary-label">Payment reference</span>
+                  <span className="pm-summary-value">
+                    {payRefType === "custom" ? (payRefCustom || "empty (custom)") :
+                     payRefType === "peachID" ? "Buyer's Peach ID" : "Trade ID"}
+                  </span>
+                </div>
+              </div>
+
+              <button className="btn-save-pm" disabled={!step3Ok} onClick={handleSave}>
+                {isEdit ? "Save changes" : "Add payment method"}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── DeleteModal ──────────────────────────────────────────────────────────────
+
+export function DeleteModal({ pm, onConfirm, onCancel }) {
+  return (
+    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
+      <div className="modal-card" style={{ maxWidth:380 }}>
+        <div className="modal-header">
+          <span className="modal-title">Delete payment method?</span>
+          <button className="modal-close" onClick={onCancel}>✕</button>
+        </div>
+        <div className="modal-body">
+          <div style={{ fontSize:".85rem", color:"var(--black-75)", lineHeight:1.6, marginBottom:6 }}>
+            This will permanently remove your <strong>{pm.name}</strong> payment method
+            ({pm.currencies.join(", ")}). Any active offers using this method may be affected.
+          </div>
+          <div style={{ display:"flex", gap:10, marginTop:16 }}>
+            <button className="btn-cancel" onClick={onCancel}>Cancel</button>
+            <button className="btn-delete" onClick={onConfirm}>Delete</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -2,12 +2,12 @@ import { Component } from 'react'
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import PeachAuth from './screens/peach-auth.jsx'
 import PeachHome from './screens/peach-home.jsx'
-import PeachMarket from './screens/peach-market-view.jsx'
+import PeachMarket from './screens/market-view/index.jsx'
 import OfferCreation from './screens/offer-creation/index.jsx'
 import TradesDashboard from './screens/trades-dashboard/index.jsx'
 import TradeExecution from './screens/trade-execution/index.jsx'
-import SettingsScreen from './screens/peach-settings.jsx'
-import PeachPaymentMethods from './screens/peach-payment-methods.jsx'
+import SettingsScreen from './screens/settings/index.jsx'
+import PeachPaymentMethods from './screens/payment-methods/index.jsx'
 
 class ErrorBoundary extends Component {
   constructor(props) {

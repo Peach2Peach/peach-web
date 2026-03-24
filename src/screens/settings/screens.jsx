@@ -1,361 +1,21 @@
+// ─── SETTINGS — SUB-SCREENS ──────────────────────────────────────────────────
+// Extracted from peach-settings.jsx.
+// Each sub-screen receives `onBack` to return to the main settings menu.
+// ─────────────────────────────────────────────────────────────────────────────
+
 import { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import { SideNav, Topbar, formatPeachId, PeachIcon } from "../components/Navbars.jsx";
-import { IcoBtc } from "../components/BitcoinAmount.jsx";
-import { useAuth } from "../hooks/useAuth.js";
-import { useApi } from "../hooks/useApi.js";
+import { formatPeachId, PeachIcon } from "../../components/Navbars.jsx";
+import { useApi } from "../../hooks/useApi.js";
+import { validateBtcAddress, validateBIP322Signature, validateFeeRate } from "../../peach-validators.js";
+import {
+  IconCopy, IconTrash, IconCamera, IconExternalLink, IconShield,
+  Toggle, SettingsRow, SettingsSection, SubScreenWrapper,
+  CopyBtn, PrimaryBtn, OutlineBtn, FieldError, makeBlurHandler, toPeaches,
+} from "./components.jsx";
 
-// ─── INPUT VALIDATORS (inline for Claude.ai preview; import from peach-validators.js for GitHub build) ──
+// ── ProfileSubScreen ─────────────────────────────────────────────────────────
 
-// ─── SHA-256 (compact pure-JS) ───────────────────────────────────────────────
-const SHA256_K = new Uint32Array([
-  0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
-  0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
-  0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
-  0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
-  0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
-  0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
-  0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
-  0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2,
-]);
-function sha256(msgBytes) {
-  const rr = (v, n) => (v >>> n) | (v << (32 - n));
-  let H0=0x6a09e667,H1=0xbb67ae85,H2=0x3c6ef372,H3=0xa54ff53a,
-      H4=0x510e527f,H5=0x9b05688c,H6=0x1f83d9ab,H7=0x5be0cd19;
-  const len = msgBytes.length, bitLen = len * 8;
-  const padded = new Uint8Array(Math.ceil((len + 9) / 64) * 64);
-  padded.set(msgBytes); padded[len] = 0x80;
-  const dv = new DataView(padded.buffer);
-  dv.setUint32(padded.length - 4, bitLen, false);
-  const W = new Uint32Array(64);
-  for (let off = 0; off < padded.length; off += 64) {
-    for (let i = 0; i < 16; i++) W[i] = dv.getUint32(off + i * 4, false);
-    for (let i = 16; i < 64; i++) {
-      const s0 = rr(W[i-15],7)^rr(W[i-15],18)^(W[i-15]>>>3);
-      const s1 = rr(W[i-2],17)^rr(W[i-2],19)^(W[i-2]>>>10);
-      W[i] = (W[i-16]+s0+W[i-7]+s1)|0;
-    }
-    let a=H0,b=H1,c=H2,d=H3,e=H4,f=H5,g=H6,h=H7;
-    for (let i = 0; i < 64; i++) {
-      const S1=rr(e,6)^rr(e,11)^rr(e,25), ch=(e&f)^(~e&g), t1=(h+S1+ch+SHA256_K[i]+W[i])|0;
-      const S0=rr(a,2)^rr(a,13)^rr(a,22), maj=(a&b)^(a&c)^(b&c), t2=(S0+maj)|0;
-      h=g;g=f;f=e;e=(d+t1)|0;d=c;c=b;b=a;a=(t1+t2)|0;
-    }
-    H0=(H0+a)|0;H1=(H1+b)|0;H2=(H2+c)|0;H3=(H3+d)|0;
-    H4=(H4+e)|0;H5=(H5+f)|0;H6=(H6+g)|0;H7=(H7+h)|0;
-  }
-  const out = new Uint8Array(32), odv = new DataView(out.buffer);
-  [H0,H1,H2,H3,H4,H5,H6,H7].forEach((v,i) => odv.setUint32(i*4, v, false));
-  return out;
-}
-
-// ─── Base58Check ─────────────────────────────────────────────────────────────
-const B58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-const B58_MAP = new Uint8Array(128).fill(255);
-for (let i = 0; i < 58; i++) B58_MAP[B58_ALPHABET.charCodeAt(i)] = i;
-function base58Decode(str) {
-  let zeros = 0;
-  for (let i = 0; i < str.length && str[i]==='1'; i++) zeros++;
-  const size = Math.ceil(str.length * 733 / 1000) + 1;
-  const buf = new Uint8Array(size);
-  for (let i = 0; i < str.length; i++) {
-    const c = str.charCodeAt(i);
-    if (c >= 128 || B58_MAP[c] === 255) return null;
-    let carry = B58_MAP[c];
-    for (let j = size - 1; j >= 0; j--) { carry += 58*buf[j]; buf[j] = carry & 0xff; carry >>= 8; }
-    if (carry !== 0) return null;
-  }
-  let start = 0;
-  while (start < size && buf[start] === 0) start++;
-  const result = new Uint8Array(zeros + (size - start));
-  result.set(buf.subarray(start), zeros);
-  return result;
-}
-function verifyBase58Check(addr, expectedVersion) {
-  const decoded = base58Decode(addr);
-  if (!decoded || decoded.length !== 25) return false;
-  if (decoded[0] !== expectedVersion) return false;
-  const hash = sha256(sha256(decoded.slice(0, 21)));
-  return hash[0]===decoded[21] && hash[1]===decoded[22] && hash[2]===decoded[23] && hash[3]===decoded[24];
-}
-
-// ─── Bech32 / Bech32m ───────────────────────────────────────────────────────
-const BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
-function bech32Polymod(values) {
-  const GEN = [0x3b6a57b2,0x26508e6d,0x1ea119fa,0x3d4233dd,0x2a1462b3];
-  let chk = 1;
-  for (let i = 0; i < values.length; i++) {
-    const top = chk >> 25;
-    chk = ((chk & 0x1ffffff) << 5) ^ values[i];
-    for (let j = 0; j < 5; j++) { if ((top >> j) & 1) chk ^= GEN[j]; }
-  }
-  return chk;
-}
-function bech32HrpExpand(hrp) {
-  const out = [];
-  for (let i = 0; i < hrp.length; i++) out.push(hrp.charCodeAt(i) >> 5);
-  out.push(0);
-  for (let i = 0; i < hrp.length; i++) out.push(hrp.charCodeAt(i) & 31);
-  return out;
-}
-function bech32Decode(addr) {
-  const lower = addr.toLowerCase();
-  if (lower !== addr && addr.toUpperCase() !== addr) return null;
-  const a = lower, pos = a.lastIndexOf("1");
-  if (pos < 1 || pos + 7 > a.length || a.length > 90) return null;
-  const hrp = a.slice(0, pos), dataStr = a.slice(pos + 1), data = [];
-  for (let i = 0; i < dataStr.length; i++) {
-    const idx = BECH32_CHARSET.indexOf(dataStr[i]);
-    if (idx === -1) return null;
-    data.push(idx);
-  }
-  const polymod = bech32Polymod(bech32HrpExpand(hrp).concat(data));
-  let encoding = null;
-  if (polymod === 1) encoding = "bech32";
-  if (polymod === 0x2bc830a3) encoding = "bech32m";
-  if (!encoding) return null;
-  return { hrp, data: data.slice(0, data.length - 6), encoding };
-}
-function convertBits(data, fromBits, toBits, pad) {
-  let acc = 0, bits = 0; const out = [], maxv = (1 << toBits) - 1;
-  for (let i = 0; i < data.length; i++) {
-    acc = (acc << fromBits) | data[i]; bits += fromBits;
-    while (bits >= toBits) { bits -= toBits; out.push((acc >> bits) & maxv); }
-  }
-  if (pad) { if (bits > 0) out.push((acc << (toBits - bits)) & maxv); }
-  else { if (bits >= fromBits) return null; if ((acc << (toBits - bits)) & maxv) return null; }
-  return out;
-}
-function verifySegwitAddress(addr) {
-  const dec = bech32Decode(addr);
-  if (!dec || dec.hrp !== "bc") return { ok: false, error: "Invalid bech32 encoding or checksum" };
-  const witnessVer = dec.data[0];
-  if (witnessVer > 16) return { ok: false, error: "Witness version must be 0–16" };
-  const prog = convertBits(dec.data.slice(1), 5, 8, false);
-  if (!prog || prog.length < 2 || prog.length > 40) return { ok: false, error: "Invalid witness program length" };
-  if (witnessVer === 0) {
-    if (dec.encoding !== "bech32") return { ok: false, error: "Witness v0 must use bech32 encoding" };
-    if (prog.length !== 20 && prog.length !== 32) return { ok: false, error: "Witness v0 program must be 20 or 32 bytes" };
-  } else {
-    if (dec.encoding !== "bech32m") return { ok: false, error: `Witness v${witnessVer} must use bech32m encoding` };
-  }
-  return { ok: true };
-}
-
-// ─── Validators ──────────────────────────────────────────────────────────────
-function validateBtcAddress(addr) {
-  if (!addr || !addr.trim()) return { valid: false, error: "Address is required" };
-  const a = addr.trim();
-  if (a.startsWith("1")) {
-    if (a.length < 25 || a.length > 34) return { valid: false, error: "P2PKH address must be 25–34 characters" };
-    if (!verifyBase58Check(a, 0x00)) return { valid: false, error: "Invalid P2PKH address (checksum failed)" };
-    return { valid: true, error: null };
-  }
-  if (a.startsWith("3")) {
-    if (a.length < 25 || a.length > 34) return { valid: false, error: "P2SH address must be 25–34 characters" };
-    if (!verifyBase58Check(a, 0x05)) return { valid: false, error: "Invalid P2SH address (checksum failed)" };
-    return { valid: true, error: null };
-  }
-  if (a.toLowerCase().startsWith("bc1")) {
-    if (a.toLowerCase() !== a) return { valid: false, error: "Bech32 address must be lowercase" };
-    const result = verifySegwitAddress(a);
-    if (!result.ok) return { valid: false, error: result.error };
-    return { valid: true, error: null };
-  }
-  return { valid: false, error: "Address must start with 1, 3, or bc1" };
-}
-
-const BASE64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
-function validateBIP322Signature(raw) {
-  if (!raw || !raw.trim()) return { valid: false, error: "Signature is required" };
-  const clean = raw.trim();
-  if (clean.length < 20) return { valid: false, error: "Signature too short" };
-  if (!BASE64_RE.test(clean)) return { valid: false, error: "Signature must be valid base64" };
-  return { valid: true, error: null };
-}
-
-function validateFeeRate(raw) {
-  if (raw === "" || raw === null || raw === undefined) return { valid: false, error: "Fee rate is required" };
-  const n = Number(raw);
-  if (!Number.isInteger(n)) return { valid: false, error: "Must be a whole number" };
-  if (n < 1) return { valid: false, error: "Minimum 1 sat/vB" };
-  if (n > 150) return { valid: false, error: "Maximum 150 sat/vB" };
-  return { valid: true, error: null };
-}
-
-function makeBlurHandler(setErrors) {
-  return (fieldKey, value, validatorFn, ...extraArgs) => {
-    const result = validatorFn(value, ...extraArgs);
-    setErrors(prev => ({ ...prev, [fieldKey]: result.valid ? null : result.error }));
-    return result.valid;
-  };
-}
-
-// ─── ICONS ────────────────────────────────────────────────────────────────────
-const IconCopy = ({ size=16 }) => <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="7" y="7" width="11" height="11" rx="2"/><path d="M3 13V3h10"/></svg>;
-const IconTrash = ({ size=16 }) => <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="5,7 5,17 15,17 15,7"/><line x1="3" y1="7" x2="17" y2="7"/><line x1="8" y1="3" x2="12" y2="3"/></svg>;
-const IconCamera = ({ size=16 }) => <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2 7.5C2 6.4 2.9 5.5 4 5.5h1.5l1.5-2h6l1.5 2H16c1.1 0 2 .9 2 2v8c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2v-8z"/><circle cx="10" cy="11" r="2.5"/></svg>;
-const IconExternalLink = ({ size=14 }) => <svg width={size} height={size} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3H3a1 1 0 00-1 1v7a1 1 0 001 1h7a1 1 0 001-1V8"/><polyline points="9,2 12,2 12,5"/><line x1="7" y1="7" x2="12" y2="2"/></svg>;
-const IconShield = ({ size=20 }) => <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="#F56522" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2L3 5v5c0 4.4 3 8.2 7 9 4-.8 7-4.6 7-9V5l-7-3z"/></svg>;
-
-
-// ─── TOGGLE ───────────────────────────────────────────────────────────────────
-function Toggle({ checked, onChange }) {
-  return (
-    <button onClick={() => onChange(!checked)} style={{
-      width:44, height:26, borderRadius:999, border:"none",
-      background: checked ? "#F56522" : "#C4B5AE",
-      cursor:"pointer", position:"relative", transition:"background .2s", flexShrink:0, padding:0,
-    }}>
-      <span style={{
-        position:"absolute", top:3, left: checked ? 21 : 3,
-        width:20, height:20, borderRadius:"50%", background:"#FFFFFF",
-        boxShadow:"0 1px 4px rgba(0,0,0,.2)", transition:"left .2s", display:"block",
-      }}/>
-    </button>
-  );
-}
-
-// ─── ICONS ────────────────────────────────────────────────────────────────────
-const IconChevronRight = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="9 18 15 12 9 6"/>
-  </svg>
-);
-const IconChevronLeft = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="15 18 9 12 15 6"/>
-  </svg>
-);
-
-// ─── SETTINGS ROW ─────────────────────────────────────────────────────────────
-function SettingsRow({ label, description, icon, right, warning, onClick, noBorder }) {
-  return (
-    <div onClick={onClick} style={{
-      display:"flex", alignItems:"center", gap:14, padding:"14px 20px",
-      borderBottom: noBorder ? "none" : "1px solid #F4EEEB",
-      cursor: onClick ? "pointer" : "default", transition:"background .12s",
-      borderRadius: noBorder ? "0 0 12px 12px" : 0,
-    }}
-    onMouseEnter={e => { if (onClick) e.currentTarget.style.background="#FFF9F6"; }}
-    onMouseLeave={e => { e.currentTarget.style.background="transparent"; }}>
-      {icon && (
-        <div style={{ width:36, height:36, borderRadius:10, background:"#F4EEEB", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, fontSize:"1rem" }}>
-          {icon}
-        </div>
-      )}
-      <div style={{ flex:1, minWidth:0 }}>
-        <div style={{ fontSize:".9rem", fontWeight:600, color: warning ? "#DF321F" : "#2B1911", lineHeight:1.3 }}>{label}</div>
-        {description && <div style={{ fontSize:".75rem", color:"#7D675E", marginTop:2, fontWeight:400 }}>{description}</div>}
-      </div>
-      <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
-        {right}
-        {warning && <span style={{ fontSize:"1.1rem" }}>⚠️</span>}
-        {onClick && <span style={{ color:"#C4B5AE" }}><IconChevronRight/></span>}
-      </div>
-    </div>
-  );
-}
-
-// ─── SECTION CARD ─────────────────────────────────────────────────────────────
-function SettingsSection({ title, children }) {
-  return (
-    <div style={{ marginBottom:24 }}>
-      <div style={{ fontSize:".72rem", fontWeight:700, textTransform:"uppercase", letterSpacing:".1em", color:"#F56522", marginBottom:8, paddingLeft:4 }}>
-        {title}
-      </div>
-      <div style={{ background:"#FFFFFF", border:"1px solid #EAE3DF", borderRadius:12, overflow:"hidden" }}>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-// ─── SUB-SCREEN WRAPPER ───────────────────────────────────────────────────────
-function SubScreenWrapper({ title, onBack, children }) {
-  return (
-    <div className="settings-scroll">
-      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:28 }}>
-        <button onClick={onBack} style={{
-          display:"flex", alignItems:"center", justifyContent:"center",
-          width:34, height:34, borderRadius:8, border:"none",
-          background:"transparent", cursor:"pointer", color:"#7D675E", flexShrink:0,
-        }}
-        onMouseEnter={e => e.currentTarget.style.background="#F4EEEB"}
-        onMouseLeave={e => e.currentTarget.style.background="transparent"}>
-          <IconChevronLeft/>
-        </button>
-        <h1 style={{ fontSize:"1.3rem", fontWeight:800, color:"#2B1911", letterSpacing:"-0.02em", margin:0 }}>{title}</h1>
-      </div>
-      {children}
-    </div>
-  );
-}
-
-// ─── SHARED: COPY BUTTON ──────────────────────────────────────────────────────
-function CopyBtn({ text, size=16 }) {
-  const [copied, setCopied] = useState(false);
-  function copy() {
-    try { navigator.clipboard.writeText(text); } catch {}
-    setCopied(true); setTimeout(() => setCopied(false), 1500);
-  }
-  return (
-    <button onClick={copy} title="Copy" style={{ border:"none", background:"transparent", cursor:"pointer", color: copied ? "#65A519" : "#F56522", padding:4, borderRadius:6, display:"flex", alignItems:"center" }}>
-      {copied ? <span style={{ fontSize:".7rem", fontWeight:700 }}>✓</span> : <IconCopy size={size}/>}
-    </button>
-  );
-}
-
-// ─── SHARED: PRIMARY BUTTON ───────────────────────────────────────────────────
-function PrimaryBtn({ label, onClick, disabled }) {
-  return (
-    <button onClick={disabled ? undefined : onClick} style={{
-      width:"100%", padding:"13px 20px", borderRadius:999, border:"none",
-      background: disabled ? "#C4B5AE" : "linear-gradient(90deg,#FF4D42,#FF7A50,#FFA24C)",
-      color:"#FFFFFF", fontFamily:"'Baloo 2',cursive", fontSize:".85rem",
-      fontWeight:800, letterSpacing:".06em", textTransform:"uppercase",
-      cursor: disabled ? "not-allowed" : "pointer",
-    }}>
-      {label}
-    </button>
-  );
-}
-
-// ─── SHARED: OUTLINE BUTTON ───────────────────────────────────────────────────
-
-// ─── SHARED: FIELD ERROR ─────────────────────────────────────────────────────
-function FieldError({ error }) {
-  if (!error) return null;
-  return (
-    <div style={{ fontSize:".72rem", fontWeight:600, color:"#DF321F", marginTop:4, marginBottom:4, paddingLeft:2 }}>
-      {error}
-    </div>
-  );
-}
-
-function OutlineBtn({ label, onClick }) {
-  return (
-    <button onClick={onClick} style={{
-      width:"100%", padding:"12px 20px", borderRadius:999,
-      border:"2px solid #F56522", background:"transparent",
-      color:"#F56522", fontFamily:"'Baloo 2',cursive", fontSize:".85rem",
-      fontWeight:800, letterSpacing:".06em", textTransform:"uppercase", cursor:"pointer",
-    }}>
-      {label}
-    </button>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SUB-SCREENS
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** Convert API rating (-1…+1) to Peach scale (0…5) */
-function toPeaches(apiRating) {
-  return (apiRating + 1) / 2 * 5;
-}
-
-function ProfileSubScreen({ onBack }) {
+export function ProfileSubScreen({ onBack }) {
   const { get, auth, isLoggedIn } = useApi();
   const liveProfile = auth?.profile ?? null;
 
@@ -479,7 +139,9 @@ function ProfileSubScreen({ onBack }) {
   );
 }
 
-function ReferralsSubScreen({ onBack }) {
+// ── ReferralsSubScreen ───────────────────────────────────────────────────────
+
+export function ReferralsSubScreen({ onBack }) {
   const points = 0;
   const maxPoints = 400;
   const pct = Math.min(100, (points / maxPoints) * 100);
@@ -555,7 +217,9 @@ function ReferralsSubScreen({ onBack }) {
   );
 }
 
-function BackupsSubScreen({ onBack }) {
+// ── BackupsSubScreen ─────────────────────────────────────────────────────────
+
+export function BackupsSubScreen({ onBack }) {
   return (
     <SubScreenWrapper title="Backups" onBack={onBack}>
       {/* Main info card */}
@@ -608,7 +272,9 @@ function BackupsSubScreen({ onBack }) {
   );
 }
 
-function NetworkFeesSubScreen({ onBack }) {
+// ── NetworkFeesSubScreen ─────────────────────────────────────────────────────
+
+export function NetworkFeesSubScreen({ onBack }) {
   const { get, patch, auth } = useApi();
   const [feeRates, setFeeRates] = useState({ fast:1, medium:1, slow:1 });
   const [selected, setSelected] = useState("medium");
@@ -712,7 +378,9 @@ function NetworkFeesSubScreen({ onBack }) {
   );
 }
 
-function TxBatchingSubScreen({ onBack }) {
+// ── TxBatchingSubScreen ──────────────────────────────────────────────────────
+
+export function TxBatchingSubScreen({ onBack }) {
   const { patch, auth } = useApi();
   const [batching, setBatching] = useState(false);
 
@@ -748,8 +416,9 @@ function TxBatchingSubScreen({ onBack }) {
   );
 }
 
-// ─── REFUND ADDRESS (multi-step) ──────────────────────────────────────────────
-function RefundAddressSubScreen({ onBack }) {
+// ── RefundAddressSubScreen ───────────────────────────────────────────────────
+
+export function RefundAddressSubScreen({ onBack }) {
   const { patch, auth } = useApi();
   const [step, setStep] = useState(1);
   const [label, setLabel] = useState("");
@@ -879,8 +548,9 @@ function RefundAddressSubScreen({ onBack }) {
   );
 }
 
-// ─── CUSTOM PAYOUT WALLET (multi-step) ───────────────────────────────────────
-function PayoutWalletSubScreen({ onBack }) {
+// ── PayoutWalletSubScreen ────────────────────────────────────────────────────
+
+export function PayoutWalletSubScreen({ onBack }) {
   const { patch, auth } = useApi();
   const [step, setStep] = useState(1);
   const [label, setLabel] = useState("");
@@ -1044,7 +714,9 @@ function PayoutWalletSubScreen({ onBack }) {
   );
 }
 
-function BlockUsersSubScreen({ onBack }) {
+// ── BlockUsersSubScreen ──────────────────────────────────────────────────────
+
+export function BlockUsersSubScreen({ onBack }) {
   const { put, auth } = useApi();
   const [inputId, setInputId] = useState("");
   const [blocking, setBlocking] = useState(false);
@@ -1112,35 +784,9 @@ function BlockUsersSubScreen({ onBack }) {
   );
 }
 
-// ─── STYLES ───────────────────────────────────────────────────────────────────
-const css = `
-  .settings-scroll{margin-top:var(--topbar);padding:32px 24px 80px;max-width:640px;margin-left:auto;margin-right:auto}
-  .settings-page-title{font-size:1.5rem;font-weight:800;color:var(--black);margin-bottom:28px;letter-spacing:-0.02em}
-  .version-footer{text-align:center;padding:20px 0 8px;font-size:.72rem;color:var(--black-25);font-weight:500}
+// ── ComingSoonPlaceholder ────────────────────────────────────────────────────
 
-  @media(max-width:768px){
-    .topbar-price{display:none}
-    .sidenav-price-slot{display:block}
-    .settings-scroll{padding:24px 16px 80px}
-  }
-  @media(max-width:767px){
-    .sidenav{width:220px;left:0;transform:translateX(-100%);
-      transition:transform .25s cubic-bezier(.4,0,.2,1);z-index:500;
-      align-items:flex-start;box-shadow:none}
-    .sidenav-collapsed{width:220px}
-    .sidenav.sidenav-mobile-open{transform:translateX(0);box-shadow:6px 0 28px rgba(43,25,17,.16)}
-    .sidenav-item{width:calc(100% - 16px);flex-direction:row;justify-content:flex-start;gap:12px;padding:10px 14px}
-    .sidenav-collapsed .sidenav-item{width:calc(100% - 16px)}
-    .sidenav-label,.sidenav-collapsed .sidenav-label{opacity:1!important;max-height:none!important;font-size:.8rem;text-transform:none;font-weight:600;letter-spacing:0}
-    .sidenav-toggle{display:none}
-    .burger-btn{display:flex}
-    .page-wrap{margin-left:0!important}
-  }
-`;
-
-// ─── PLACEHOLDER SUB-SCREENS ─────────────────────────────────────────────────
-
-function ComingSoonPlaceholder({ title, icon, description, onBack }) {
+export function ComingSoonPlaceholder({ title, icon, description, onBack }) {
   return (
     <SubScreenWrapper title={title} onBack={onBack}>
       <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
@@ -1162,37 +808,39 @@ function ComingSoonPlaceholder({ title, icon, description, onBack }) {
   );
 }
 
-function AccountSessionsSubScreen({ onBack }) {
+export function AccountSessionsSubScreen({ onBack }) {
   return <ComingSoonPlaceholder title="Account & Sessions" icon="🔐"
     description="View your active web sessions, revoke access, and check your mobile app link status."
     onBack={onBack}/>;
 }
 
-function NotificationsSubScreen({ onBack }) {
+export function NotificationsSubScreen({ onBack }) {
   return <ComingSoonPlaceholder title="Notifications" icon="🔔"
     description="Configure which notifications you receive: trade matches, escrow funded, payment sent, disputes, and price alerts."
     onBack={onBack}/>;
 }
 
-function PinCodeSubScreen({ onBack }) {
+export function PinCodeSubScreen({ onBack }) {
   return <ComingSoonPlaceholder title="Pin Code" icon="🔑"
     description="Set, change, or remove a numeric PIN to protect access to the web app."
     onBack={onBack}/>;
 }
 
-function LanguageSubScreen({ onBack }) {
+export function LanguageSubScreen({ onBack }) {
   return <ComingSoonPlaceholder title="Language" icon="🌐"
     description="Choose your preferred language. Peach Web will support English, French, German, Spanish, and Italian."
     onBack={onBack}/>;
 }
 
-function NodeSubScreen({ onBack }) {
+export function NodeSubScreen({ onBack }) {
   return <ComingSoonPlaceholder title="Use Your Own Node" icon="🖧"
     description="Connect to your own Bitcoin or Electrum node for maximum privacy and sovereignty."
     onBack={onBack}/>;
 }
 
-function ContactSubScreen({ onBack }) {
+// ── ContactSubScreen ─────────────────────────────────────────────────────────
+
+export function ContactSubScreen({ onBack }) {
   const { post, auth } = useApi();
   const [topic, setTopic] = useState("general");
   const [reason, setReason] = useState("");
@@ -1309,7 +957,9 @@ function ContactSubScreen({ onBack }) {
   );
 }
 
-function AboutSubScreen({ onBack }) {
+// ── AboutSubScreen ───────────────────────────────────────────────────────────
+
+export function AboutSubScreen({ onBack }) {
   const links = [
     { icon:"🌐", label:"Website",  url:"https://peachbitcoin.com" },
     { icon:"𝕏",  label:"Twitter / X", url:"https://x.com/peachbitcoin" },
@@ -1353,212 +1003,5 @@ function AboutSubScreen({ onBack }) {
         Made with 🍑 · Open source
       </div>
     </SubScreenWrapper>
-  );
-}
-
-// ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
-export default function SettingsScreen() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const [currentView, setCurrentView] = useState("main");
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
-
-  // Reset to main view when sidenav "Settings" is clicked (same-route navigation)
-  useEffect(() => { setCurrentView("main"); }, [location.key]);
-
-  // ── AUTH STATE ──
-  const { isLoggedIn, handleLogin, handleLogout, showAvatarMenu, setShowAvatarMenu } = useAuth();
-  const { get } = useApi();
-  useEffect(() => {
-    if (!showAvatarMenu) return;
-    const close = (e) => { if (!e.target.closest(".avatar-menu-wrap")) setShowAvatarMenu(false); };
-    document.addEventListener("click", close);
-    return () => document.removeEventListener("click", close);
-  }, [showAvatarMenu]);
-
-  const [allPrices,           setAllPrices]           = useState({ EUR: 87432 });
-  const [availableCurrencies, setAvailableCurrencies] = useState(["EUR","CHF","GBP"]);
-  const [selectedCurrency,    setSelectedCurrency]    = useState("EUR");
-  const btcPrice = Math.round(allPrices[selectedCurrency] ?? 87432);
-  const [diagnostics, setDiagnostics] = useState(true);
-  const [darkMode,     setDarkMode]    = useState(false);
-
-  useEffect(() => {
-    async function fetchPrices() {
-      try {
-        const res = await get('/market/prices');
-        const data = await res.json();
-        if (data && typeof data === "object") {
-          setAllPrices(data);
-          setAvailableCurrencies(Object.keys(data).sort());
-        }
-      } catch {}
-    }
-    fetchPrices();
-    const iv = setInterval(fetchPrices, 30000);
-    return () => clearInterval(iv);
-  }, []);
-
-  const satsPerCur = Math.round(100_000_000 / btcPrice);
-  const sideMargin = sidebarCollapsed ? 44 : 68;
-
-  function renderContent() {
-    if (currentView === "profile")      return <ProfileSubScreen     onBack={() => setCurrentView("main")}/>;
-    if (currentView === "referrals")    return <ReferralsSubScreen   onBack={() => setCurrentView("main")}/>;
-    if (currentView === "backups")      return <BackupsSubScreen     onBack={() => setCurrentView("main")}/>;
-    if (currentView === "network-fees") return <NetworkFeesSubScreen onBack={() => setCurrentView("main")}/>;
-    if (currentView === "tx-batching")  return <TxBatchingSubScreen  onBack={() => setCurrentView("main")}/>;
-    if (currentView === "refund")       return <RefundAddressSubScreen onBack={() => setCurrentView("main")}/>;
-    if (currentView === "payout")       return <PayoutWalletSubScreen  onBack={() => setCurrentView("main")}/>;
-    if (currentView === "block-users")  return <BlockUsersSubScreen  onBack={() => setCurrentView("main")}/>;
-    if (currentView === "account-sessions") return <AccountSessionsSubScreen onBack={() => setCurrentView("main")}/>;
-    if (currentView === "notifications")    return <NotificationsSubScreen    onBack={() => setCurrentView("main")}/>;
-    if (currentView === "pin")              return <PinCodeSubScreen          onBack={() => setCurrentView("main")}/>;
-    if (currentView === "language")         return <LanguageSubScreen         onBack={() => setCurrentView("main")}/>;
-    if (currentView === "node")             return <NodeSubScreen             onBack={() => setCurrentView("main")}/>;
-    if (currentView === "contact")          return <ContactSubScreen          onBack={() => setCurrentView("main")}/>;
-    if (currentView === "about")            return <AboutSubScreen            onBack={() => setCurrentView("main")}/>;
-
-    return (
-      <div className="settings-scroll">
-        <h1 className="settings-page-title">Settings</h1>
-
-        <SettingsSection title="Account">
-          <SettingsRow icon="👤" label="My Profile"
-            description="Reputation, badges, and trading history"
-            onClick={() => setCurrentView("profile")}/>
-          <SettingsRow icon="🔐" label="Account & Sessions"
-            description="Active sessions and security"
-            onClick={() => setCurrentView("account-sessions")}/>
-          <SettingsRow icon="🎁" label="Referrals"
-            description="Invite friends and earn rewards"
-            onClick={() => setCurrentView("referrals")}/>
-          <SettingsRow icon="💾" label="Backups"
-            description="Back up your account on the mobile app"
-            warning={true}
-            onClick={() => setCurrentView("backups")}/>
-          <SettingsRow icon="🚫" label="Block Users"
-            description="Block a user from matching with your offers"
-            onClick={() => setCurrentView("block-users")}
-            noBorder/>
-        </SettingsSection>
-
-        <SettingsSection title="Trading & Bitcoin">
-          <SettingsRow icon="💳" label="Payment Methods"
-            description="Add or manage your accepted payment methods"
-            onClick={() => navigate("/payment-methods")}/>
-          <SettingsRow icon="⛏️" label="Network Fees"
-            description="Set your preferred on-chain fee rate"
-            onClick={() => setCurrentView("network-fees")}/>
-          <SettingsRow icon="📦" label="Transaction Batching"
-            description="Combine payouts to save on fees"
-            onClick={() => setCurrentView("tx-batching")}/>
-          <SettingsRow icon="↩️" label="Refund Address"
-            description="Bitcoin address for trade cancellations"
-            onClick={() => setCurrentView("refund")}/>
-          <SettingsRow icon="📤" label="Custom Payout Address"
-            description="Send your sats to an external wallet automatically"
-            onClick={() => setCurrentView("payout")}
-            noBorder/>
-        </SettingsSection>
-
-        <SettingsSection title="App & Notifications">
-          <SettingsRow icon="🔔" label="Notifications"
-            description="Trade updates, matches, and alerts"
-            onClick={() => setCurrentView("notifications")}/>
-          <SettingsRow icon="🔑" label="Pin Code"
-            description="Protect the app with a PIN"
-            onClick={() => setCurrentView("pin")}/>
-          <SettingsRow icon="🌐" label="Language"
-            description="English"
-            onClick={() => setCurrentView("language")}/>
-          <SettingsRow icon="🌙" label="Dark Mode"
-            right={<Toggle checked={darkMode} onChange={setDarkMode}/>}/>
-          <SettingsRow icon="🔧" label="Diagnostics"
-            description="Share anonymous usage data to help improve the app"
-            right={<Toggle checked={diagnostics} onChange={setDiagnostics}/>}
-            noBorder/>
-        </SettingsSection>
-
-        <SettingsSection title="Advanced & Support">
-          <SettingsRow icon="🖧" label="Use Your Own Node"
-            description="Connect to a custom Bitcoin node"
-            onClick={() => setCurrentView("node")}/>
-          <SettingsRow icon="💬" label="Contact Peach"
-            description="Get help from the Peach team"
-            onClick={() => setCurrentView("contact")}/>
-          <SettingsRow icon="ℹ️" label="About Peach"
-            description="Version, licenses, and legal info"
-            onClick={() => setCurrentView("about")}
-            noBorder/>
-        </SettingsSection>
-
-        <div className="version-footer">Peach Bitcoin Web · v0.1.0 · Made with 🍑</div>
-      </div>
-    );
-  }
-
-  return (
-    <>
-      <style>{css}</style>
-      <div className="app">
-        <Topbar
-          onBurgerClick={() => setSidebarMobileOpen(o => !o)}
-          isLoggedIn={isLoggedIn}
-          handleLogin={handleLogin}
-          handleLogout={handleLogout}
-          showAvatarMenu={showAvatarMenu}
-          setShowAvatarMenu={setShowAvatarMenu}
-          btcPrice={btcPrice}
-          selectedCurrency={selectedCurrency}
-          availableCurrencies={availableCurrencies}
-          onCurrencyChange={c => setSelectedCurrency(c)}
-        />
-
-        <SideNav
-          active="settings"
-          collapsed={sidebarCollapsed}
-          onToggle={() => setSidebarCollapsed(c => !c)}
-          mobileOpen={sidebarMobileOpen}
-          onClose={() => setSidebarMobileOpen(false)}
-          onNavigate={navigate}
-          mobilePriceSlot={
-            <div className="mobile-price-pill">
-              <IcoBtc size={16}/>
-              <div className="mobile-price-text">
-                <span className="mobile-price-main">{btcPrice.toLocaleString("fr-FR")} {selectedCurrency}</span>
-                <span className="mobile-price-sats">{satsPerCur.toLocaleString()} sats / {selectedCurrency.toLowerCase()}</span>
-              </div>
-              <div className="topbar-cur-select mobile-cur-select">
-                <span className="cur-select-label">{selectedCurrency}</span>
-                <svg className="cur-select-arrow" width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{pointerEvents:"none",flexShrink:0}}><polyline points="1,1 5,5 9,1"/></svg>
-                <select value={selectedCurrency} onChange={e => setSelectedCurrency(e.target.value)} className="cur-select-inner">
-                  {availableCurrencies.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-            </div>
-          }
-        />
-
-        <div className="page-wrap" style={{ marginLeft: sideMargin }}>
-          {renderContent()}
-        </div>
-
-        {/* ── AUTH POPUP (when logged out) ── */}
-        {!isLoggedIn && (
-          <div className="auth-screen-overlay">
-            <div className="auth-popup">
-              <div className="auth-popup-icon">
-                <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round"><rect x="5" y="12" width="18" height="13" rx="3"/><path d="M9 12V9a5 5 0 0 1 10 0v3"/><circle cx="14" cy="19" r="1.5" fill="var(--primary)"/></svg>
-              </div>
-              <div className="auth-popup-title">Authentication required</div>
-              <div className="auth-popup-sub">Please authenticate to access your settings and preferences</div>
-              <button className="auth-popup-btn" onClick={handleLogin}>Log in</button>
-            </div>
-          </div>
-        )}
-      </div>
-    </>
   );
 }
