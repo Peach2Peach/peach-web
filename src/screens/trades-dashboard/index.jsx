@@ -15,7 +15,6 @@ import {
   generateSymmetricKey, encryptForRecipients,
   encryptSymmetric, signPGPMessage, hashPaymentFields,
 } from "../../utils/pgp.js";
-import { MOCK_PENDING, MOCK_TRADES, AVATAR_COLORS } from "../../data/mockData.js";
 import { SAT, BTC_PRICE_FALLBACK as BTC_PRICE, satsToFiatRaw, fmtFiat } from "../../utils/format.js";
 import { STATUS_CONFIG, FINISHED_STATUSES, PENDING_STATUSES } from "../../data/statusConfig.js";
 
@@ -947,18 +946,18 @@ export default function TradesDashboard() {
     setRefreshKey(k => k + 1);
   }
 
-  const trades = liveItems ?? (auth ? [] : MOCK_TRADES);
+  const trades = liveItems ?? [];
 
   // Split items into active (unfinished) vs history (finished)
   // Merge live unread counts from background polling into trade items
-  const rawItems = liveItems ?? (auth ? [] : MOCK_TRADES);
+  const rawItems = liveItems ?? [];
   const allItems = useMemo(() => rawItems.map(i =>
     i.kind === "contract" && liveUnread[i.id] != null ? { ...i, unread: liveUnread[i.id] } : i
   ), [rawItems, liveUnread]);
   const activeItems = allItems.filter(i => !FINISHED_STATUSES.has(i.tradeStatus) && !PENDING_STATUSES.has(i.tradeStatus));
   const historyItems = allItems.filter(i => FINISHED_STATUSES.has(i.tradeStatus));
 
-  const pendingItems = livePending ?? (auth ? [] : MOCK_PENDING);
+  const pendingItems = livePending ?? [];
 
   // Auto-select the best default tab: Active > Pending > History
   // Only runs after data has loaded (tradesLoading === false)

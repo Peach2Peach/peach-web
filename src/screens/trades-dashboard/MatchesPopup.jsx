@@ -6,7 +6,7 @@
 import { useState, useEffect, useRef } from "react";
 import { SatsAmount, IcoBtc } from "../../components/BitcoinAmount.jsx";
 import { relTime as relativeTime, formatTradeId } from "../../utils/format.js";
-import { AVATAR_COLORS } from "../../data/mockData.js";
+import { AVATAR_COLORS } from "../../data/constants.js";
 import Avatar from "../../components/Avatar.jsx";
 import { PeachRating, Badge, satsToFiat } from "./components.jsx";
 import { decryptPGPMessage, decryptSymmetric, encryptSymmetric, signPGPMessage } from "../../utils/pgp.js";

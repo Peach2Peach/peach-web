@@ -10,7 +10,6 @@ import { IcoBtc } from "../../components/BitcoinAmount.jsx";
 import { useAuth } from "../../hooks/useAuth.js";
 import { useApi } from "../../hooks/useApi.js";
 import { extractPMsFromProfile, encryptPGPMessage, signPGPMessage, isApiError } from "../../utils/pgp.js";
-import { MOCK_SAVED_PMS as MOCK_SAVED } from "../../data/mockData.js";
 import { SAT, BTC_PRICE_FALLBACK as BTC_PRICE } from "../../utils/format.js";
 import { CSS } from "./styles.js";
 import {
@@ -46,7 +45,7 @@ export default function PeachPaymentMethods() {
   const [catalogueLoading, setCatalogueLoading] = useState(true);
 
   // User's saved PMs
-  const [savedMethods, setSavedMethods] = useState(auth ? [] : MOCK_SAVED);
+  const [savedMethods, setSavedMethods] = useState([]);
   const [savedLoading, setSavedLoading] = useState(false);
   const [pmError, setPmError]           = useState(false);
 

@@ -6,7 +6,6 @@ import { useAuth } from "../../hooks/useAuth.js";
 import { useApi } from "../../hooks/useApi.js";
 import { extractPMsFromProfile, isApiError, generateSymmetricKey, encryptForRecipients, encryptSymmetric, signPGPMessage, hashPaymentFields } from "../../utils/pgp.js";
 import { getCached, setCache, clearCache } from "../../hooks/useApi.js";
-import { MOCK_OFFERS, MOCK_USER_PMS as USER_PMS, MOCK_ALL_METHODS as ALL_METHODS } from "../../data/mockData.js";
 import { BTC_PRICE_FALLBACK as BTC_PRICE, fmtPct, fmtFiat, formatTradeId } from "../../utils/format.js";
 import { PeachRating } from "../trades-dashboard/components.jsx";
 import { CSS } from "./styles.js";
@@ -517,8 +516,8 @@ export default function PeachMarket() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const marketOffers = liveOffers ?? (auth ? [] : MOCK_OFFERS);
-  const userPMs = liveUserPMs ?? (auth ? [] : USER_PMS);
+  const marketOffers = liveOffers ?? [];
+  const userPMs = liveUserPMs ?? [];
 
   const offerType = isSellTab ? "bid" : "ask";
 
@@ -994,7 +993,7 @@ export default function PeachMarket() {
             />
             <MultiSelect
               label="Payment method"
-              options={ALL_METHODS}
+              options={[...new Set(marketOffers.flatMap(o => o.methods || []))].sort()}
               value={selMethods}
               onChange={setSelMethods}
             />

@@ -4,7 +4,6 @@ import { SideNav, Topbar, formatPeachId } from "../components/Navbars.jsx";
 import { SatsAmount, IcoBtc } from "../components/BitcoinAmount.jsx";
 import { useAuth } from "../hooks/useAuth.js";
 import { useApi, getCached, setCache } from "../hooks/useApi.js";
-import { MOCK_STATS, MOCK_USER } from "../data/mockData.js";
 import { STATUS_CONFIG } from "../data/statusConfig.js";
 import { BTC_PRICE_FALLBACK as BTC_PRICE, fmt as formatSats, fmtPct } from "../utils/format.js";
 
@@ -278,7 +277,11 @@ export default function PeachHome() {
     totalVolumeBtc:      liveProfile?.totalVolumeBtc ?? 0,
     lastTradeDaysAgo:    liveProfile?.lastTradeDaysAgo ?? null,
     blockedByCount:      liveProfile?.blockedByCount ?? 0,
-  } : MOCK_USER;
+  } : {
+    peachId: "—", memberSince: "—", trades: 0, disputesTotal: 0,
+    rating: 0, badges: [], preferredMethods: [], preferredCurrencies: [],
+    totalVolumeBtc: 0, lastTradeDaysAgo: null, blockedByCount: 0,
+  };
 
   // Close avatar menu on outside click
   useEffect(() => {
@@ -588,16 +591,7 @@ export default function PeachHome() {
                     <span className="card-link" onClick={() => navigate("/payment-methods")}>See all →</span>
                   </div>
                   <div className="methods-list">
-                    {MOCK_STATS.topMethods.map(m => (
-                      <div key={m.name} className="method-row">
-                        <span className="method-name">{m.name}</span>
-                        <div className="method-bar-wrap">
-                          <div className="method-bar" style={{width:`${m.volume}%`}}/>
-                        </div>
-                        <span className="method-pct">{m.volume}%</span>
-                        <span className="method-count">{m.count} offers</span>
-                      </div>
-                    ))}
+                    <div style={{padding:"18px 0",textAlign:"center",color:"var(--black-40)",fontSize:".82rem",fontWeight:600}}>No data yet</div>
                   </div>
                 </div>
 
@@ -606,16 +600,7 @@ export default function PeachHome() {
                     <span className="card-title">Top Currencies</span>
                   </div>
                   <div className="methods-list">
-                    {MOCK_STATS.topCurrencies.map(c => (
-                      <div key={c.name} className="method-row">
-                        <span className="method-name">{c.name}</span>
-                        <div className="method-bar-wrap">
-                          <div className="method-bar" style={{width:`${c.volume}%`,background:"linear-gradient(90deg,#FF4D42,#FF7A50,#FFA24C)"}}/>
-                        </div>
-                        <span className="method-pct">{c.volume}%</span>
-                        <span className="method-count">{c.count} offers</span>
-                      </div>
-                    ))}
+                    <div style={{padding:"18px 0",textAlign:"center",color:"var(--black-40)",fontSize:".82rem",fontWeight:600}}>No data yet</div>
                   </div>
                 </div>
               </div>
@@ -631,9 +616,9 @@ export default function PeachHome() {
                   {/* 24h Volume — full width when narrow */}
                   <div className="stats-vol" style={{display:"flex",flexDirection:"column",gap:4}}>
                     <span style={{fontSize:".72rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--black-65)"}}>24h Volume</span>
-                    <div className="stat-big"><SatsAmount sats={MOCK_STATS.dailyVolume.sats} fontSize="1.1rem"/></div>
-                    <div className="stat-sub">≈ €{MOCK_STATS.dailyVolume.eur.toLocaleString()} · today</div>
-                    <span className="stat-change pos">↑ +12% vs yesterday</span>
+                    <div className="stat-big"><SatsAmount sats={0} fontSize="1.1rem"/></div>
+                    <div className="stat-sub">≈ €0 · today</div>
+                    <span className="stat-change neu">—</span>
                   </div>
 
                   {/* Bottom 2 cols wrapper — only used at narrow widths */}
@@ -642,23 +627,22 @@ export default function PeachHome() {
                     {/* Trades Today */}
                     <div style={{display:"flex",flexDirection:"column",gap:4}}>
                       <span style={{fontSize:".72rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--black-65)"}}>Trades Today</span>
-                      <div className="stat-big">{MOCK_STATS.dailyTrades}</div>
+                      <div className="stat-big">0</div>
                       <div className="stat-sub">completed trades · today</div>
-                      <span className="stat-change neu">→ Same as yesterday</span>
+                      <span className="stat-change neu">—</span>
                     </div>
 
                     {/* Active Offers */}
                     <div style={{display:"flex",flexDirection:"column",gap:4}}>
                       <span style={{fontSize:".72rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--black-65)"}}>Active Offers</span>
-                      <div className="stat-big">{MOCK_STATS.activeOffers.buy + MOCK_STATS.activeOffers.sell}</div>
+                      <div className="stat-big">0</div>
                       <div className="stat-sub">
-                        <span style={{color:"var(--success)",fontWeight:700}}>{MOCK_STATS.activeOffers.buy} buy</span>
+                        <span style={{color:"var(--success)",fontWeight:700}}>0 buy</span>
                         {" · "}
-                        <span style={{color:"var(--error)",fontWeight:700}}>{MOCK_STATS.activeOffers.sell} sell</span>
+                        <span style={{color:"var(--error)",fontWeight:700}}>0 sell</span>
                       </div>
                       <div style={{display:"flex",flexDirection:"column",gap:4,alignItems:"flex-start",marginTop:2}}>
-                        <span className="stat-change neg" style={{width:"fit-content"}}>Buy avg {fmtPct(MOCK_STATS.avgPremiumBuy)}</span>
-                        <span className="stat-change pos" style={{width:"fit-content"}}>Sell avg {fmtPct(MOCK_STATS.avgPremiumSell)}</span>
+                        <span className="stat-change neu" style={{width:"fit-content"}}>—</span>
                       </div>
                     </div>
 

@@ -11,7 +11,6 @@ import { useApi } from "../../hooks/useApi.js";
 import { extractPMsFromProfile, isApiError, hashPaymentFields } from "../../utils/pgp.js";
 import { deriveEscrowPubKey, deriveReturnAddress } from "../../utils/escrow.js";
 import { QRCodeSVG } from "qrcode.react";
-import { MOCK_SAVED_OFFER_PMS as MOCK_SAVED, MOCK_ESCROW } from "../../data/mockData.js";
 import { SAT, BTC_PRICE_FALLBACK as BTC_PRICE_INIT, fmt, satsToFiatRaw as satsToFiat, fmtFiat as fmtEur } from "../../utils/format.js";
 import { CSS } from "./styles.js";
 import {
@@ -35,7 +34,7 @@ export default function OfferCreation({ initialType="buy" }) {
   const [escrowFunded,  setEscrowFunded]  = useState(false);
   const [fundingStatus, setFundingStatus] = useState(null); // null → "MEMPOOL" → "FUNDED" | "WRONG_FUNDING_AMOUNT"
   const [fundingAmounts, setFundingAmounts] = useState(null); // amounts array from API (for wrong-amount case)
-  const [savedMethods, setSavedMethods] = useState(MOCK_SAVED);
+  const [savedMethods, setSavedMethods] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPM,    setEditingPM]    = useState(null); // PM object being edited
   const [pmError,      setPmError]      = useState(false);
@@ -840,13 +839,14 @@ export default function OfferCreation({ initialType="buy" }) {
                     Send exactly the amount below to activate your offer. It goes live on confirmation.
                   </div>
                   <label className="field-label" style={{marginBottom:6}}>Escrow address</label>
+                  {escrowAddress ? (
+                  <>
                   <div className="escrow-addr"
                     onClick={()=>{
-                      const addr = escrowAddress || MOCK_ESCROW;
-                      navigator.clipboard.writeText(addr).catch(()=>{});
+                      navigator.clipboard.writeText(escrowAddress).catch(()=>{});
                       setCopiedAddr(true);setTimeout(()=>setCopiedAddr(false),2000);
                     }}>
-                    {escrowAddress || MOCK_ESCROW}
+                    {escrowAddress}
                   </div>
                   <div style={{fontSize:".7rem",fontWeight:700,color:"var(--success)",
                     minHeight:18,marginTop:4,marginBottom:20}}>
@@ -857,11 +857,17 @@ export default function OfferCreation({ initialType="buy" }) {
                     <div style={{padding:12,background:"white",borderRadius:12,
                       border:"1px solid var(--black-10)",display:"inline-block"}}>
                       <QRCodeSVG
-                        value={`bitcoin:${escrowAddress || MOCK_ESCROW}?amount=${(form.amtFixed / 1e8).toFixed(8)}`}
+                        value={`bitcoin:${escrowAddress}?amount=${(form.amtFixed / 1e8).toFixed(8)}`}
                         size={140} level="L" bgColor="white" fgColor="#2B1911"
                       />
                     </div>
                   </div>
+                  </>
+                  ) : (
+                  <div style={{padding:"24px 0",textAlign:"center",color:"var(--black-40)",fontSize:".84rem",fontWeight:600}}>
+                    Waiting for escrow address…
+                  </div>
+                  )}
                   <label className="field-label" style={{marginBottom:6}}>Exact amount to send</label>
                   <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:22}}>
                     <SatsAmount sats={form.amtFixed} fontSize="1.6rem"/>

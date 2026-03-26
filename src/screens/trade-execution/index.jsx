@@ -6,7 +6,6 @@ import { useAuth } from "../../hooks/useAuth.js";
 import { useApi, createTask } from "../../hooks/useApi.js";
 import MobileSigningModal, { hasPendingTask, savePendingTask, clearPendingTask } from "../../components/MobileSigningModal.jsx";
 import { decryptPGPMessage, decryptSymmetric, encryptSymmetric, signPGPMessage, encryptForPublicKey } from "../../utils/pgp.js";
-import { DEMO_SCENARIOS, MOCK_MESSAGES } from "../../data/mockData.js";
 import { SAT, BTC_PRICE_FALLBACK as BTC_PRICE, satsToFiat, formatTradeId } from "../../utils/format.js";
 import Avatar from "../../components/Avatar.jsx";
 import StatusChip from "../../components/StatusChip.jsx";
@@ -74,18 +73,6 @@ const CSS = `
   .trade-topbar-elapsed{font-size:.75rem;color:var(--black-65);display:flex;align-items:center;gap:4px}
   .trade-topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
 
-  /* ── Demo switcher ── */
-  .demo-bar{
-    background:linear-gradient(90deg,#2B1911,#624D44);
-    padding:7px 24px;display:flex;align-items:center;gap:12px;flex-shrink:0;flex-wrap:wrap}
-  .demo-label{font-size:.68rem;font-weight:700;color:rgba(255,255,255,.5);
-    text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}
-  .demo-btn{
-    border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);
-    border-radius:999px;font-family:var(--font);font-size:.72rem;font-weight:700;
-    color:rgba(255,255,255,.7);padding:3px 12px;cursor:pointer;transition:all .15s;white-space:nowrap}
-  .demo-btn:hover{background:rgba(255,255,255,.14);color:white}
-  .demo-btn.demo-active{background:var(--primary);border-color:var(--primary);color:white}
 
   /* ── Split layout ── */
   .split-layout{display:flex;flex:1;overflow:hidden}
@@ -231,8 +218,11 @@ export default function TradeExecution() {
   const { auth, isLoggedIn, handleLogin, handleLogout, showAvatarMenu, setShowAvatarMenu } = useAuth();
   const { get, post, patch } = useApi();
 
-  const [demoOpen, setDemoOpen] = useState(false);
-  const [scenarioId, setScenarioId]   = useState("buyer_awaiting");
+  // Redirect to trades dashboard when not logged in and no trade ID
+  useEffect(() => {
+    if (!auth && !routeId) navigate("/trades", { replace: true });
+  }, [auth, routeId]);
+
   const [collapsed, setCollapsed]     = useState(false);
   const [mobileOpen, setMobileOpen]   = useState(false);
   const [mobileTab, setMobileTab]     = useState("details");   // "details" | "chat"
@@ -338,13 +328,13 @@ export default function TradeExecution() {
     return () => clearInterval(iv);
   }, [auth, routeId, signingModal, liveContract?.tradeStatus]);
 
-  const demoScenario = DEMO_SCENARIOS.find(s => s.id === scenarioId) || DEMO_SCENARIOS[0];
-  const demoMessages = MOCK_MESSAGES[scenarioId] || [];
-
-  // Use live data if available, fall back to demo scenario (mock mode only)
-  const activeLive = !!liveContract;
-  const scenario = activeLive ? liveContract : demoScenario;
-  const messages = activeLive ? (liveMessages ?? []) : demoMessages;
+  // Use live contract data — no demo fallback
+  const scenario = liveContract ?? {
+    role: "buyer", tradeStatus: "fundEscrow",
+    contract: { id: routeId || "—", direction: "buy", amount: 0, fiat: null, currency: "EUR", premium: 0, method: "", creationDate: Date.now(), paymentExpectedBy: null, escrow: null },
+    counterparty: null, paymentDetails: null, paymentDetailsError: null,
+  };
+  const messages = liveMessages ?? [];
   const { contract, counterparty: rawCounterparty, tradeStatus: status, role, paymentDetails, paymentDetailsError } = scenario;
   const counterparty = rawCounterparty ?? { initials: "??", color: "#7D675E", name: "Unknown", rep: 0, trades: 0, badges: [], online: false };
 
@@ -714,46 +704,6 @@ export default function TradeExecution() {
             <div className="spinner" style={{ width:32, height:32, border:"3px solid #EAE3DF", borderTopColor:"var(--primary)", borderRadius:"50%" }}/>
             <span style={{ fontSize:".85rem", color:"#7D675E", fontWeight:600 }}>Loading trade…</span>
           </div>
-        )}
-
-        {/* ── Demo scenario switcher (mock mode only) ── */}
-        {!auth && (
-        <div style={{ position:"relative", flexShrink:0 }}>
-          <button
-            onClick={() => setDemoOpen(o => !o)}
-            style={{
-              position:"absolute", top:8, left:16, zIndex:10,
-              display:"flex", alignItems:"center", gap:5,
-              background:"#2B1911", border:"none", borderRadius:999,
-              color:"rgba(255,255,255,.65)", fontFamily:"Baloo 2, cursive",
-              fontSize:".68rem", fontWeight:700, padding:"4px 10px",
-              cursor:"pointer", transition:"color .15s",
-              boxShadow: demoOpen ? "none" : "0 2px 8px rgba(0,0,0,.25)",
-            }}
-            onMouseEnter={e => e.currentTarget.style.color="white"}
-            onMouseLeave={e => e.currentTarget.style.color="rgba(255,255,255,.65)"}
-          >
-            Preview
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-              style={{ transform: demoOpen ? "rotate(180deg)" : "rotate(0)", transition:"transform .2s" }}>
-              <polyline points="2,3 5,7 8,3"/>
-            </svg>
-          </button>
-
-          {demoOpen && (
-            <div className="demo-bar" style={{ paddingLeft:90 }}>
-              {DEMO_SCENARIOS.map(s => (
-                <button
-                  key={s.id}
-                  className={`demo-btn${scenarioId === s.id ? " demo-active" : ""}`}
-                  onClick={() => { setScenarioId(s.id); setMobileTab("details"); }}
-                >{s.label}</button>
-              ))}
-            </div>
-          )}
-
-          {!demoOpen && <div style={{ height:34 }}/>}
-        </div>
         )}
 
         {!contractLoading && (
