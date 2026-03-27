@@ -4,7 +4,7 @@ import { SideNav, Topbar } from "../../components/Navbars.jsx";
 import { SatsAmount, IcoBtc } from "../../components/BitcoinAmount.jsx";
 import { useAuth } from "../../hooks/useAuth.js";
 import { useApi } from "../../hooks/useApi.js";
-import { extractPMsFromProfile, isApiError, generateSymmetricKey, encryptForRecipients, encryptSymmetric, signPGPMessage, hashPaymentFields } from "../../utils/pgp.js";
+import { extractPMsFromProfile, isApiError, generateSymmetricKey, encryptForRecipients, encryptSymmetric, signPGPMessage, hashPaymentFields, decryptPGPMessage } from "../../utils/pgp.js";
 import { getCached, setCache, clearCache } from "../../hooks/useApi.js";
 import { BTC_PRICE_FALLBACK as BTC_PRICE, fmtPct, fmtFiat, formatTradeId } from "../../utils/format.js";
 import { PeachRating } from "../trades-dashboard/components.jsx";
@@ -402,13 +402,27 @@ export default function PeachMarket() {
         const sellOffersJson = sellOffersRes.ok ? await sellOffersRes.json() : {};
         const ownOffersJson  = ownOffersRes.ok  ? await ownOffersRes.json()  : {};
         // v069 response: { offers: [...], stats: {...} }
-        console.log("[Market] raw buy offers:", buyOffersJson);
-        console.log("[Market] raw sell offers:", sellOffersJson);
         const bidsArr = Array.isArray(buyOffersJson) ? buyOffersJson : buyOffersJson?.offers ?? [];
         const asksArr = Array.isArray(sellOffersJson) ? sellOffersJson : sellOffersJson?.offers ?? [];
         // Own offers from /v069/user/{id}/offers — returns { buyOffers: [...], sellOffers: [...] }
         const ownBidsArr = ownOffersJson?.buyOffers ?? [];
         const ownAsksArr = ownOffersJson?.sellOffers ?? [];
+
+        // Debug: decrypt selfEncrypted PM data on own offers
+        if (auth?.pgpPrivKey) {
+          for (const o of [...ownBidsArr, ...ownAsksArr]) {
+            const pd = o.paymentData;
+            if (!pd) continue;
+            for (const [method, data] of Object.entries(pd)) {
+              if (data?.selfEncrypted) {
+                decryptPGPMessage(data.selfEncrypted, auth.pgpPrivKey).then(decrypted => {
+                  console.log(`[MarketView] Offer ${o.id} → ${method} selfEncrypted:`, decrypted);
+                }).catch(() => {});
+              }
+            }
+          }
+        }
+
         // Merge market + own offers, deduplicating by ID
         const seen = new Set();
         const merged = [];

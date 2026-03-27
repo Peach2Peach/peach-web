@@ -14,6 +14,7 @@ import {
   extractPMsFromProfile, isApiError,
   generateSymmetricKey, encryptForRecipients,
   encryptSymmetric, signPGPMessage, hashPaymentFields,
+  decryptPGPMessage, verifyDetachedSignature, derivePublicKeyArmored,
 } from "../../utils/pgp.js";
 import { SAT, BTC_PRICE_FALLBACK as BTC_PRICE, satsToFiatRaw, fmtFiat } from "../../utils/format.js";
 import { STATUS_CONFIG, FINISHED_STATUSES, PENDING_STATUSES } from "../../data/statusConfig.js";
@@ -630,6 +631,7 @@ export default function TradesDashboard() {
       createdAt: new Date(o.creationDate ?? Date.now()),
       methods: offerMethods.length > 0 ? offerMethods : (o.paymentMethods ?? []),
       currencies: offerCurrencies.length > 0 ? offerCurrencies : (o.currencies ?? []),
+      paymentData: o.paymentData ?? null,
     };
   }
 
@@ -732,6 +734,22 @@ export default function TradesDashboard() {
         // Own sell offers from /user/{peachId}/offers (replaces broken sellOffer?ownOffers=true)
         const ownSellArr = ownOffersData?.sellOffers ?? [];
         ownSellArr.forEach(o => { o._direction = 'sell'; });
+
+        // Debug: decrypt selfEncrypted PM data on own offers
+        if (auth?.pgpPrivKey) {
+          for (const o of [...v069BuyArr, ...ownSellArr]) {
+            const pd = o.paymentData;
+            if (!pd) continue;
+            for (const [method, data] of Object.entries(pd)) {
+              if (data?.selfEncrypted) {
+                decryptPGPMessage(data.selfEncrypted, auth.pgpPrivKey).then(decrypted => {
+                  console.log(`[Trades] Offer ${o.id} → ${method} selfEncrypted:`, decrypted);
+                }).catch(() => {});
+              }
+            }
+          }
+        }
+
         // Cross-reference sell offer status from v1 summary (since /user/{id}/offers lacks tradeStatus)
         const v1StatusById = new Map(offersArr.map(o => [o.id, o.tradeStatusNew ?? o.tradeStatus ?? o.status]));
         ownSellArr.forEach(o => {
@@ -1337,6 +1355,22 @@ export default function TradesDashboard() {
         }
       }
 
+      // Fallback: if no matching PM found locally, decrypt selfEncrypted from the offer's paymentData
+      const pmSelfEnc = trade.paymentData?.[paymentMethod]?.selfEncrypted;
+      const pmSelfSig = trade.paymentData?.[paymentMethod]?.selfEncryptedSignature;
+      if (!pmData && pmSelfEnc && auth?.pgpPrivKey) {
+        const decrypted = await decryptPGPMessage(pmSelfEnc, auth.pgpPrivKey);
+        if (decrypted) {
+          if (pmSelfSig) {
+            const pubKey = await derivePublicKeyArmored(auth.pgpPrivKey);
+            const valid = await verifyDetachedSignature(decrypted, pmSelfSig, pubKey);
+            if (!valid) throw new Error("selfEncrypted signature verification failed");
+          }
+          pmData = JSON.parse(decrypted);
+          console.log("[Trades] Using selfEncrypted PM data for:", paymentMethod);
+        }
+      }
+
       // Clean PM data for encryption
       const STRUCTURAL = new Set(["id", "methodId", "type", "name", "label", "currencies", "hashes", "details", "data", "country", "anonymous"]);
       const cleanData = {};
@@ -1351,7 +1385,6 @@ export default function TradesDashboard() {
         // ═══ v069 trade request acceptance ═══
         // Counterparty already sent their symmetricKeyEncrypted (encrypted to our PGP key).
         // We decrypt it, then encrypt our PM data with it.
-        const { decryptPGPMessage } = await import("../../utils/pgp.js");
         let symmetricKey = null;
         if (auth?.pgpPrivKey && match._raw?.symmetricKeyEncrypted) {
           const raw = await decryptPGPMessage(match._raw.symmetricKeyEncrypted, auth.pgpPrivKey);

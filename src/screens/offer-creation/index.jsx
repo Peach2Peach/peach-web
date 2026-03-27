@@ -8,7 +8,7 @@ import { SideNav, Topbar } from "../../components/Navbars.jsx";
 import { SatsAmount, IcoBtc } from "../../components/BitcoinAmount.jsx";
 import { useAuth } from "../../hooks/useAuth.js";
 import { useApi } from "../../hooks/useApi.js";
-import { extractPMsFromProfile, isApiError, hashPaymentFields } from "../../utils/pgp.js";
+import { extractPMsFromProfile, isApiError, hashPaymentFields, encryptForPublicKey, encryptPGPMessage, signPGPMessage } from "../../utils/pgp.js";
 import { deriveEscrowPubKey, deriveReturnAddress } from "../../utils/escrow.js";
 import { QRCodeSVG } from "qrcode.react";
 import { SAT, BTC_PRICE_FALLBACK as BTC_PRICE_INIT, fmt, satsToFiatRaw as satsToFiat, fmtFiat as fmtEur } from "../../utils/format.js";
@@ -156,7 +156,6 @@ export default function OfferCreation({ initialType="buy" }) {
         const res = await get('/offer/' + sellOfferId + '/escrow');
         if (!res.ok || cancelled) return;
         const data = await res.json();
-        console.log("[OfferCreation] Escrow status:", data);
         const s = data?.funding?.status;
         if (s === "MEMPOOL") {
           setFundingStatus("MEMPOOL");
@@ -215,8 +214,22 @@ export default function OfferCreation({ initialType="buy" }) {
   const premOk = form.premium!=="";
   const configOk = amtOk&&payOk&&premOk;
 
+  // Fields that are structural (not actual payment details to encrypt)
+  const PM_STRUCTURAL = new Set(["id", "methodId", "type", "name", "label", "currencies", "hashes", "details", "data", "country", "anonymous"]);
+
+  // Extract clean payment detail fields from a PM (strips structural fields)
+  function cleanPMData(pm) {
+    const details = pm.details || {};
+    const clean = {};
+    for (const [k, v] of Object.entries(details)) {
+      if (!PM_STRUCTURAL.has(k) && typeof v !== "object" && v) clean[k] = v;
+    }
+    return clean;
+  }
+
   // Build meansOfPayment + paymentData from selected PMs (shared by buy & sell)
-  async function buildPaymentPayload(){
+  // When serverPGPKey is provided (instant trade), encrypts PM details for the server
+  async function buildPaymentPayload(serverPGPKey){
     const meansOfPayment = {};
     for(const pm of selectedSaved){
       const methodType = (pm.type||"").toLowerCase();
@@ -232,7 +245,38 @@ export default function OfferCreation({ initialType="buy" }) {
       const details = pm.details || {};
       const hashed = await hashPaymentFields(methodType, details, details.country);
       Object.assign(paymentData, hashed);
+
+      const cleanData = cleanPMData(pm);
+
+      // Self-encrypt PM details with user's own PGP key
+      if (auth?.pgpPrivKey && Object.keys(cleanData).length > 0) {
+        const plaintext = JSON.stringify(cleanData);
+        const [enc, sig] = await Promise.all([
+          encryptPGPMessage(plaintext, auth.pgpPrivKey),
+          signPGPMessage(plaintext, auth.pgpPrivKey),
+        ]);
+        if (enc) {
+          paymentData[methodType].selfEncrypted = enc;
+          paymentData[methodType].selfEncryptedSignature = sig;
+        }
+      }
+
+      // Instant trade: encrypt PM details with server's PGP key + sign with user's key
+      if (serverPGPKey && auth?.pgpPrivKey) {
+        if (Object.keys(cleanData).length > 0) {
+          const plaintext = JSON.stringify(cleanData);
+          const [encrypted, signature] = await Promise.all([
+            encryptForPublicKey(plaintext, serverPGPKey),
+            signPGPMessage(plaintext, auth.pgpPrivKey),
+          ]);
+          if (encrypted && signature) {
+            paymentData[methodType].encrypted = encrypted;
+            paymentData[methodType].signature = signature;
+          }
+        }
+      }
     }
+
     return { meansOfPayment, paymentData };
   }
 
@@ -252,7 +296,18 @@ export default function OfferCreation({ initialType="buy" }) {
         setPublishing(true);
         setPublishError(null);
         try{
-          const { meansOfPayment, paymentData } = await buildPaymentPayload();
+          // For instant trade: fetch the Peach server PGP key to encrypt PM data
+          let serverPGPKey = null;
+          if (form.instantMatch) {
+            try {
+              const infoRes = await get('/info');
+              const infoData = await infoRes.json().catch(() => null);
+              serverPGPKey = infoData?.peach?.pgpPublicKey ?? null;
+            } catch (e) {
+              console.warn("[OfferCreation] Failed to fetch server PGP key:", e.message);
+            }
+          }
+          const { meansOfPayment, paymentData } = await buildPaymentPayload(serverPGPKey);
 
           // 1. Derive return address from multisigXpub at m/84'/{coin}'/1/{index}
           // Index = total sell offers ever created (active + historical). Monotonically increasing.
@@ -270,30 +325,28 @@ export default function OfferCreation({ initialType="buy" }) {
           const historyCount = Array.isArray(historySell) ? historySell.filter(o => o.type === "ask").length : 0;
           const addrIdx = activeCount + historyCount;
           const returnAddress = deriveReturnAddress(auth.xpub, addrIdx);
-          console.log("[OfferCreation] Return address:", returnAddress, "at index", addrIdx, `(${activeCount} active + ${historyCount} history)`);
 
           // 2. POST /v1/offer — create sell offer
-          const offerRes = await post('/offer', {
+          const sellPayload = {
             type: "ask",
             amount: form.amtFixed,
             premium: parseFloat(form.premium) || 0,
             meansOfPayment,
             paymentData,
             returnAddress,
-            ...(form.instantMatch ? { instantTradeCriteria: { minReputation: form.noNewUsers ? 0.5 : -1, minTrades: form.noNewUsers ? 1 : 0, badges: [] } } : {}),
+            ...(form.instantMatch ? { instantTradeCriteria: { minReputation: form.noNewUsers ? 0.5 : -1, minTrades: form.noNewUsers ? 4 : 0, badges: [] } } : {}),
             ...(form.experienceLevel ? { experienceLevelCriteria: form.experienceLevel } : {}),
-          });
+          };
+          const offerRes = await post('/offer', sellPayload);
           const offerData = await offerRes.json().catch(()=>null);
           if(!offerRes.ok){
             throw new Error(offerData?.error || offerData?.message || `Server error ${offerRes.status}`);
           }
 
           const newOfferId = offerData.offerId || offerData.id;
-          console.log("[OfferCreation] Sell offer created:", newOfferId);
 
           // 2. Derive escrow public key (non-hardened: /3/{offerId})
           const pubKeyHex = deriveEscrowPubKey(auth.multisigXpub, Number(newOfferId));
-          console.log("[OfferCreation] Derived escrow pubkey:", pubKeyHex);
 
           // 3. POST /v1/offer/:id/escrow — register key, get escrow address
           const escrowRes = await post(`/offer/${newOfferId}/escrow`, {
@@ -305,7 +358,6 @@ export default function OfferCreation({ initialType="buy" }) {
             throw new Error(escrowData?.error || escrowData?.message || `Escrow creation failed ${escrowRes.status}`);
           }
 
-          console.log("[OfferCreation] Escrow created:", escrowData);
           setSellOfferId(newOfferId);
           setEscrowAddress(escrowData.escrow);
           setStep(2);
@@ -326,7 +378,18 @@ export default function OfferCreation({ initialType="buy" }) {
       setPublishing(true);
       setPublishError(null);
       try{
-        const { meansOfPayment, paymentData } = await buildPaymentPayload();
+        // For instant trade: fetch the Peach server PGP key to encrypt PM data
+        let buyServerPGPKey = null;
+        if (form.instantMatch) {
+          try {
+            const infoRes = await get('/info');
+            const infoData = await infoRes.json().catch(() => null);
+            buyServerPGPKey = infoData?.peach?.pgpPublicKey ?? null;
+          } catch (e) {
+            console.warn("[OfferCreation] Failed to fetch server PGP key:", e.message);
+          }
+        }
+        const { meansOfPayment, paymentData } = await buildPaymentPayload(buyServerPGPKey);
 
         const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
         const res = await fetch(`${v069Base}/buyOffer`, {
@@ -341,7 +404,7 @@ export default function OfferCreation({ initialType="buy" }) {
             paymentData,
             premium: parseFloat(form.premium) || 0,
             ...(form.noNewUsers ? { minReputation: 0.5 } : {}),
-            ...(form.instantMatch ? { instantTradeCriteria: { minReputation: form.noNewUsers ? 0.5 : -1, minTrades: form.noNewUsers ? 1 : 0, badges: [] } } : {}),
+            ...(form.instantMatch ? { instantTradeCriteria: { minReputation: form.noNewUsers ? 0.5 : -1, minTrades: form.noNewUsers ? 4 : 0, badges: [] } } : {}),
           }),
         });
 
@@ -352,7 +415,6 @@ export default function OfferCreation({ initialType="buy" }) {
           throw new Error(msg);
         }
 
-        console.log("[OfferCreation] Buy offer created:", data);
         setDone(true);
       }catch(err){
         console.error("[OfferCreation] Buy offer failed:", err);
@@ -816,7 +878,7 @@ export default function OfferCreation({ initialType="buy" }) {
                   ["Current effective price", `€${Math.round(effP).toLocaleString()}/BTC`],
                   ["Methods", offerMethods.join(", ")||"—"],
                   ["Currencies", offerCurrencies.join(", ")||"—"],
-                  ...(!isSell?[["Instant Match", form.instantMatch?"⚡ Enabled":"Off"]]:[] ),
+                  ...(form.instantMatch?[["Instant Match", "⚡ Enabled"]]:[]),
                   ...(form.noNewUsers?[["No new users", "On"]]:[] ),
                   ...(form.experienceLevel?[["Experience filter", form.experienceLevel==="newUsersOnly"?"New users only":"Experienced users only"]]:[] ),
                 ].map(([k,v])=>(
@@ -1046,7 +1108,7 @@ export default function OfferCreation({ initialType="buy" }) {
                   <span className="ik">Effective price</span>
                   <span className="iv">€{Math.round(effP).toLocaleString()}</span>
                 </div>
-                {!isSell&&form.instantMatch&&(
+                {form.instantMatch&&(
                   <div className="ir">
                     <span className="ik">Instant Match</span>
                     <span className="iv">⚡ On</span>

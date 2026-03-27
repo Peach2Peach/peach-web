@@ -717,11 +717,54 @@ export function PayoutWalletSubScreen({ onBack }) {
 // ── BlockUsersSubScreen ──────────────────────────────────────────────────────
 
 export function BlockUsersSubScreen({ onBack }) {
-  const { put, auth } = useApi();
+  const { put, del, auth } = useApi();
   const [inputId, setInputId] = useState("");
   const [blocking, setBlocking] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [blockedUsers, setBlockedUsers] = useState([]);
+  const [listLoading, setListLoading] = useState(false);
+  const [listError, setListError] = useState(null);
+
+  async function fetchBlockedUsers() {
+    if (!auth) return;
+    setListLoading(true);
+    setListError(null);
+    try {
+      const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
+      const res = await fetch(`${v069Base}/selfUser/blockedUsers`, {
+        headers: { Authorization: `Bearer ${auth.token}` },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setListError(err.message || "Failed to load blocked users");
+        setListLoading(false);
+        return;
+      }
+      const data = await res.json();
+      setBlockedUsers(data.users ?? []);
+    } catch {
+      setListError("Network error — check your connection");
+    } finally {
+      setListLoading(false);
+    }
+  }
+
+  useEffect(() => { fetchBlockedUsers(); }, [auth]);
+
+  async function handleUnblock(userId) {
+    try {
+      const res = await del(`/user/${encodeURIComponent(userId)}/block`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setListError(err.message || "Failed to unblock user");
+        return;
+      }
+      fetchBlockedUsers();
+    } catch {
+      setListError("Network error — check your connection");
+    }
+  }
 
   async function handleBlock() {
     const userId = inputId.trim();
@@ -745,6 +788,7 @@ export function BlockUsersSubScreen({ onBack }) {
       setSuccess(`User blocked successfully`);
       setInputId("");
       setBlocking(false);
+      fetchBlockedUsers();
     } catch {
       setError("Network error — check your connection");
       setBlocking(false);
@@ -776,9 +820,52 @@ export function BlockUsersSubScreen({ onBack }) {
         {success && <div style={{ fontSize:".75rem", fontWeight:700, color:"#65A519", marginTop:6 }}>{success}</div>}
       </div>
 
-      <div style={{ fontSize:".72rem", fontWeight:700, color:"#C4B5AE", textTransform:"uppercase",
-        letterSpacing:".08em", textAlign:"center", marginTop:32 }}>
-        List of blocked users coming soon
+      <div style={{ marginTop:32 }}>
+        <div style={{ fontSize:".72rem", fontWeight:700, color:"#F56522", textTransform:"uppercase",
+          letterSpacing:".1em", marginBottom:12, paddingLeft:4 }}>
+          Blocked Users
+        </div>
+
+        {listLoading && (
+          <div style={{ fontSize:".82rem", color:"#7D675E", textAlign:"center", padding:"20px 0" }}>
+            Loading…
+          </div>
+        )}
+
+        {listError && (
+          <div style={{ fontSize:".75rem", fontWeight:600, color:"#DF321F", textAlign:"center", padding:"12px 0" }}>
+            {listError}
+          </div>
+        )}
+
+        {!listLoading && !listError && blockedUsers.length === 0 && (
+          <div style={{ fontSize:".82rem", color:"#C4B5AE", textAlign:"center", padding:"24px 0", fontWeight:600 }}>
+            No blocked users
+          </div>
+        )}
+
+        {!listLoading && blockedUsers.length > 0 && (
+          <div style={{ background:"#FFFFFF", border:"1px solid #EAE3DF", borderRadius:12, overflow:"hidden" }}>
+            {blockedUsers.map((user, i) => (
+              <div key={user.id} style={{
+                display:"flex", alignItems:"center", justifyContent:"space-between",
+                padding:"12px 16px",
+                borderBottom: i < blockedUsers.length - 1 ? "1px solid #F4EEEB" : "none",
+              }}>
+                <span style={{ fontSize:".8rem", fontWeight:700, letterSpacing:".04em",
+                  color:"#2B1911", fontFamily:"monospace" }}>
+                  {formatPeachId(user.id)}
+                </span>
+                <button onClick={() => handleUnblock(user.id)}
+                  style={{ padding:"6px 14px", borderRadius:8, border:"1.5px solid #DF321F",
+                    background:"transparent", color:"#DF321F", fontFamily:"'Baloo 2',cursive",
+                    fontSize:".72rem", fontWeight:700, cursor:"pointer" }}>
+                  Unblock
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </SubScreenWrapper>
   );

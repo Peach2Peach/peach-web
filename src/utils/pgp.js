@@ -521,6 +521,14 @@ export async function generateEphemeralKeyPair() {
 }
 
 /**
+ * Derive the armored public key from an armored private key.
+ */
+export async function derivePublicKeyArmored(armoredPrivKey) {
+  const privateKey = await openpgp.readPrivateKey({ armoredKey: armoredPrivKey });
+  return privateKey.toPublic().armor();
+}
+
+/**
  * Verify a detached PGP signature against a known public key.
  * Used to verify the server signed the desktop connection ID.
  * @param {string} data - the plaintext that was signed
