@@ -223,6 +223,7 @@ export function useQRAuth({ baseUrl }) {
           peachId: userProfile.id || userProfile.publicKey || null,
           baseUrl: baseUrl + "/v1",
           profile: userProfile,
+          loginTime: Date.now(),
         };
 
         try { localStorage.setItem("peach_logged_in", "true"); } catch {}

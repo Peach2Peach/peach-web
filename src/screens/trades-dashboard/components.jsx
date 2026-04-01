@@ -545,6 +545,7 @@ export function HistoryTable({ rows, onTradeSelect, selectedCurrency, tab, onRef
                 <td>
                   <span style={{ display:"inline-flex", alignItems:"center", gap:6 }}>
                     <StatusChip status={r.tradeStatus} showAction role={r.direction === "sell" ? "seller" : "buyer"}/>
+                    {r.experienceLevel&&<span title={r.experienceLevel==="experiencedUsersOnly"?"Experienced users only":"New users only"} style={{fontSize:".72rem"}}>{r.experienceLevel==="experiencedUsersOnly"?"👤":"🆕"}</span>}
                     {r.unread > 0 && <span className="unread-badge"><span style={{ lineHeight:1 }}>{r.unread}</span><IconMsg/></span>}
                   </span>
                 </td>

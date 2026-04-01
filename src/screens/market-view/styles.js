@@ -130,6 +130,9 @@ export const CSS = `
   .auto-badge{display:inline-flex;align-items:center;gap:3px;padding:3px 9px;
     border-radius:999px;background:var(--grad);color:white;font-size:.68rem;font-weight:800;
     white-space:nowrap;box-shadow:0 1px 6px rgba(245,101,34,.28)}
+  .exp-badge{display:inline-flex;align-items:center;gap:3px;padding:3px 9px;
+    border-radius:999px;background:var(--primary-mild);color:var(--primary-dark);
+    font-size:.68rem;font-weight:700;white-space:nowrap;border:1.5px solid var(--primary)}
 
   .offer-table tbody tr.own-row td{background:rgba(245,101,34,.05)}
   .offer-table tbody tr.own-row td:first-child{border-left:3px solid var(--primary)}

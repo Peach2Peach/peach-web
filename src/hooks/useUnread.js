@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { fetchWithSessionCheck } from "../utils/sessionGuard.js";
 
 // ── Singleton polling state ──────────────────────────────────────────────────
 let _interval = null;
@@ -19,7 +20,7 @@ async function _poll(auth, base) {
     return;
   }
   try {
-    const res = await fetch(`${base}/contracts/summary`, {
+    const res = await fetchWithSessionCheck(`${base}/contracts/summary`, {
       headers: { Authorization: `Bearer ${auth.token}` },
     });
     if (!res.ok) return;

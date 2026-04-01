@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { IcoBtc } from "./BitcoinAmount.jsx";
 import { useUnread } from "../hooks/useUnread.js";
+import { useSessionTimer } from "../hooks/useSessionTimer.js";
 import { useNotifications } from "../hooks/useNotifications.js";
 import NotificationPanel from "./NotificationPanel.jsx";
 import peachLogo from "../assets/PEACH WEB-LOGO.svg";
@@ -113,6 +114,7 @@ export function Topbar({
 }) {
   const { total: unreadTotal } = useUnread();
   const { notifications, unreadCount: unreadNotifs, markAllRead } = useNotifications();
+  const session = useSessionTimer();
   const [showNotifPanel, setShowNotifPanel] = useState(false);
   const navigate = useNavigate();
   const satsPerCur = btcPrice > 0 ? Math.round(100_000_000 / btcPrice) : 0;
@@ -196,6 +198,11 @@ export function Topbar({
         {isLoggedIn ? (
           <div className="avatar-menu-wrap">
             <div className="avatar-peachid" onClick={openAvatarMenu}>
+              {session.show && (
+                <span className={`session-timer${session.isWarning ? " session-timer-warn" : ""}`}>
+                  {session.display}
+                </span>
+              )}
               <span className="peach-id">{getTopbarPeachId()}</span>
               <div className="avatar">PW{unreadTotal > 0 && <div className="avatar-badge">{unreadTotal > 99 ? "99+" : unreadTotal}</div>}</div>
             </div>

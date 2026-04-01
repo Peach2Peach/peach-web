@@ -4,6 +4,7 @@ import { SideNav, Topbar } from "../../components/Navbars.jsx";
 import { SatsAmount, IcoBtc } from "../../components/BitcoinAmount.jsx";
 import { useAuth } from "../../hooks/useAuth.js";
 import { useApi } from "../../hooks/useApi.js";
+import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 import { extractPMsFromProfile, isApiError, generateSymmetricKey, encryptForRecipients, encryptSymmetric, signPGPMessage, hashPaymentFields, decryptPGPMessage } from "../../utils/pgp.js";
 import { getCached, setCache, clearCache } from "../../hooks/useApi.js";
 import { BTC_PRICE_FALLBACK as BTC_PRICE, fmtPct, fmtFiat, formatTradeId } from "../../utils/format.js";
@@ -200,7 +201,7 @@ export default function PeachMarket() {
       // POST trade request to v069
       const offerType = offer.type === "bid" ? "buyOffer" : "sellOffer";
       const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
-      const res = await fetch(`${v069Base}/${offerType}/${offer.id}/tradeRequestPerformed`, {
+      const res = await fetchWithSessionCheck(`${v069Base}/${offerType}/${offer.id}/tradeRequestPerformed`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -279,7 +280,7 @@ export default function PeachMarket() {
       // 4. Call performInstantTrade
       const offerType = offer.type === "bid" ? "buyOffer" : "sellOffer";
       const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
-      const res = await fetch(`${v069Base}/${offerType}/${offer.id}/performInstantTrade`, {
+      const res = await fetchWithSessionCheck(`${v069Base}/${offerType}/${offer.id}/performInstantTrade`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -359,6 +360,7 @@ export default function PeachMarket() {
       trades: o.user?.trades ?? 0,
       badges: o.user?.medals ?? o.user?.badges ?? [],
       auto: o.allowedToInstantTrade ?? false,
+      experienceLevel: o.experienceLevelCriteria ?? null,
       online: o.user?.online ?? false,
       isOwn: !!peachId && (o.user?.id === peachId || o.user?.id?.toLowerCase?.() === peachId?.toLowerCase?.()),
       _raw: o,
@@ -380,6 +382,7 @@ export default function PeachMarket() {
       trades: auth?.profile?.trades ?? 0,
       badges: auth?.profile?.medals ?? [],
       auto: false,
+      experienceLevel: o.experienceLevelCriteria ?? null,
       online: true,
       isOwn: true,
     };
@@ -394,9 +397,9 @@ export default function PeachMarket() {
         const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
         const hdrs = { Authorization: `Bearer ${auth.token}` };
         const [buyOffersRes, sellOffersRes, ownOffersRes] = await Promise.all([
-          fetch(`${v069Base}/buyOffer`, { headers: hdrs }),
-          fetch(`${v069Base}/sellOffer`, { headers: hdrs }),
-          fetch(`${v069Base}/user/${peachId}/offers`, { headers: hdrs }),
+          fetchWithSessionCheck(`${v069Base}/buyOffer`, { headers: hdrs }),
+          fetchWithSessionCheck(`${v069Base}/sellOffer`, { headers: hdrs }),
+          fetchWithSessionCheck(`${v069Base}/user/${peachId}/offers`, { headers: hdrs }),
         ]);
         const buyOffersJson  = buyOffersRes.ok  ? await buyOffersRes.json()  : {};
         const sellOffersJson = sellOffersRes.ok ? await sellOffersRes.json() : {};
@@ -473,7 +476,7 @@ export default function PeachMarket() {
 
     if (auth) {
       const selfUserBase = auth.baseUrl.replace(/\/v1$/, '/v069');
-      fetch(`${selfUserBase}/selfUser`, {
+      fetchWithSessionCheck(`${selfUserBase}/selfUser`, {
         headers: { Authorization: `Bearer ${auth.token}` },
       })
         .then(r => r.ok ? r.json() : null)
@@ -670,6 +673,8 @@ export default function PeachMarket() {
                 </div>
               </div>
               {isInstant && <span className="auto-badge">⚡ Instant</span>}
+              {offer.experienceLevel==="experiencedUsersOnly"&&<span className="exp-badge">👤 Experienced only</span>}
+              {offer.experienceLevel==="newUsersOnly"&&<span className="exp-badge">🆕 New users</span>}
             </div>
 
             {/* Summary rows */}
@@ -1116,7 +1121,13 @@ export default function PeachMarket() {
                       <td>
                         <div className="action-cell">
                           {offer.isOwn && <span className="own-label">Your offer</span>}
-                          {offer.auto && <span className="auto-badge">⚡ Instant Match</span>}
+                          {(offer.auto||offer.experienceLevel)&&(
+                            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
+                              {offer.auto&&<span className="auto-badge">⚡ Instant Match</span>}
+                              {offer.experienceLevel==="experiencedUsersOnly"&&<span className="exp-badge">👤 Experienced only</span>}
+                              {offer.experienceLevel==="newUsersOnly"&&<span className="exp-badge">🆕 New users</span>}
+                            </div>
+                          )}
                           {offer.isOwn
                             ? <button className="action-btn edit-btn">✏ Edit</button>
                             : effectiveRequested.has(offer.id) && !offer.auto
@@ -1167,7 +1178,13 @@ export default function PeachMarket() {
                     {offer.badges.includes("fast")&&<span className="badge badge-fast">⚡</span>}
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-                    {offer.auto&&<span className="auto-badge">⚡ Instant Match</span>}
+                    {(offer.auto||offer.experienceLevel)&&(
+                      <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
+                        {offer.auto&&<span className="auto-badge">⚡ Instant Match</span>}
+                        {offer.experienceLevel==="experiencedUsersOnly"&&<span className="exp-badge">👤 Experienced only</span>}
+                        {offer.experienceLevel==="newUsersOnly"&&<span className="exp-badge">🆕 New users</span>}
+                      </div>
+                    )}
                     {offer.isOwn
                       ? <button className="action-btn edit-btn">✏ Edit</button>
                       : effectiveRequested.has(offer.id) && !offer.auto

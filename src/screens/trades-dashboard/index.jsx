@@ -8,6 +8,7 @@ import { SideNav, Topbar } from "../../components/Navbars.jsx";
 import { SatsAmount, IcoBtc } from "../../components/BitcoinAmount.jsx";
 import { useAuth } from "../../hooks/useAuth.js";
 import { useApi, getCached, setCache, clearCache } from "../../hooks/useApi.js";
+import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 import MobileSigningModal from "../../components/MobileSigningModal.jsx";
 import { useUnread } from "../../hooks/useUnread.js";
 import {
@@ -632,6 +633,7 @@ export default function TradesDashboard() {
       methods: offerMethods.length > 0 ? offerMethods : (o.paymentMethods ?? []),
       currencies: offerCurrencies.length > 0 ? offerCurrencies : (o.currencies ?? []),
       paymentData: o.paymentData ?? null,
+      experienceLevel: o.experienceLevelCriteria ?? null,
     };
   }
 
@@ -700,8 +702,8 @@ export default function TradesDashboard() {
         const [offersRes, contractsRes, v069BuyRes, ownOffersRes] = await Promise.all([
           get('/offers/summary'),
           get('/contracts/summary'),
-          fetch(`${v069Base}/buyOffer?ownOffers=true`, { headers: hdrs }),
-          fetch(`${v069Base}/user/${auth.peachId}/offers`, { headers: hdrs }),
+          fetchWithSessionCheck(`${v069Base}/buyOffer?ownOffers=true`, { headers: hdrs }),
+          fetchWithSessionCheck(`${v069Base}/user/${auth.peachId}/offers`, { headers: hdrs }),
         ]);
         const [offersData, contractsData, v069BuyData, ownOffersData] = await Promise.all([
           offersRes.ok ? offersRes.json() : [],
@@ -829,7 +831,7 @@ export default function TradesDashboard() {
         (async () => {
           if (!auth?.pgpPrivKey) return;
           try {
-            const res = await fetch(`${v069Base}/selfUser`, { headers: hdrs });
+            const res = await fetchWithSessionCheck(`${v069Base}/selfUser`, { headers: hdrs });
             if (!res.ok) return;
             const data = await res.json();
             const profile = data?.user ?? data;
@@ -849,8 +851,8 @@ export default function TradesDashboard() {
       // ── Browse marketplace for sent trade requests ──
       try {
         const [browseBuyRes, browseSellRes] = await Promise.all([
-          fetch(`${v069Base}/buyOffer?ownOffers=false`, { headers: hdrs }),
-          fetch(`${v069Base}/sellOffer?ownOffers=false`, { headers: hdrs }),
+          fetchWithSessionCheck(`${v069Base}/buyOffer?ownOffers=false`, { headers: hdrs }),
+          fetchWithSessionCheck(`${v069Base}/sellOffer?ownOffers=false`, { headers: hdrs }),
         ]);
         const [browseBuyData, browseSellData] = await Promise.all([
           browseBuyRes.ok ? browseBuyRes.json() : [],
@@ -866,12 +868,12 @@ export default function TradesDashboard() {
         if (sentRequests.length > 0) {
           await Promise.all(sentRequests.map(async (sr) => {
             try {
-              const detailRes = await fetch(`${v069Base}/${sr._offerType}/${sr._offerId}/tradeRequestPerformed/`, { headers: hdrs });
+              const detailRes = await fetchWithSessionCheck(`${v069Base}/${sr._offerType}/${sr._offerId}/tradeRequestPerformed/`, { headers: hdrs });
               if (detailRes.ok) {
                 const detailData = await detailRes.json();
                 sr._tradeRequestData = Array.isArray(detailData) ? detailData[0] : detailData;
               }
-              const chatRes = await fetch(`${v069Base}/${sr._offerType}/${sr._offerId}/tradeRequestPerformed/chat`, { headers: hdrs });
+              const chatRes = await fetchWithSessionCheck(`${v069Base}/${sr._offerType}/${sr._offerId}/tradeRequestPerformed/chat`, { headers: hdrs });
               if (chatRes.ok) {
                 const chatData = await chatRes.json();
                 const msgs = Array.isArray(chatData) ? chatData : (chatData.messages ?? chatData.data ?? []);
@@ -895,7 +897,7 @@ export default function TradesDashboard() {
                 try {
                   if (offer.tradeStatus === "acceptTradeRequest") {
                     const offerType = offer.direction === "buy" ? "buyOffer" : "sellOffer";
-                    const res = await fetch(`${v069Base}/${offerType}/${offer.id}/tradeRequestReceived/`, { headers: hdrs });
+                    const res = await fetchWithSessionCheck(`${v069Base}/${offerType}/${offer.id}/tradeRequestReceived/`, { headers: hdrs });
                     if (!res.ok) return { offerId: offer.id, matches: [], totalMatches: 0 };
                     const data = await res.json();
                     const requests = Array.isArray(data) ? data : (data?.tradeRequests ?? []);
@@ -1097,7 +1099,7 @@ export default function TradesDashboard() {
       // v069 offers use PATCH /v069/{buyOffer|sellOffer}/:id (v1 returns 401 for numeric IDs)
       const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
       const offerType = offer.direction === "buy" ? "buyOffer" : "sellOffer";
-      const res = await fetch(`${v069Base}/${offerType}/${offer.id}`, {
+      const res = await fetchWithSessionCheck(`${v069Base}/${offerType}/${offer.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.token}` },
         body: JSON.stringify({ premium: val }),
@@ -1124,7 +1126,7 @@ export default function TradesDashboard() {
       if (offer.direction === "buy") {
         // Buy offers use v069 DELETE (v1 cancel returns 401 for numeric v069 IDs)
         const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
-        res = await fetch(`${v069Base}/buyOffer/${offer.id}`, {
+        res = await fetchWithSessionCheck(`${v069Base}/buyOffer/${offer.id}`, {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${auth.token}` },
         });
@@ -1176,7 +1178,7 @@ export default function TradesDashboard() {
             // v069: fetch trade requests
             const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
             const offerType = trade.direction === "buy" ? "buyOffer" : "sellOffer";
-            const res = await fetch(`${v069Base}/${offerType}/${trade.id}/tradeRequestReceived/`, {
+            const res = await fetchWithSessionCheck(`${v069Base}/${offerType}/${trade.id}/tradeRequestReceived/`, {
               headers: { Authorization: `Bearer ${auth.token}` },
             });
             if (res.ok) {
@@ -1296,7 +1298,7 @@ export default function TradesDashboard() {
         const userId = match._raw?.tradeRequestUserId;
         const offerType = trade.direction === "buy" ? "buyOffer" : "sellOffer";
         const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
-        const res = await fetch(`${v069Base}/${offerType}/${trade.id}/tradeRequestReceived/${userId}`, {
+        const res = await fetchWithSessionCheck(`${v069Base}/${offerType}/${trade.id}/tradeRequestReceived/${userId}`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${auth.token}` },
         });
@@ -1417,7 +1419,7 @@ export default function TradesDashboard() {
         console.log("[Trades] v069 accept URL:", acceptUrl);
         console.log("[Trades] v069 accept payload has paymentDataEncrypted:", !!paymentDataEncrypted);
 
-        const res = await fetch(acceptUrl, {
+        const res = await fetchWithSessionCheck(acceptUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${auth.token}` },
           body: JSON.stringify({ paymentDataEncrypted, paymentDataSignature }),
@@ -1742,6 +1744,14 @@ export default function TradesDashboard() {
                   <span className="offer-detail-label">Created</span>
                   <span className="offer-detail-value">{o.createdAt ? new Date(o.createdAt).toLocaleDateString() : "—"}</span>
                 </div>
+                {o.experienceLevel&&(
+                  <div className="offer-detail-row">
+                    <span className="offer-detail-label">Experience filter</span>
+                    <span className="offer-detail-value">
+                      {o.experienceLevel==="experiencedUsersOnly"?"👤 Experienced users only":"🆕 New users only"}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Footer — actions */}

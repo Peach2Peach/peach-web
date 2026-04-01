@@ -10,6 +10,7 @@ import { AVATAR_COLORS } from "../../data/constants.js";
 import Avatar from "../../components/Avatar.jsx";
 import { PeachRating, Badge, satsToFiat } from "./components.jsx";
 import { decryptPGPMessage, decryptSymmetric, encryptSymmetric, signPGPMessage } from "../../utils/pgp.js";
+import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 
 // ─── ICONS (chat) ────────────────────────────────────────────────────────────
 const IconChat = () => (
@@ -179,7 +180,7 @@ export default function MatchesPopup({
     Promise.all(chatMatches.map(async (m) => {
       try {
         const url = `${v069Base}/${offerType}/${trade.id}/tradeRequestReceived/${m._raw.tradeRequestUserId}/chat`;
-        const res = await fetch(url, { headers: { Authorization: `Bearer ${auth.token}` } });
+        const res = await fetchWithSessionCheck(url, { headers: { Authorization: `Bearer ${auth.token}` } });
         if (!res.ok) return null;
         const data = await res.json();
         const msgs = Array.isArray(data) ? data : (data.messages ?? data.data ?? []);
@@ -241,7 +242,7 @@ export default function MatchesPopup({
 
         // Fetch messages
         const url = buildChatUrl(chatMatch);
-        const res = await fetch(url, {
+        const res = await fetchWithSessionCheck(url, {
           headers: { Authorization: `Bearer ${auth.token}` },
         });
         if (cancelled) return;
@@ -266,7 +267,7 @@ export default function MatchesPopup({
     const url = buildChatUrl(chatMatch);
     const iv = setInterval(async () => {
       try {
-        const res = await fetch(url, {
+        const res = await fetchWithSessionCheck(url, {
           headers: { Authorization: `Bearer ${auth.token}` },
         });
         if (!res.ok) return;
@@ -309,7 +310,7 @@ export default function MatchesPopup({
       const encrypted = await encryptSymmetric(plaintext, chatSymKey);
       const signature = await signPGPMessage(plaintext, auth.pgpPrivKey);
       const url = buildChatUrl(chatMatch);
-      const res = await fetch(url, {
+      const res = await fetchWithSessionCheck(url, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${auth.token}`,
@@ -673,7 +674,7 @@ export function SentRequestPopup({ trade, onClose }) {
         setChatSymKey(symKey);
 
         const url = buildChatUrl();
-        const res = await fetch(url, {
+        const res = await fetchWithSessionCheck(url, {
           headers: { Authorization: `Bearer ${auth.token}` },
         });
         if (cancelled) return;
@@ -698,7 +699,7 @@ export function SentRequestPopup({ trade, onClose }) {
     const url = buildChatUrl();
     const iv = setInterval(async () => {
       try {
-        const res = await fetch(url, {
+        const res = await fetchWithSessionCheck(url, {
           headers: { Authorization: `Bearer ${auth.token}` },
         });
         if (!res.ok) return;
@@ -740,7 +741,7 @@ export function SentRequestPopup({ trade, onClose }) {
       const encrypted = await encryptSymmetric(plaintext, chatSymKey);
       const signature = await signPGPMessage(plaintext, auth.pgpPrivKey);
       const url = buildChatUrl();
-      const res = await fetch(url, {
+      const res = await fetchWithSessionCheck(url, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${auth.token}`,

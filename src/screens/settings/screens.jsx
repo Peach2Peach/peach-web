@@ -6,6 +6,7 @@
 import { useState, useEffect } from "react";
 import { formatPeachId, PeachIcon } from "../../components/Navbars.jsx";
 import { useApi } from "../../hooks/useApi.js";
+import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 import { validateBtcAddress, validateBIP322Signature, validateFeeRate } from "../../peach-validators.js";
 import {
   IconCopy, IconTrash, IconCamera, IconExternalLink, IconShield,
@@ -732,7 +733,7 @@ export function BlockUsersSubScreen({ onBack }) {
     setListError(null);
     try {
       const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
-      const res = await fetch(`${v069Base}/selfUser/blockedUsers`, {
+      const res = await fetchWithSessionCheck(`${v069Base}/selfUser/blockedUsers`, {
         headers: { Authorization: `Bearer ${auth.token}` },
       });
       if (!res.ok) {

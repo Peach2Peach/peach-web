@@ -15,6 +15,8 @@
  *   const res = await del('/offer/match', { matchOfferId: '...' });
  */
 
+import { fetchWithSessionCheck } from '../utils/sessionGuard.js';
+
 // ── In-memory cache (survives navigation, cleared on page refresh) ──
 if (!window.__PEACH_CACHE__) window.__PEACH_CACHE__ = {};
 
@@ -61,11 +63,11 @@ export function useApi() {
     isLoggedIn: !!auth,
 
     get(path) {
-      return fetch(`${base}${path}`, { headers: authHeaders });
+      return fetchWithSessionCheck(`${base}${path}`, { headers: authHeaders });
     },
 
     post(path, body) {
-      return fetch(`${base}${path}`, {
+      return fetchWithSessionCheck(`${base}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify(body),
@@ -73,7 +75,7 @@ export function useApi() {
     },
 
     patch(path, body) {
-      return fetch(`${base}${path}`, {
+      return fetchWithSessionCheck(`${base}${path}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify(body),
@@ -81,7 +83,7 @@ export function useApi() {
     },
 
     put(path, body) {
-      return fetch(`${base}${path}`, {
+      return fetchWithSessionCheck(`${base}${path}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: body ? JSON.stringify(body) : undefined,
@@ -89,7 +91,7 @@ export function useApi() {
     },
 
     del(path, body) {
-      return fetch(`${base}${path}`, {
+      return fetchWithSessionCheck(`${base}${path}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify(body),

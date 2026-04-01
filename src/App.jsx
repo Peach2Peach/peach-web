@@ -1,5 +1,8 @@
-import { Component } from 'react'
+import { Component, useState, useEffect } from 'react'
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
+import SessionExpiredModal from './components/SessionExpiredModal.jsx'
+import { clearCache } from './hooks/useApi.js'
+import { resetSessionExpiredFlag } from './utils/sessionGuard.js'
 import PeachAuth from './screens/peach-auth.jsx'
 import PeachHome from './screens/peach-home.jsx'
 import PeachMarket from './screens/market-view/index.jsx'
@@ -42,6 +45,23 @@ class ErrorBoundary extends Component {
 }
 
 export default function App() {
+  const [sessionExpired, setSessionExpired] = useState(false);
+
+  useEffect(() => {
+    const handleExpired = () => setSessionExpired(true);
+    window.addEventListener('peach:session-expired', handleExpired);
+    return () => window.removeEventListener('peach:session-expired', handleExpired);
+  }, []);
+
+  function handleReauth() {
+    window.__PEACH_AUTH__ = null;
+    clearCache();
+    resetSessionExpiredFlag();
+    try { localStorage.setItem("peach_logged_in", "false"); } catch {}
+    setSessionExpired(false);
+    window.location.hash = '#/';
+  }
+
   return (
     <ErrorBoundary>
       <HashRouter>
@@ -57,6 +77,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </HashRouter>
+      {sessionExpired && <SessionExpiredModal onReauth={handleReauth} />}
     </ErrorBoundary>
   )
 }

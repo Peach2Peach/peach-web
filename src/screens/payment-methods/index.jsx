@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { SideNav, Topbar } from "../../components/Navbars.jsx";
 import { IcoBtc } from "../../components/BitcoinAmount.jsx";
 import { useAuth } from "../../hooks/useAuth.js";
+import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 import { useApi } from "../../hooks/useApi.js";
 import { extractPMsFromProfile, encryptPGPMessage, signPGPMessage, isApiError } from "../../utils/pgp.js";
 import { SAT, BTC_PRICE_FALLBACK as BTC_PRICE } from "../../utils/format.js";
@@ -97,7 +98,7 @@ export default function PeachPaymentMethods() {
     (async () => {
       try {
         const selfUserBase = auth.baseUrl.replace(/\/v1$/, '/v069');
-        const res = await fetch(`${selfUserBase}/selfUser`, {
+        const res = await fetchWithSessionCheck(`${selfUserBase}/selfUser`, {
           headers: { Authorization: `Bearer ${auth.token}` },
         });
         if (!res.ok) throw new Error(`${res.status}`);
@@ -238,7 +239,7 @@ export default function PeachPaymentMethods() {
       const payload = { encryptedPaymentData: encrypted };
       if (signature) payload.encryptedPaymentDataSignature = signature;
       const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
-      const res = await fetch(`${v069Base}/selfUser/encryptedPaymentData`, {
+      const res = await fetchWithSessionCheck(`${v069Base}/selfUser/encryptedPaymentData`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${auth.token}`,

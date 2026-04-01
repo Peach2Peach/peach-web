@@ -8,6 +8,7 @@ import { SideNav, Topbar } from "../../components/Navbars.jsx";
 import { SatsAmount, IcoBtc } from "../../components/BitcoinAmount.jsx";
 import { useAuth } from "../../hooks/useAuth.js";
 import { useApi } from "../../hooks/useApi.js";
+import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 import { extractPMsFromProfile, isApiError, hashPaymentFields, encryptForPublicKey, encryptPGPMessage, signPGPMessage } from "../../utils/pgp.js";
 import { deriveEscrowPubKey, deriveReturnAddress } from "../../utils/escrow.js";
 import { QRCodeSVG } from "qrcode.react";
@@ -49,7 +50,7 @@ export default function OfferCreation({ initialType="buy" }) {
     // On regtest, clear mock data while we fetch
     setSavedMethods([]);
     const selfUserBase = auth.baseUrl.replace(/\/v1$/, '/v069');
-    fetch(`${selfUserBase}/selfUser`, {
+    fetchWithSessionCheck(`${selfUserBase}/selfUser`, {
       headers: { Authorization: `Bearer ${auth.token}` },
     })
       .then(r => r.ok ? r.json() : null)
@@ -118,7 +119,8 @@ export default function OfferCreation({ initialType="buy" }) {
   }, [showAvatarMenu]);
 
   const initForm = ()=>({amtFixed:MIN_SATS,
-    selectedMethodIds:[],premium:"0",instantMatch:false,noNewUsers:false,experienceLevel:""});
+    selectedMethodIds:[],premium:"0",instantMatch:false,noNewUsers:false,
+    minReputation:false,instantMatchBadges:[],experienceLevel:""});
   const [form, setForm] = useState(initForm());
 
   const isSell = type==="sell";
@@ -180,6 +182,18 @@ export default function OfferCreation({ initialType="buy" }) {
     setStep(0);setDone(false);setEscrowFunded(false);setFundingStatus(null);setFundingAmounts(null);setPublishError(null);setEscrowAddress(null);setSellOfferId(null);setForm(initForm());
   }
   function switchType(t){ setType(t); reset(); }
+
+  function buildInstantTradeCriteria(){
+    if(!form.instantMatch) return undefined;
+    let mr = -1;
+    if(form.minReputation) mr = 0.8;        // 4.5 stars on 0-5 scale → (4.5/5)*2-1
+    else if(form.noNewUsers) mr = 0.5;
+    return {
+      minReputation: mr,
+      minTrades: form.noNewUsers ? 4 : 0,
+      badges: [...form.instantMatchBadges],
+    };
+  }
 
   function handleSavePM(pm) {
     if(editingPM) {
@@ -314,7 +328,7 @@ export default function OfferCreation({ initialType="buy" }) {
           const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
           const hdrs = { Authorization: `Bearer ${auth.token}` };
           const [ownOffersRes, historySellRes] = await Promise.all([
-            fetch(`${v069Base}/user/${auth.peachId}/offers`, { headers: hdrs }),
+            fetchWithSessionCheck(`${v069Base}/user/${auth.peachId}/offers`, { headers: hdrs }),
             get('/offers/summary'),
           ]);
           const ownOffersData = await ownOffersRes.json().catch(() => ({}));
@@ -334,7 +348,7 @@ export default function OfferCreation({ initialType="buy" }) {
             meansOfPayment,
             paymentData,
             returnAddress,
-            ...(form.instantMatch ? { instantTradeCriteria: { minReputation: form.noNewUsers ? 0.5 : -1, minTrades: form.noNewUsers ? 4 : 0, badges: [] } } : {}),
+            ...(buildInstantTradeCriteria() ? { instantTradeCriteria: buildInstantTradeCriteria() } : {}),
             ...(form.experienceLevel ? { experienceLevelCriteria: form.experienceLevel } : {}),
           };
           const offerRes = await post('/offer', sellPayload);
@@ -392,7 +406,7 @@ export default function OfferCreation({ initialType="buy" }) {
         const { meansOfPayment, paymentData } = await buildPaymentPayload(buyServerPGPKey);
 
         const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
-        const res = await fetch(`${v069Base}/buyOffer`, {
+        const res = await fetchWithSessionCheck(`${v069Base}/buyOffer`, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${auth.token}`,
@@ -403,8 +417,8 @@ export default function OfferCreation({ initialType="buy" }) {
             meansOfPayment,
             paymentData,
             premium: parseFloat(form.premium) || 0,
-            ...(form.noNewUsers ? { minReputation: 0.5 } : {}),
-            ...(form.instantMatch ? { instantTradeCriteria: { minReputation: form.noNewUsers ? 0.5 : -1, minTrades: form.noNewUsers ? 4 : 0, badges: [] } } : {}),
+            ...(buildInstantTradeCriteria() ? { instantTradeCriteria: buildInstantTradeCriteria() } : {}),
+            ...(form.experienceLevel ? { experienceLevelCriteria: form.experienceLevel } : {}),
           }),
         });
 
@@ -770,81 +784,104 @@ export default function OfferCreation({ initialType="buy" }) {
                   )}
                 </div>
 
-                {(
-                  <div className="check-row" style={{marginTop:12}}
-                    onClick={()=>{ setForm(f => ({ ...f, instantMatch: !f.instantMatch, ...(f.instantMatch ? {noNewUsers: false} : {}) })); }}>
-                    <div className="check-box" style={{
-                      border:`2px solid ${form.instantMatch?"var(--primary)":"var(--black-10)"}`,
-                      background:form.instantMatch?"var(--primary-mild)":"var(--surface)"}}>
-                      {form.instantMatch&&"✓"}
+                {/* ── INSTANT MATCH TOGGLE ── */}
+                <div className="check-row" style={{marginTop:12}}
+                  onClick={()=>setForm(f=>({...f, instantMatch:!f.instantMatch,
+                    ...(f.instantMatch ? {noNewUsers:false,minReputation:false,instantMatchBadges:[]} : {})}))}>
+                  <div className="check-box" style={{
+                    border:`2px solid ${form.instantMatch?"var(--primary)":"var(--black-10)"}`,
+                    background:form.instantMatch?"var(--primary-mild)":"var(--surface)"}}>
+                    {form.instantMatch&&"✓"}
+                  </div>
+                  <div>
+                    <div style={{fontSize:".8rem",fontWeight:700}}>⚡ Enable Instant Match</div>
+                    <div style={{fontSize:".7rem",color:"var(--black-65)",fontWeight:500}}>
+                      Auto-accept any qualifying {isSell?"buy":"sell"} offer
                     </div>
-                    <div>
-                      <div style={{fontSize:".8rem",fontWeight:700}}>⚡ Enable Instant Match</div>
-                      <div style={{fontSize:".7rem",color:"var(--black-65)",fontWeight:500}}>
-                        Auto-accept any qualifying sell offer
+                  </div>
+                </div>
+
+                {/* ── INSTANT MATCH SUB-OPTIONS (only when enabled) ── */}
+                {form.instantMatch&&(
+                  <div style={{marginTop:10,marginLeft:32,display:"flex",flexDirection:"column",gap:8}}>
+                    {/* No new users */}
+                    <div className="check-row" style={{cursor:"pointer"}}
+                      onClick={()=>setForm(f=>({...f, noNewUsers:!f.noNewUsers,
+                        ...((!f.noNewUsers && f.experienceLevel==="newUsersOnly") ? {experienceLevel:""} : {})}))}>
+                      <div style={{width:16,height:16,borderRadius:"50%",
+                        border:`2px solid ${form.noNewUsers?"var(--primary)":"var(--black-10)"}`,
+                        background:form.noNewUsers?"var(--primary)":"var(--surface)",
+                        display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        {form.noNewUsers&&<div style={{width:6,height:6,borderRadius:"50%",background:"#fff"}}/>}
                       </div>
+                      <div>
+                        <div style={{fontSize:".78rem",fontWeight:600}}>No new users</div>
+                        <div style={{fontSize:".68rem",color:"var(--black-65)",fontWeight:500}}>
+                          Only match with traders who have completed at least 1 trade
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Minimum reputation */}
+                    <div className="check-row" style={{cursor:"pointer"}}
+                      onClick={()=>setForm(f=>({...f, minReputation:!f.minReputation}))}>
+                      <div style={{width:16,height:16,borderRadius:"50%",
+                        border:`2px solid ${form.minReputation?"var(--primary)":"var(--black-10)"}`,
+                        background:form.minReputation?"var(--primary)":"var(--surface)",
+                        display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        {form.minReputation&&<div style={{width:6,height:6,borderRadius:"50%",background:"#fff"}}/>}
+                      </div>
+                      <span style={{fontSize:".78rem",fontWeight:600}}>Minimum reputation : 4.5</span>
+                    </div>
+
+                    {/* Badge filter chips */}
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:2}}>
+                      {[["fastTrader","Fast trader"],["superTrader","super trader"]].map(([val,label])=>(
+                        <span key={val}
+                          className={`badge-chip${form.instantMatchBadges.includes(val)?" sel":""}`}
+                          onClick={()=>setForm(f=>({...f,
+                            instantMatchBadges: f.instantMatchBadges.includes(val)
+                              ? f.instantMatchBadges.filter(b=>b!==val)
+                              : [...f.instantMatchBadges, val]
+                          }))}>{label}</span>
+                      ))}
                     </div>
                   </div>
                 )}
 
-                {/* No new users — visible for both buy and sell; requires Instant Match on */}
-                <div className="check-row" style={{
-                    marginTop:10,
-                    opacity: !form.instantMatch ? 0.4 : 1,
-                    pointerEvents: !form.instantMatch ? "none" : "auto",
-                    cursor: !form.instantMatch ? "not-allowed" : "pointer",
-                  }}
-                  onClick={()=>setForm(f=>({...f, noNewUsers:!f.noNewUsers, ...((!f.noNewUsers && f.experienceLevel==="newUsersOnly") ? {experienceLevel:""} : {})}))}>
+                {/* ── EXPERIENCE LEVEL FILTER ── */}
+                <div className="check-row" style={{marginTop:16}}
+                  onClick={()=>setForm(f=>({...f, experienceLevel: f.experienceLevel ? "" : "experiencedUsersOnly"}))}>
                   <div className="check-box" style={{
-                    border:`2px solid ${form.noNewUsers?"var(--primary)":"var(--black-10)"}`,
-                    background:form.noNewUsers?"var(--primary-mild)":"var(--surface)"}}>
-                    {form.noNewUsers&&"✓"}
+                    border:`2px solid ${form.experienceLevel?"var(--primary)":"var(--black-10)"}`,
+                    background:form.experienceLevel?"var(--primary-mild)":"var(--surface)"}}>
+                    {form.experienceLevel&&"✓"}
                   </div>
                   <div>
-                    <div style={{fontSize:".8rem",fontWeight:700}}>No new users</div>
+                    <div style={{fontSize:".8rem",fontWeight:700}}>Filter by experience level</div>
                     <div style={{fontSize:".7rem",color:"var(--black-65)",fontWeight:500}}>
-                      Only match with traders who have completed at least 1 trade
+                      Only accept trades from {isSell?"buyers":"sellers"} matching your criteria
                     </div>
                   </div>
                 </div>
-              </div>
-            </div>
-          )}
-
-          {/* ── EXPERIENCE LEVEL FILTER (sell only) ── */}
-          {step===0&&isSell&&(
-            <div className="card" style={{marginBottom:16}}>
-              <div className="check-row"
-                onClick={()=>setForm(f=>({...f, experienceLevel: f.experienceLevel ? "" : "experiencedUsersOnly"}))}>
-                <div className="check-box" style={{
-                  border:`2px solid ${form.experienceLevel?"var(--primary)":"var(--black-10)"}`,
-                  background:form.experienceLevel?"var(--primary-mild)":"var(--surface)"}}>
-                  {form.experienceLevel&&"✓"}
-                </div>
-                <div>
-                  <div style={{fontSize:".8rem",fontWeight:700}}>Filter by experience level</div>
-                  <div style={{fontSize:".7rem",color:"var(--black-65)",fontWeight:500}}>
-                    Only accept trades from buyers matching your criteria
-                  </div>
-                </div>
-              </div>
-              {form.experienceLevel&&(
-                <div style={{marginTop:10,marginLeft:32,display:"flex",flexDirection:"column",gap:8}}>
-                  {[["experiencedUsersOnly","Experienced users only"],["newUsersOnly","New users only (< 4 trades)"]].map(([val,label])=>(
-                    <div key={val} className="check-row" style={{cursor:"pointer"}}
-                      onClick={()=>setForm(f=>({...f, experienceLevel:val, ...(val==="newUsersOnly"&&f.noNewUsers ? {noNewUsers:false} : {})}))}>
-                      <div style={{
-                        width:16,height:16,borderRadius:"50%",
-                        border:`2px solid ${form.experienceLevel===val?"var(--primary)":"var(--black-10)"}`,
-                        background:form.experienceLevel===val?"var(--primary)":"var(--surface)",
-                        display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                        {form.experienceLevel===val&&<div style={{width:6,height:6,borderRadius:"50%",background:"#fff"}}/>}
+                {form.experienceLevel&&(
+                  <div style={{marginTop:10,marginLeft:32,display:"flex",flexDirection:"column",gap:8}}>
+                    {[["experiencedUsersOnly","Experienced users only"],["newUsersOnly","New users only (< 4 trades)"]].map(([val,label])=>(
+                      <div key={val} className="check-row" style={{cursor:"pointer"}}
+                        onClick={()=>setForm(f=>({...f, experienceLevel:val, ...(val==="newUsersOnly"&&f.noNewUsers ? {noNewUsers:false} : {})}))}>
+                        <div style={{
+                          width:16,height:16,borderRadius:"50%",
+                          border:`2px solid ${form.experienceLevel===val?"var(--primary)":"var(--black-10)"}`,
+                          background:form.experienceLevel===val?"var(--primary)":"var(--surface)",
+                          display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                          {form.experienceLevel===val&&<div style={{width:6,height:6,borderRadius:"50%",background:"#fff"}}/>}
+                        </div>
+                        <span style={{fontSize:".78rem",fontWeight:600}}>{label}</span>
                       </div>
-                      <span style={{fontSize:".78rem",fontWeight:600}}>{label}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -879,8 +916,10 @@ export default function OfferCreation({ initialType="buy" }) {
                   ["Methods", offerMethods.join(", ")||"—"],
                   ["Currencies", offerCurrencies.join(", ")||"—"],
                   ...(form.instantMatch?[["Instant Match", "⚡ Enabled"]]:[]),
-                  ...(form.noNewUsers?[["No new users", "On"]]:[] ),
-                  ...(form.experienceLevel?[["Experience filter", form.experienceLevel==="newUsersOnly"?"New users only":"Experienced users only"]]:[] ),
+                  ...(form.noNewUsers?[["No new users", "On"]]:[]),
+                  ...(form.minReputation?[["Min reputation", "4.5"]]:[]),
+                  ...(form.instantMatchBadges.length>0?[["Badge filter", form.instantMatchBadges.map(b=>b==="fastTrader"?"Fast trader":"Super trader").join(", ")]]:[]),
+                  ...(form.experienceLevel?[["Experience filter", form.experienceLevel==="newUsersOnly"?"New users only":"Experienced users only"]]:[]),
                 ].map(([k,v])=>(
                   <div key={k} className="review-row">
                     <span className="rk">{k}</span>

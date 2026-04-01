@@ -154,6 +154,12 @@ export const CSS = `
     color:var(--black-65);transition:all .12s;font-family:var(--font)}
   .method-chip:hover{border-color:var(--primary);color:var(--primary-dark)}
   .method-chip.sel{border-color:var(--primary);background:var(--primary-mild);color:var(--primary-dark)}
+  .badge-chip{display:inline-flex;align-items:center;padding:6px 14px;border-radius:999px;
+    font-size:.78rem;font-weight:700;cursor:pointer;border:2px solid var(--black-10);
+    background:var(--surface);color:var(--black-65);transition:all .12s;font-family:var(--font);
+    user-select:none}
+  .badge-chip:hover{border-color:var(--primary);color:var(--primary-dark)}
+  .badge-chip.sel{border-color:var(--primary);background:var(--primary-mild);color:var(--primary-dark)}
   .curr-chip{padding:4px 11px;border-radius:6px;font-size:.73rem;font-weight:800;
     cursor:pointer;border:2px solid var(--black-10);background:var(--surface);
     color:var(--black-65);transition:all .12s;letter-spacing:.04em;font-family:var(--font)}

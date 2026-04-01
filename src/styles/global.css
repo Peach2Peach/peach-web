@@ -53,11 +53,13 @@ body{font-family:var(--font);background:var(--primary-bg);color:var(--black)}
   font-size:.55rem;font-weight:800;width:14px;height:14px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;border:2px solid var(--surface)}
 .peach-id{font-size:.72rem;font-weight:800;letter-spacing:.06em;color:var(--black-75);font-family:var(--font);white-space:nowrap}
+.session-timer{font-size:.68rem;font-weight:700;color:var(--black-65);font-variant-numeric:tabular-nums;letter-spacing:.04em;font-family:var(--font);white-space:nowrap;padding:2px 8px;border-radius:999px;background:var(--black-5)}
+.session-timer-warn{color:var(--error);background:var(--error-bg);animation:pulse 1.5s ease-in-out infinite}
 .burger-btn{display:none;align-items:center;justify-content:center;
   width:34px;height:34px;border-radius:8px;border:none;
   background:transparent;cursor:pointer;color:var(--black-65);flex-shrink:0;transition:background .14s}
 .burger-btn:hover{background:var(--black-5)}
-@media(max-width:767px){.burger-btn{display:flex}.topbar-price{display:none}.peach-id{display:none}.sidenav-price-slot{display:block}}
+@media(max-width:767px){.burger-btn{display:flex}.topbar-price{display:none}.peach-id{display:none}.session-timer{display:none}.sidenav-price-slot{display:block}}
 
 /* ── AVATAR DROPDOWN ── */
 .avatar-menu-wrap{position:relative}

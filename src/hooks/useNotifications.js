@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { STATUS_CONFIG } from "../data/statusConfig.js";
 import { formatTradeId } from "../utils/format.js";
+import { fetchWithSessionCheck } from "../utils/sessionGuard.js";
 
 // ── Seller-specific overrides (keyed by status) ─────────────────────────────
 const SELLER_OVERRIDE = {
@@ -101,9 +102,9 @@ async function _poll(auth, base) {
   try {
     const peachId = window.__PEACH_AUTH__?.peachId;
     const [contractsRes, buyRes, ownOffersRes] = await Promise.all([
-      fetch(`${base}/contracts/summary`, { headers: hdrs }).then(r => r.ok ? r.json() : null).catch(() => null),
-      fetch(`${v069Base}/buyOffer?ownOffers=true`, { headers: hdrs }).then(r => r.ok ? r.json() : null).catch(() => null),
-      fetch(`${v069Base}/user/${peachId}/offers`, { headers: hdrs }).then(r => r.ok ? r.json() : null).catch(() => null),
+      fetchWithSessionCheck(`${base}/contracts/summary`, { headers: hdrs }).then(r => r.ok ? r.json() : null).catch(() => null),
+      fetchWithSessionCheck(`${v069Base}/buyOffer?ownOffers=true`, { headers: hdrs }).then(r => r.ok ? r.json() : null).catch(() => null),
+      fetchWithSessionCheck(`${v069Base}/user/${peachId}/offers`, { headers: hdrs }).then(r => r.ok ? r.json() : null).catch(() => null),
     ]);
 
     // ── Parse responses ──
