@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { useQRAuth } from "../hooks/useQRAuth.js";
+import peachLogo from "../assets/PEACH WEB-LOGO.svg";
 
 // ─── LOGO ─────────────────────────────────────────────────────────────────────
 const PeachIcon = ({ size = 28 }) => (
@@ -182,12 +183,7 @@ export default function PeachAuth() {
           <line x1="2" y1="4.5" x2="16" y2="4.5"/><line x1="2" y1="9" x2="16" y2="9"/><line x1="2" y1="13.5" x2="16" y2="13.5"/>
         </svg>
       </button>
-      <PeachIcon size={28}/>
-      <span style={{
-        fontSize:"1.22rem",fontWeight:800,letterSpacing:"-.02em",
-        background:"linear-gradient(90deg,#FF4D42,#FF7A50,#FFA24C)",
-        WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"
-      }}>Peach</span>
+      <img src={peachLogo} alt="Peach" style={{ height: 28 }} />
       {!isMobile && (
         <div style={{display:"flex",alignItems:"center",gap:8,background:"linear-gradient(90deg,#FFBFA8,#FFD5BF)",borderRadius:999,padding:"5px 6px 5px 10px",fontSize:".78rem",fontWeight:600,color:"#2B1911",flexShrink:0}}>
           <svg width="18" height="18" viewBox="0 0 32 32" fill="none" style={{flexShrink:0}}>

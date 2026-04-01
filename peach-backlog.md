@@ -124,21 +124,6 @@ Items that don't add new API wiring but improve existing screens. Organized by p
 ### To verify (needs regtest)
 - **Trade Execution: rating modal** — `MobileSigningModal` wired to `RatingPanel.onRate`. Mock `createTask("rate", ...)` fires, modal appears. Needs real regtest trade in `rateUser` status to test. Verify: select rating → submit → modal shows → cancel closes it.
 - **Trade Execution: refundOrReviveRequired status** — 3.3 Republish/Refund UI is implemented but untested. Yellow banner + two sliders (Re-publish Offer / Refund Escrow) should appear when a contract reaches `refundOrReviveRequired` status. Republish calls `POST /v1/offer/:offerId/revive`. Refund goes through MobileSigningModal. Needs a regtest trade that gets cancelled to reach this status.
----
-
-## Execution Order (Suggested)
-
-| Order | Item | Effort | Impact |
-|-------|------|--------|--------|
-| 16 | 4.10 Dark Mode | ~1-2 sessions | High UX impact |
-| 17 | 4.5–4.6 Language + Notification settings | ~1 session | Settings sub-screens |
-| 18 | 4.7–4.8 Account & Sessions + PIN Code | ~1 session | Settings sub-screens |
-| 19 | 4.9 Custom Node | ~0.5 session | Settings sub-screen |
-| 20 | 4.11 Referrals | ~1 session | Wire mock to real data |
-| 21 | 4.12 My Profile (settings) | ~0.5 session | Wire referral, daily limits, memberSince |
-| 22 | 3.8 Create Multiple Offers | ~1 session | Offer creation enhancement |
-| 24 | `useApi()` v069 param support | ~0.5 session | Engineering cleanup |
-| — | UI fixes & polish | Ongoing | See tiers below |
 
 ---
 

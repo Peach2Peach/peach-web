@@ -4,6 +4,7 @@ import { IcoBtc } from "./BitcoinAmount.jsx";
 import { useUnread } from "../hooks/useUnread.js";
 import { useNotifications } from "../hooks/useNotifications.js";
 import NotificationPanel from "./NotificationPanel.jsx";
+import peachLogo from "../assets/PEACH WEB-LOGO.svg";
 
 // ─── PEACH ID FORMATTING ─────────────────────────────────────────────────────
 export function formatPeachId(rawId) {
@@ -21,7 +22,7 @@ export function getTopbarPeachId() {
   return "";
 }
 
-// ─── LOGO ─────────────────────────────────────────────────────────────────────
+// ─── PEACH ICON ─────────────────────────────────────────────────────────────────────
 export const PeachIcon = ({ size = 28 }) => (
   <svg width={size} height={size} viewBox="0 0 352 353" fill="none" xmlns="http://www.w3.org/2000/svg">
     <rect y="0.38" width="352" height="352" rx="58.13" fill="#FFF9F6"/>
@@ -158,8 +159,7 @@ export function Topbar({
   return (
     <header className="topbar">
       <button className="burger-btn" onClick={onBurgerClick}><IconBurger/></button>
-      <PeachIcon size={28}/>
-      <span className="logo-wordmark">Peach</span>
+      <img src={peachLogo} alt="Peach" style={{ height: 55 }} />
 
       {showPrice && (
         <div className="topbar-price">
