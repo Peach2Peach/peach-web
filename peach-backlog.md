@@ -8,16 +8,6 @@ Completed items archived in `peach-completed.md`.
 
 ---
 
-## Phase 3: Offer Management Completion
-
-### 3.8 Create Multiple Offers ✅
-- **File**: `src/screens/offer-creation/index.jsx`, `components.jsx`, `styles.js`
-- **Done**: Checkbox + counter (×2–10) below premium section. Identical copies. Both buy and sell.
-- Buy: parallel `POST /v069/buyOffer` × N. Sell: sequential loop with unique return addresses + escrow registration per offer.
-- Multi-escrow funding screen: persistent QR that swaps on address click, copy/copy+amount buttons, "Send to mobile and fund all" button.
-- Partial success + retry for both buy and sell. Progress bar during sequential sell creation.
-- **Remaining**: "Send to mobile and fund all" uses mock `createTask()` — wire to real endpoint when backend provides it.
-
 ---
 
 ## Phase 4: Settings & Secondary Features

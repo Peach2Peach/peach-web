@@ -25,7 +25,7 @@ export default function PeachMarket() {
   const [selPaymentTypes,  setSelPaymentTypes]  = useState([]);   // [] = all
   const [searchQuery,      setSearchQuery]      = useState("");
 
-  const [showMyOffers,        setShowMyOffers]        = useState(true);
+  const [showMyOffers,        setShowMyOffers]        = useState(false);
   const [showMyOffersInfo,    setShowMyOffersInfo]    = useState(false);
   const infoRef = useRef(null);
   const [allPrices,           setAllPrices]           = useState({ EUR: BTC_PRICE });
@@ -1032,7 +1032,7 @@ export default function PeachMarket() {
                   disabled={!isLoggedIn}
                 />
                 <span className="my-offers-check-box"/>
-                My Offers
+                Show My Offers
               </label>
               <span
                 className="info-dot"
