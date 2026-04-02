@@ -1,7 +1,8 @@
 // ─── TRADES DASHBOARD — SUB-COMPONENTS ─────────────────────────────────────
 // Extracted from peach-trades-dashboard.jsx
-// Contains: icons, helpers, FilterDropdown, PILL_CONFIG, PeachRating, Badge,
+// Contains: icons, helpers, FilterDropdown, PILL_CONFIG, Badge,
 //           TradeCard, HistorySatsAmount, CURRENCY_SYMBOLS, HistoryTable
+// PeachRating is now shared — see src/components/PeachRating.jsx
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -10,6 +11,7 @@ import { BTC_PRICE_FALLBACK as BTC_PRICE, satsToFiatRaw, relTime as relativeTime
 import { STATUS_CONFIG } from "../../data/statusConfig.js";
 import Avatar from "../../components/Avatar.jsx";
 import StatusChip from "../../components/StatusChip.jsx";
+export { default as PeachRating } from "../../components/PeachRating.jsx";
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 export const IconSort      = ({ dir }) => <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d={dir === "asc" ? "M2 8l4-5 4 5" : dir === "desc" ? "M2 4l4 5 4-5" : "M2 4.5l4-3 4 3M2 7.5l4 3 4-3"}/></svg>;
@@ -127,37 +129,6 @@ const BUYER_LABEL = {
   confirmPaymentRequired: "Payment Sent",
 };
 
-// ─── PEACH RATING — fills proportionally like a cup ──────────────────────────
-export function PeachRating({ rep, size = 16 }) {
-  const pct = Math.max(0, Math.min(1, rep / 5));
-  const id = `pr-${Math.round(rep * 10)}`;
-  return (
-    <span style={{ display:"inline-flex", alignItems:"center", gap:4 }}>
-      {/* Peach icon with fill */}
-      <svg width={size} height={size} viewBox="0 0 32 32" style={{ display:"inline-block", verticalAlign:"middle", flexShrink:0 }}>
-        <defs>
-          <clipPath id={`${id}-clip`}>
-            {/* Fill from bottom: fill starts at (1-pct)*32 from top */}
-            <rect x="0" y={32 * (1 - pct)} width="32" height={32 * pct}/>
-          </clipPath>
-        </defs>
-        {/* Outline / empty peach in muted color */}
-        <g opacity="0.25">
-          <circle cx="16" cy="17" r="11" fill="#F56522"/>
-          <path d="M14 8c1-3 5-4 6-1" stroke="#05A85A" strokeWidth="2" fill="none" strokeLinecap="round"/>
-        </g>
-        {/* Filled peach clipped to rating level */}
-        <g clipPath={`url(#${id}-clip)`}>
-          <circle cx="16" cy="17" r="11" fill="#F56522"/>
-          <path d="M14 8c1-3 5-4 6-1" stroke="#05A85A" strokeWidth="2" fill="none" strokeLinecap="round"/>
-          {/* Bowl highlight */}
-          <path d="M11 17 Q16 13 21 17" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round" opacity="0.6"/>
-        </g>
-      </svg>
-      <span style={{ fontSize:".78rem", fontWeight:700, color:"var(--black-75)" }}>{rep.toFixed(1)}</span>
-    </span>
-  );
-}
 
 // ─── BADGE — sober outlined style ─────────────────────────────────────────────
 export function Badge({ label, icon }) {

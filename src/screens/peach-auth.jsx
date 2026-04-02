@@ -152,7 +152,6 @@ export default function PeachAuth() {
     return () => clearInterval(iv);
   }, []);
 
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
   const [desktopShowCode, setDesktopShowCode] = useState(false);
 
@@ -467,16 +466,8 @@ export default function PeachAuth() {
           position:fixed;top:56px;left:0;bottom:0;
           width:68px;background:#FFFFFF;border-right:1px solid #EAE3DF;
           z-index:150;display:flex;flex-direction:column;align-items:center;
-          padding:8px 0;gap:2px;
-          transition:width .2s cubic-bezier(.4,0,.2,1);overflow:hidden;
+          padding:8px 0;gap:2px;overflow:hidden;
         }
-        .sidenav-collapsed{width:44px}
-        .sidenav-toggle{
-          width:100%;height:32px;display:flex;align-items:center;justify-content:flex-end;
-          padding-right:10px;border:none;background:transparent;cursor:pointer;
-          color:#C4B5AE;flex-shrink:0;transition:color .14s;margin-bottom:4px;
-        }
-        .sidenav-toggle:hover{color:#7D675E}
         .sidenav-item{
           width:calc(100% - 16px);display:flex;flex-direction:column;align-items:center;
           justify-content:center;gap:3px;padding:8px 4px;border-radius:10px;
@@ -490,7 +481,6 @@ export default function PeachAuth() {
           text-transform:uppercase;white-space:nowrap;overflow:hidden;
           transition:opacity .15s,max-height .2s;max-height:20px;opacity:1;
         }
-        .sidenav-collapsed .sidenav-label{opacity:0;max-height:0;pointer-events:none}
         .sidenav-backdrop{
           display:none;position:fixed;inset:0;z-index:149;
           background:rgba(43,25,17,.4);animation:fadeIn .2s ease;
@@ -509,12 +499,9 @@ export default function PeachAuth() {
             transition:transform .25s cubic-bezier(.4,0,.2,1);
             z-index:500;align-items:flex-start;box-shadow:none;
           }
-          .sidenav-collapsed{width:220px}
           .sidenav.sidenav-mobile-open{transform:translateX(0);box-shadow:6px 0 28px rgba(43,25,17,.16)}
           .sidenav-item{width:calc(100% - 16px);flex-direction:row;justify-content:flex-start;gap:12px;padding:10px 14px}
-          .sidenav-collapsed .sidenav-item{width:calc(100% - 16px)}
-          .sidenav-label,.sidenav-collapsed .sidenav-label{opacity:1!important;max-height:none!important;font-size:.8rem;text-transform:none;font-weight:600;letter-spacing:0}
-          .sidenav-toggle{display:none}
+          .sidenav-label{opacity:1!important;max-height:none!important;font-size:.8rem;text-transform:none;font-weight:600;letter-spacing:0}
           .sidenav-backdrop.open{display:block}
           .burger-btn{display:flex}
         }
@@ -522,13 +509,7 @@ export default function PeachAuth() {
       <Topbar/>
       {/* Sidebar */}
       <div className={`sidenav-backdrop${sidebarMobileOpen?" open":""}`} onClick={() => setSidebarMobileOpen(false)}/>
-      <nav className={`sidenav${sidebarCollapsed?" sidenav-collapsed":""}${sidebarMobileOpen?" sidenav-mobile-open":""}`}>
-        <button className="sidenav-toggle" onClick={() => setSidebarCollapsed(c => !c)}>
-          {sidebarCollapsed
-            ? <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="5,2 10,7 5,12"/></svg>
-            : <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="9,2 4,7 9,12"/></svg>
-          }
-        </button>
+      <nav className={`sidenav${sidebarMobileOpen?" sidenav-mobile-open":""}`}>
         {[
           {id:"home",    label:"Home",    icon:<PeachIcon size={20}/>},
           {id:"market",  label:"Market",  icon:<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="2,14 7,9 11,12 18,5"/><polyline points="13,5 18,5 18,10"/></svg>},
@@ -546,7 +527,7 @@ export default function PeachAuth() {
       </nav>
 
       {/* Ghost market */}
-      <div style={{position:"fixed",top:56,left:sidebarCollapsed?44:68,right:0,bottom:0,
+      <div style={{position:"fixed",top:56,left:68,right:0,bottom:0,
         overflow:"hidden",pointerEvents:"none",userSelect:"none"}}>
         <div style={{padding:"12px 24px",background:"#FFFFFF",
           borderBottom:"1px solid #EAE3DF",display:"flex",alignItems:"center",gap:10}}>
@@ -587,7 +568,7 @@ export default function PeachAuth() {
       </div>
 
       {/* Auth card */}
-      <div style={{position:"fixed",top:56,left:sidebarCollapsed?44:68,right:0,bottom:0,
+      <div style={{position:"fixed",top:56,left:68,right:0,bottom:0,
         display:"flex",alignItems:"center",justifyContent:"center",zIndex:10,padding:20}}>
         <div style={{
           background:"#FFFFFF",border:"1px solid #EAE3DF",borderRadius:20,

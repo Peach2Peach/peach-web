@@ -46,8 +46,6 @@ const IconTrades     = () => <svg width="20" height="20" viewBox="0 0 20 20" fil
 const IconCreate     = () => <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="10" cy="10" r="8"/><line x1="10" y1="6.5" x2="10" y2="13.5"/><line x1="6.5" y1="10" x2="13.5" y2="10"/></svg>;
 const IconSettings   = () => <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="10" cy="10" r="2.5"/><path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.2 4.2l1.4 1.4M14.4 14.4l1.4 1.4M4.2 15.8l1.4-1.4M14.4 5.6l1.4-1.4"/></svg>;
 const IconCreditCard = () => <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="18" height="13" rx="2"/><line x1="1" y1="9" x2="19" y2="9"/><line x1="5" y1="14" x2="8" y2="14"/></svg>;
-const IconChevLeft   = () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="9,2 4,7 9,12"/></svg>;
-const IconChevRight  = () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="5,2 10,7 5,12"/></svg>;
 export const IconBurger = () => <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="2" y1="4.5" x2="16" y2="4.5"/><line x1="2" y1="9" x2="16" y2="9"/><line x1="2" y1="13.5" x2="16" y2="13.5"/></svg>;
 const IconBell = () => <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M15 7a5 5 0 00-10 0c0 5-2 7-2 7h14s-2-2-2-7"/><path d="M8.5 17a1.5 1.5 0 003 0"/></svg>;
 
@@ -71,15 +69,12 @@ export const NAV_ROUTES = {
 };
 
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
-export function SideNav({ active, collapsed, onToggle, mobileOpen, onClose, onNavigate, mobilePriceSlot }) {
+export function SideNav({ active, mobileOpen, onClose, onNavigate, mobilePriceSlot }) {
   const { total } = useUnread();
   return (
     <>
       <div className={`sidenav-backdrop${mobileOpen ? " open" : ""}`} onClick={onClose}/>
-      <nav className={`sidenav${collapsed ? " sidenav-collapsed" : ""}${mobileOpen ? " sidenav-mobile-open" : ""}`}>
-        <button className="sidenav-toggle" onClick={onToggle} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}>
-          {collapsed ? <IconChevRight/> : <IconChevLeft/>}
-        </button>
+      <nav className={`sidenav${mobileOpen ? " sidenav-mobile-open" : ""}`}>
         {NAV_ITEMS.map(({ id, label, icon }) => (
           <button key={id} className={`sidenav-item${active === id ? " sidenav-active" : ""}`}
             onClick={() => { if (onNavigate && NAV_ROUTES[id]) onNavigate(NAV_ROUTES[id]); }}>
@@ -160,23 +155,27 @@ export function Topbar({
 
   return (
     <header className="topbar">
-      <button className="burger-btn" onClick={onBurgerClick}><IconBurger/></button>
-      <img src={peachLogo} alt="Peach" style={{ height: 55 }} />
-
-      {showPrice && (
-        <div className="topbar-price">
-          <IcoBtc size={18}/>
-          <span className="topbar-price-main">{btcPrice.toLocaleString("fr-FR")} {selectedCurrency}</span>
-          <span className="topbar-price-sats">{satsPerCur.toLocaleString()} sats / {selectedCurrency.toLowerCase()}</span>
-          <div className="topbar-cur-select">
-            <span className="cur-select-label">{selectedCurrency}</span>
-            <svg className="cur-select-arrow" width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{pointerEvents:"none",flexShrink:0}}><polyline points="1,1 5,5 9,1"/></svg>
-            <select value={selectedCurrency} onChange={e => onCurrencyChange(e.target.value)} className="cur-select-inner">
-              {availableCurrencies.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+      <div className="topbar-left">
+        <button className="burger-btn" onClick={onBurgerClick}><IconBurger/></button>
+        {showPrice && (
+          <div className="topbar-price">
+            <IcoBtc size={18}/>
+            <span className="topbar-price-main">{btcPrice.toLocaleString("fr-FR")} {selectedCurrency}</span>
+            <span className="topbar-price-sats">{satsPerCur.toLocaleString()} sats / {selectedCurrency.toLowerCase()}</span>
+            <div className="topbar-cur-select">
+              <span className="cur-select-label">{selectedCurrency}</span>
+              <svg className="cur-select-arrow" width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{pointerEvents:"none",flexShrink:0}}><polyline points="1,1 5,5 9,1"/></svg>
+              <select value={selectedCurrency} onChange={e => onCurrencyChange(e.target.value)} className="cur-select-inner">
+                {availableCurrencies.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
+
+      <div className="topbar-center">
+        <img src={peachLogo} alt="Peach" style={{ height: 55 }} />
+      </div>
 
       <div className="topbar-right">
         {isLoggedIn && (

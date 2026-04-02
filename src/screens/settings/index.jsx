@@ -23,7 +23,6 @@ export default function SettingsScreen() {
   const navigate = useNavigate();
   const location = useLocation();
   const [currentView, setCurrentView] = useState("main");
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
 
   // Reset to main view when sidenav "Settings" is clicked (same-route navigation)
@@ -63,7 +62,7 @@ export default function SettingsScreen() {
   }, []);
 
   const satsPerCur = Math.round(100_000_000 / btcPrice);
-  const sideMargin = sidebarCollapsed ? 44 : 68;
+  const sideMargin = 68;
 
   function renderContent() {
     if (currentView === "profile")      return <ProfileSubScreen     onBack={() => setCurrentView("main")}/>;
@@ -180,8 +179,6 @@ export default function SettingsScreen() {
 
         <SideNav
           active="settings"
-          collapsed={sidebarCollapsed}
-          onToggle={() => setSidebarCollapsed(c => !c)}
           mobileOpen={sidebarMobileOpen}
           onClose={() => setSidebarMobileOpen(false)}
           onNavigate={navigate}

@@ -5,15 +5,10 @@
 
 import { useState, useEffect, useRef } from "react";
 import { SatsAmount } from "../../components/BitcoinAmount.jsx";
-import { PeachRating } from "../trades-dashboard/components.jsx";
-import { fmtPct, fmtFiat } from "../../utils/format.js";
+import PeachRating from "../../components/PeachRating.jsx";
+import { fmtPct, fmtFiat, toPeaches } from "../../utils/format.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Convert API rating (-1…+1) to Peach scale (0…5) */
-export function toPeaches(apiRating) {
-  return (apiRating + 1) / 2 * 5;
-}
 
 export function premiumStats(offers) {
   if (!offers.length) return { avg: null, best: null };

@@ -5,10 +5,8 @@ import { SatsAmount, IcoBtc } from "../components/BitcoinAmount.jsx";
 import { useAuth } from "../hooks/useAuth.js";
 import { useApi, getCached, setCache } from "../hooks/useApi.js";
 import { STATUS_CONFIG, FINISHED_STATUSES } from "../data/statusConfig.js";
-import { BTC_PRICE_FALLBACK as BTC_PRICE, fmt as formatSats, fmtPct, relTime } from "../utils/format.js";
-
-// Convert API rating (-1 to +1) to Peach display scale (0–5)
-const toPeaches = (r) => ((r + 1) / 2 * 5).toFixed(1);
+import { BTC_PRICE_FALLBACK as BTC_PRICE, fmt as formatSats, fmtPct, relTime, toPeaches } from "../utils/format.js";
+import PeachRating from "../components/PeachRating.jsx";
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const css = `
@@ -225,12 +223,9 @@ const css = `
       transition:transform .25s cubic-bezier(.4,0,.2,1);
       z-index:500;align-items:flex-start;box-shadow:none;
     }
-    .sidenav-collapsed{width:220px}
     .sidenav.sidenav-mobile-open{transform:translateX(0);box-shadow:6px 0 28px rgba(43,25,17,.16)}
     .sidenav-item{width:calc(100% - 16px);flex-direction:row;justify-content:flex-start;gap:12px;padding:10px 14px}
-    .sidenav-collapsed .sidenav-item{width:calc(100% - 16px)}
-    .sidenav-label,.sidenav-collapsed .sidenav-label{opacity:1!important;max-height:none!important;font-size:.8rem;text-transform:none;font-weight:600;letter-spacing:0}
-    .sidenav-toggle{display:none}
+    .sidenav-label{opacity:1!important;max-height:none!important;font-size:.8rem;text-transform:none;font-weight:600;letter-spacing:0}
     .sidenav-backdrop.open{display:block}
     .dashboard-grid{grid-template-columns:1fr}
     .dashboard-grid .card{width:100%!important;max-width:100%!important}
@@ -251,7 +246,6 @@ export default function PeachHome() {
   const [availableCurrencies, setAvailableCurrencies] = useState(["EUR","CHF","GBP"]);
   const [selectedCurrency,    setSelectedCurrency]    = useState("EUR");
   const btcPrice = Math.round(allPrices[selectedCurrency] ?? BTC_PRICE);
-  const [sidebarCollapsed,  setSidebarCollapsed]  = useState(false);
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const [marketStats, setMarketStats] = useState(null);
@@ -275,7 +269,7 @@ export default function PeachHome() {
                            : "—",
     trades:              liveProfile?.trades ?? 0,
     disputesTotal,
-    rating:              liveProfile?.rating != null ? toPeaches(liveProfile.rating) : "—",
+    rating:              liveProfile?.rating != null ? toPeaches(liveProfile.rating) : 0,
     badges:              liveProfile?.medals ?? liveProfile?.badges ?? [],
     preferredMethods:    liveProfile?.preferredPaymentMethods ?? [],
     preferredCurrencies: liveProfile?.preferredCurrencies ?? [],
@@ -384,7 +378,7 @@ export default function PeachHome() {
     : null;
 
   const satsPerCur  = Math.round(100_000_000 / btcPrice);
-  const navWidth = isMobile ? 0 : (sidebarCollapsed ? 44 : 68);
+  const navWidth = isMobile ? 0 : 68;
 
   return (
     <>
@@ -406,8 +400,6 @@ export default function PeachHome() {
 
         <SideNav
           active="home"
-          collapsed={sidebarCollapsed}
-          onToggle={() => setSidebarCollapsed(c => !c)}
           mobileOpen={sidebarMobileOpen}
           onClose={() => setSidebarMobileOpen(false)}
           onNavigate={navigate}
@@ -541,7 +533,7 @@ export default function PeachHome() {
                   {/* Row 1: Rating · Disputes · Blocked by */}
                   <div className="profile-stats">
                     <div className="profile-stat">
-                      <div className="profile-stat-val">⭐ {user.rating}</div>
+                      <div className="profile-stat-val"><PeachRating rep={user.rating} size={14}/></div>
                       <div className="profile-stat-lbl">Rating</div>
                     </div>
                     <div className="profile-stat">

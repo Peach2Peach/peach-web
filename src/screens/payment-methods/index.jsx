@@ -21,7 +21,6 @@ import {
 
 export default function PeachPaymentMethods() {
   const navigate = useNavigate();
-  const [collapsed, setCollapsed]   = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   // ── AUTH STATE ──
@@ -315,8 +314,6 @@ export default function PeachPaymentMethods() {
 
       <SideNav
         active="payment-methods"
-        collapsed={collapsed}
-        onToggle={() => setCollapsed(c => !c)}
         mobileOpen={mobileOpen}
         onClose={() => setMobileOpen(false)}
         onNavigate={navigate}

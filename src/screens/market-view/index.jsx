@@ -7,10 +7,10 @@ import { useApi } from "../../hooks/useApi.js";
 import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 import { extractPMsFromProfile, isApiError, generateSymmetricKey, encryptForRecipients, encryptSymmetric, signPGPMessage, hashPaymentFields, decryptPGPMessage } from "../../utils/pgp.js";
 import { getCached, setCache, clearCache } from "../../hooks/useApi.js";
-import { BTC_PRICE_FALLBACK as BTC_PRICE, fmtPct, fmtFiat, formatTradeId } from "../../utils/format.js";
-import { PeachRating } from "../trades-dashboard/components.jsx";
+import { BTC_PRICE_FALLBACK as BTC_PRICE, fmtPct, fmtFiat, formatTradeId, toPeaches } from "../../utils/format.js";
+import PeachRating from "../../components/PeachRating.jsx";
 import { CSS } from "./styles.js";
-import { toPeaches, premiumStats, premiumCls, currSym, MultiSelect, Chips, RepCell, AmountCell, PriceCell } from "./components.jsx";
+import { premiumStats, premiumCls, currSym, MultiSelect, Chips, RepCell, AmountCell, PriceCell } from "./components.jsx";
 
 const ALL_CURRENCIES = ["EUR","CHF","GBP"];
 
@@ -31,7 +31,6 @@ export default function PeachMarket() {
   const [allPrices,           setAllPrices]           = useState({ EUR: BTC_PRICE });
   const [availableCurrencies, setAvailableCurrencies] = useState(ALL_CURRENCIES);
   const [selectedCurrency,    setSelectedCurrency]    = useState("EUR");
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
 
   // ── AUTH + API ──
@@ -945,8 +944,6 @@ export default function PeachMarket() {
 
         <SideNav
           active="market"
-          collapsed={sidebarCollapsed}
-          onToggle={() => setSidebarCollapsed(c => !c)}
           mobileOpen={sidebarMobileOpen}
           onClose={() => setSidebarMobileOpen(false)}
           onNavigate={navigate}
@@ -972,7 +969,7 @@ export default function PeachMarket() {
           }
         />
 
-        <div className="page-wrap" style={{ marginTop:"var(--topbar)", marginLeft: sidebarCollapsed ? 44 : 68, display:"flex", flexDirection:"column", flex:1 }}>
+        <div className="page-wrap" style={{ marginTop:"var(--topbar)", marginLeft: 68, display:"flex", flexDirection:"column", flex:1 }}>
 
           {/* ── SUBHEADER ── */}
           <div className="subheader">

@@ -8,7 +8,9 @@ import { SatsAmount, IcoBtc } from "../../components/BitcoinAmount.jsx";
 import { relTime as relativeTime, formatTradeId } from "../../utils/format.js";
 import { AVATAR_COLORS } from "../../data/constants.js";
 import Avatar from "../../components/Avatar.jsx";
-import { PeachRating, Badge, satsToFiat } from "./components.jsx";
+import { Badge, satsToFiat } from "./components.jsx";
+import PeachRating from "../../components/PeachRating.jsx";
+import { toPeaches } from "../../utils/format.js";
 import { decryptPGPMessage, decryptSymmetric, encryptSymmetric, signPGPMessage } from "../../utils/pgp.js";
 import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 
@@ -54,6 +56,10 @@ export function transformMatch(apiMatch) {
     if (m === "superTrader") return "supertrader";
     return m;
   });
+  const rawDisputes = u.disputes;
+  const disputes = (typeof rawDisputes === "object" && rawDisputes)
+    ? rawDisputes
+    : { opened: typeof rawDisputes === "number" ? rawDisputes : 0, won: 0, lost: 0, resolved: 0 };
   const mop = apiMatch.meansOfPayment ?? {};
   const currencies = Object.keys(mop);
   const methods = [...new Set(Object.values(mop).flat())];
@@ -64,9 +70,10 @@ export function transformMatch(apiMatch) {
       name: displayName,
       initials,
       color,
-      rep: u.peachRating ?? u.rating ?? 0,
+      rep: u.peachRating ?? (u.rating != null ? toPeaches(u.rating) : 0),
       trades: u.trades ?? 0,
       badges,
+      disputes,
     },
     amount: apiMatch.amount ?? 0,
     premium: apiMatch.premium ?? 0,
@@ -98,6 +105,10 @@ export function transformTradeRequest(tr, offer, userProfile) {
     if (m === "superTrader") return "supertrader";
     return m;
   });
+  const rawDisputes = u.disputes;
+  const disputes = (typeof rawDisputes === "object" && rawDisputes)
+    ? rawDisputes
+    : { opened: typeof rawDisputes === "number" ? rawDisputes : 0, won: 0, lost: 0, resolved: 0 };
   return {
     offerId: String(tr.id), // trade request ID
     requestedAt: new Date(tr.creationDate ?? Date.now()).getTime(),
@@ -105,9 +116,10 @@ export function transformTradeRequest(tr, offer, userProfile) {
       name: displayName,
       initials,
       color,
-      rep: u.peachRating ?? u.rating ?? 0,
+      rep: u.peachRating ?? (u.rating != null ? toPeaches(u.rating) : 0),
       trades: u.trades ?? 0,
       badges,
+      disputes,
     },
     amount: offer.amount ?? 0,
     premium: offer.premium ?? 0,
@@ -431,9 +443,9 @@ export default function MatchesPopup({
             <button
               className="match-btn-accept"
               style={{width:"100%"}}
-              onClick={() => { setMatchDetail(m); setChatMatch(null); setChatSymKey(null); }}
+              onClick={() => { onAccept(trade, m); setChatMatch(null); setChatSymKey(null); }}
             >
-              Review & Accept
+              Accept trade
             </button>
           </div>
         </div>
@@ -575,36 +587,55 @@ export default function MatchesPopup({
         )}
         {/* Match rows */}
         <div className="match-list">
-          {matches.map(m => (
-            <div key={m.offerId} className="match-row" onClick={() => setMatchDetail(m)}>
-              <Avatar initials={m.user.initials} color={m.user.color} size={36}/>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                  <span style={{fontWeight:700,fontSize:".88rem"}}>{m.user.name}</span>
-                  <PeachRating rep={m.user.rep}/>
+          {matches.map(m => {
+            const d = m.user.disputes;
+            return (
+              <div key={m.offerId} className="match-row match-row-expanded">
+                {/* Identity + stats */}
+                <div className="match-row-top">
+                  <Avatar initials={m.user.initials} color={m.user.color} size={36}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                      <span style={{fontWeight:700,fontSize:".88rem"}}>{m.user.name}</span>
+                      <PeachRating rep={m.user.rep}/>
+                      <span style={{fontSize:".72rem",color:"var(--black-65)",marginLeft:"auto",flexShrink:0}}>{relativeTime(m.requestedAt)}</span>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginTop:4,flexWrap:"wrap"}}>
+                      <span style={{fontSize:".72rem",color:"var(--black-65)"}}>{m.user.trades} trades</span>
+                      <span style={{fontSize:".72rem",color:"var(--black-50)"}}>
+                        {d.opened} opened · {d.won} won · {d.lost} lost
+                      </span>
+                    </div>
+                    {m.user.badges.length > 0 && (
+                      <div style={{display:"flex",gap:6,marginTop:4}}>
+                        {m.user.badges.includes("supertrader") && <Badge label="supertrader" icon="☆"/>}
+                        {m.user.badges.includes("fast") && <Badge label="fast" icon="⚡"/>}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3}}>
-                  <span style={{fontSize:".72rem",color:"var(--black-65)"}}>{m.user.trades} trades</span>
-                  {m.user.badges.includes("supertrader") && <Badge label="supertrader" icon="☆"/>}
-                  {m.user.badges.includes("fast") && <Badge label="fast" icon="⚡"/>}
+                {/* Actions */}
+                <div className="match-row-actions">
+                  {m._raw.symmetricKeyEncrypted && (
+                    <button className="match-chat-btn-lg" title="Chat" onClick={e => {
+                      e.stopPropagation();
+                      setChatMatch(m);
+                      setUnreadMatchIds(prev => { const next = new Set(prev); next.delete(m.offerId); return next; });
+                    }}>
+                      <IconChat/>
+                      Chat
+                      {unreadMatchIds.has(m.offerId) && <span className="chat-unread-dot"/>}
+                    </button>
+                  )}
+                  <div style={{flex:1}}/>
+                  {m._raw?.isTradeRequest && (
+                    <button className="match-btn-reject match-btn-sm" onClick={e => { e.stopPropagation(); onReject(trade, m); }}>Reject</button>
+                  )}
+                  <button className="match-btn-accept match-btn-sm" onClick={e => { e.stopPropagation(); onAccept(trade, m); }}>Accept</button>
                 </div>
               </div>
-              <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-                <span style={{fontSize:".72rem",color:"var(--black-65)"}}>{relativeTime(m.requestedAt)}</span>
-                {m._raw.symmetricKeyEncrypted && (
-                  <button className="match-chat-btn" title="Chat" onClick={e => {
-                    e.stopPropagation();
-                    setChatMatch(m);
-                    setUnreadMatchIds(prev => { const next = new Set(prev); next.delete(m.offerId); return next; });
-                  }}>
-                    <IconChat/>
-                    {unreadMatchIds.has(m.offerId) && <span className="chat-unread-dot"/>}
-                  </button>
-                )}
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--black-65)" strokeWidth="2" strokeLinecap="round"><polyline points="5,2 10,7 5,12"/></svg>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

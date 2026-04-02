@@ -113,7 +113,6 @@ export default function OfferCreation({ initialType="buy" }) {
         setPmError(true);
       });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
 
   // ── AUTH STATE ──
@@ -685,8 +684,6 @@ export default function OfferCreation({ initialType="buy" }) {
       />
       <SideNav
         active="create"
-        collapsed={sidebarCollapsed}
-        onToggle={() => setSidebarCollapsed(c => !c)}
         mobileOpen={sidebarMobileOpen}
         onClose={() => setSidebarMobileOpen(false)}
         onNavigate={navigate}
@@ -709,7 +706,7 @@ export default function OfferCreation({ initialType="buy" }) {
       />
       <div style={{display:"flex",flexDirection:"column",alignItems:"center",
         justifyContent:"center",minHeight:"100vh",gap:22,padding:40,
-        marginLeft: sidebarCollapsed ? 44 : 68,
+        marginLeft: 68,
         textAlign:"center",animation:"stepFwd .4s ease both"}}>
         <div className="success-icon">✓</div>
         <div style={{fontSize:"1.45rem",fontWeight:800,color:"var(--success)"}}>
@@ -765,8 +762,6 @@ export default function OfferCreation({ initialType="buy" }) {
 
       <SideNav
         active="create"
-        collapsed={sidebarCollapsed}
-        onToggle={() => setSidebarCollapsed(c => !c)}
         mobileOpen={sidebarMobileOpen}
         onClose={() => setSidebarMobileOpen(false)}
         onNavigate={navigate}
@@ -788,7 +783,7 @@ export default function OfferCreation({ initialType="buy" }) {
         }
       />
 
-      <div className="layout" style={{marginLeft: sidebarCollapsed ? 44 : 68}}>
+      <div className="layout" style={{marginLeft: 68}}>
         {/* ── WIZARD ── */}
         <div className="wizard">
 

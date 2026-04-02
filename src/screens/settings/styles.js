@@ -16,12 +16,9 @@ export const CSS = `
     .sidenav{width:220px;left:0;transform:translateX(-100%);
       transition:transform .25s cubic-bezier(.4,0,.2,1);z-index:500;
       align-items:flex-start;box-shadow:none}
-    .sidenav-collapsed{width:220px}
     .sidenav.sidenav-mobile-open{transform:translateX(0);box-shadow:6px 0 28px rgba(43,25,17,.16)}
     .sidenav-item{width:calc(100% - 16px);flex-direction:row;justify-content:flex-start;gap:12px;padding:10px 14px}
-    .sidenav-collapsed .sidenav-item{width:calc(100% - 16px)}
-    .sidenav-label,.sidenav-collapsed .sidenav-label{opacity:1!important;max-height:none!important;font-size:.8rem;text-transform:none;font-weight:600;letter-spacing:0}
-    .sidenav-toggle{display:none}
+    .sidenav-label{opacity:1!important;max-height:none!important;font-size:.8rem;text-transform:none;font-weight:600;letter-spacing:0}
     .burger-btn{display:flex}
     .page-wrap{margin-left:0!important}
   }

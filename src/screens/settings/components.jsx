@@ -176,7 +176,3 @@ export function makeBlurHandler(setErrors) {
   };
 }
 
-/** Convert API rating (-1…+1) to Peach scale (0…5) */
-export function toPeaches(apiRating) {
-  return (apiRating + 1) / 2 * 5;
-}

@@ -6,9 +6,10 @@ import { useAuth } from "../../hooks/useAuth.js";
 import { useApi, createTask } from "../../hooks/useApi.js";
 import MobileSigningModal, { hasPendingTask, savePendingTask, clearPendingTask } from "../../components/MobileSigningModal.jsx";
 import { decryptPGPMessage, decryptSymmetric, encryptSymmetric, signPGPMessage, encryptForPublicKey } from "../../utils/pgp.js";
-import { SAT, BTC_PRICE_FALLBACK as BTC_PRICE, satsToFiat, formatTradeId } from "../../utils/format.js";
+import { SAT, BTC_PRICE_FALLBACK as BTC_PRICE, satsToFiat, formatTradeId, toPeaches } from "../../utils/format.js";
 import Avatar from "../../components/Avatar.jsx";
 import StatusChip from "../../components/StatusChip.jsx";
+import PeachRating from "../../components/PeachRating.jsx";
 import {
   IconBack, IconAlert,
   HorizontalStepper, PaymentDetailsCard, EscrowAddressCard,
@@ -223,7 +224,6 @@ export default function TradeExecution() {
     if (!auth && !routeId) navigate("/trades", { replace: true });
   }, [auth, routeId]);
 
-  const [collapsed, setCollapsed]     = useState(false);
   const [mobileOpen, setMobileOpen]   = useState(false);
   const [mobileTab, setMobileTab]     = useState("details");   // "details" | "chat"
   const [allPrices,           setAllPrices]           = useState({ EUR: BTC_PRICE });
@@ -396,7 +396,7 @@ export default function TradeExecution() {
               initials: shortHex.slice(0, 2),
               color: "#7D675E",
               name: short,
-              rep: cp.rating ?? cp.peachRating ?? 0,
+              rep: toPeaches(cp.rating ?? cp.peachRating ?? 0),
               trades: cp.trades ?? 0,
               badges: (cp.medals ?? []).map(m =>
                 m === "fastTrader" ? "fast" : m === "superTrader" ? "supertrader" : m
@@ -670,8 +670,6 @@ export default function TradeExecution() {
 
       <SideNav
         active="trades"
-        collapsed={collapsed}
-        onToggle={() => setCollapsed(c => !c)}
         mobileOpen={mobileOpen}
         onClose={() => setMobileOpen(false)}
         onNavigate={navigate}
@@ -740,7 +738,7 @@ export default function TradeExecution() {
               <div style={{ flex:1, minWidth:0 }}>
                 <div className="cp-name">{counterparty.name}</div>
                 <div className="cp-meta">
-                  <span>★ {(counterparty.rep ?? 0).toFixed(1)}</span>
+                  <PeachRating rep={counterparty.rep ?? 0} size={14}/>
                   <span>·</span>
                   <span>{counterparty.trades} trades</span>
                 </div>

@@ -1,6 +1,7 @@
 // ─── SHARED FORMAT HELPERS ───────────────────────────────────────────────────
 // Extracted from screen files to eliminate duplication.
-// Used by: trade-execution, trades-dashboard, offer-creation, home, market-view
+// Used by: trade-execution, trades-dashboard, offer-creation, home, market-view,
+//          settings, peach-status-cards, MatchesPopup
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const SAT = 100_000_000;
@@ -49,6 +50,11 @@ export function relTime(ts) {
 /** Format date: → "13 Mar 2026" */
 export function formatDate(date) {
   return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+/** Convert API rating (-1…+1) to Peach display scale (0…5) */
+export function toPeaches(apiRating) {
+  return (apiRating + 1) / 2 * 5;
 }
 
 /** Format trade/offer ID: decimal → hex with prefix.

@@ -17,17 +17,8 @@ export const CSS = `
     width:68px;background:var(--surface);border-right:1px solid var(--black-10);
     z-index:150;display:flex;flex-direction:column;align-items:center;
     padding:8px 0;gap:2px;
-    transition:width .2s cubic-bezier(.4,0,.2,1);
     overflow:hidden;
   }
-  .sidenav-collapsed{width:44px}
-  .sidenav-toggle{
-    width:100%;height:32px;display:flex;align-items:center;justify-content:flex-end;
-    padding-right:10px;border:none;background:transparent;cursor:pointer;
-    color:var(--black-25);flex-shrink:0;transition:color .14s;margin-bottom:4px;
-  }
-  .sidenav-toggle:hover{color:var(--black-65)}
-  .sidenav-toggle svg{transition:transform .2s}
   .sidenav-item{
     width:calc(100% - 16px);display:flex;flex-direction:column;align-items:center;
     justify-content:center;gap:3px;padding:8px 4px;border-radius:10px;
@@ -43,7 +34,6 @@ export const CSS = `
     transition:opacity .15s, max-height .2s;
     max-height:20px;opacity:1;
   }
-  .sidenav-collapsed .sidenav-label{opacity:0;max-height:0;pointer-events:none}
   .sidenav-backdrop{
     display:none;position:fixed;inset:0;z-index:149;
     background:rgba(43,25,17,.4);
@@ -539,7 +529,6 @@ export const CSS = `
       align-items:flex-start;
       box-shadow:none;
     }
-    .sidenav-collapsed{width:220px}
     .sidenav.sidenav-mobile-open{
       transform:translateX(0);
       box-shadow:6px 0 28px rgba(43,25,17,.16);
@@ -548,12 +537,10 @@ export const CSS = `
       width:calc(100% - 16px);flex-direction:row;justify-content:flex-start;
       gap:12px;padding:10px 14px;
     }
-    .sidenav-collapsed .sidenav-item{width:calc(100% - 16px)}
-    .sidenav-label,.sidenav-collapsed .sidenav-label{
+    .sidenav-label{
       opacity:1!important;max-height:none!important;
       font-size:.8rem;text-transform:none;font-weight:600;letter-spacing:0;
     }
-    .sidenav-toggle{display:none}
     .burger-btn{display:flex}
     .topbar-price{display:none}
     .price-pill{display:none}

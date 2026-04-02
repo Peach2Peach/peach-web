@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { SatsAmount } from "../components/BitcoinAmount.jsx";
+import PeachRating from "../components/PeachRating.jsx";
 
 // ─── DESIGN TOKENS ────────────────────────────────────────────────────────────
 const STYLE = `
@@ -190,24 +191,6 @@ const IcoMempool= ({ s = 13 }) => <svg width={s} height={s} viewBox="0 0 14 14" 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 function fmt(n) { return n.toLocaleString("fr-FR"); }
 
-function PeachRating({ rep }) {
-  const pct = Math.max(0, Math.min(1, rep / 5));
-  const id = `pr${Math.round(rep*100)}`;
-  return (
-    <span className="peach-rating">
-      <svg width="16" height="16" viewBox="0 0 32 32" style={{ display:"inline-block", verticalAlign:"middle" }}>
-        <defs><clipPath id={id}><rect x="0" y={32*(1-pct)} width="32" height={32*pct}/></clipPath></defs>
-        <g opacity="0.2"><circle cx="16" cy="18" r="10" fill="#F56522"/><path d="M14 9c1-3 5-3.5 6-1" stroke="#05A85A" strokeWidth="2.5" fill="none" strokeLinecap="round"/></g>
-        <g clipPath={`url(#${id})`}>
-          <circle cx="16" cy="18" r="10" fill="#F56522"/>
-          <path d="M14 9c1-3 5-3.5 6-1" stroke="#05A85A" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
-          <path d="M11 18 Q16 14 21 18" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round" opacity="0.55"/>
-        </g>
-      </svg>
-      <span>{rep.toFixed(1)}</span>
-    </span>
-  );
-}
 
 function Badge({ label, icon }) {
   return (

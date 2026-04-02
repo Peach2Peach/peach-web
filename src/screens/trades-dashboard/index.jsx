@@ -327,7 +327,7 @@ const CSS = `
   @keyframes matchesFadeIn{from{opacity:0}to{opacity:1}}
   .matches-popup{
     background:var(--surface);border-radius:20px;
-    max-width:480px;width:100%;
+    max-width:560px;width:100%;
     box-shadow:0 16px 48px rgba(43,25,17,.25);
     animation:matchesSlideUp .25s ease;
     max-height:85vh;overflow-y:auto;
@@ -357,6 +357,26 @@ const CSS = `
     cursor:pointer;transition:background .12s;
   }
   .match-row:hover{background:var(--black-5)}
+  .match-row-expanded{
+    flex-direction:column;gap:10px;cursor:default;
+    padding:14px 16px;border:1px solid var(--black-10);margin-bottom:8px;
+  }
+  .match-row-expanded:hover{background:var(--surface);border-color:var(--primary-mild)}
+  .match-row-top{display:flex;align-items:flex-start;gap:12px;width:100%}
+  .match-row-actions{
+    display:flex;align-items:center;gap:8px;width:100%;
+    padding-top:10px;border-top:1px solid var(--black-5);
+  }
+  .match-btn-sm{flex:0 !important;padding:8px 18px !important;font-size:.82rem !important}
+  .match-chat-btn-lg{
+    position:relative;display:inline-flex;align-items:center;gap:6px;
+    padding:7px 16px;border-radius:999px;
+    border:1.5px solid var(--black-10);background:var(--surface);
+    font-family:var(--font);font-size:.8rem;font-weight:600;
+    color:var(--black-65);cursor:pointer;transition:border-color .15s,color .15s;
+  }
+  .match-chat-btn-lg:hover{border-color:var(--primary);color:var(--primary)}
+  .match-chat-btn-lg .chat-unread-dot{top:-2px;right:-2px}
   .match-detail-terms{
     background:var(--bg);border-radius:12px;padding:12px 16px;
     display:flex;flex-direction:column;gap:10px;
@@ -394,7 +414,7 @@ const CSS = `
     animation:toastIn .3s ease both;pointer-events:none;
   }
   @keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(12px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
-  @media(max-width:500px){
+  @media(max-width:640px){
     .matches-popup{max-width:100%;border-radius:16px}
   }
 
@@ -527,7 +547,6 @@ export default function TradesDashboard() {
   const [filterStatuses, setFilterStatuses]   = useState([]);
   const [viewMode, setViewMode]               = useState("grid"); // "grid" | "list"
 
-  const [collapsed, setCollapsed]       = useState(false);
   const [mobileOpen, setMobileOpen]     = useState(false);
 
   // ── AUTH + API ──
@@ -1529,8 +1548,6 @@ export default function TradesDashboard() {
 
       <SideNav
         active="trades"
-        collapsed={collapsed}
-        onToggle={() => setCollapsed(c => !c)}
         mobileOpen={mobileOpen}
         onClose={() => setMobileOpen(false)}
         onNavigate={navigate}

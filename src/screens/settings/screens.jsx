@@ -11,8 +11,10 @@ import { validateBtcAddress, validateBIP322Signature, validateFeeRate } from "..
 import {
   IconCopy, IconTrash, IconCamera, IconExternalLink, IconShield,
   Toggle, SettingsRow, SettingsSection, SubScreenWrapper,
-  CopyBtn, PrimaryBtn, OutlineBtn, FieldError, makeBlurHandler, toPeaches,
+  CopyBtn, PrimaryBtn, OutlineBtn, FieldError, makeBlurHandler,
 } from "./components.jsx";
+import PeachRating from "../../components/PeachRating.jsx";
+import { toPeaches } from "../../utils/format.js";
 
 // ── ProfileSubScreen ─────────────────────────────────────────────────────────
 
@@ -70,14 +72,7 @@ export function ProfileSubScreen({ onBack }) {
           </span>
           <CopyBtn text={peachId}/>
         </div>
-        <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-          {[1,2,3,4,5].map(i => (
-            <svg key={i} width="15" height="15" viewBox="0 0 16 16" fill="none">
-              <circle cx="8" cy="8" r="7" fill={i <= Math.round(rating) ? "#F56522" : "none"} stroke="#F56522" strokeWidth="1.5"/>
-            </svg>
-          ))}
-          <span style={{ fontSize:".82rem", fontWeight:800, color:"#2B1911", marginLeft:2 }}>{rating.toFixed(1)}</span>
-        </div>
+        <PeachRating rep={rating} size={15}/>
       </div>
 
       {/* Badges */}
