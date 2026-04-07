@@ -1442,9 +1442,15 @@ export function ActionPanel({ scenario, onAction, showPostCancel = false, pendin
             fontSize:".83rem", color:"#DF321F", fontWeight:600, lineHeight:1.5,
           }}>
             <IconAlert/>
-            <span>{scenario.canceledBy && scenario.canceledBy !== role
-              ? `This trade has been cancelled. The ${scenario.canceledBy}'s reputation has been affected.`
-              : "This trade has been cancelled. Your reputation has been affected."}</span>
+            <span>{scenario.paymentTimedOut
+              ? (role === "buyer"
+                ? "This trade has been cancelled. Your reputation has been affected."
+                : "This trade has been cancelled. Your reputation has not been affected.")
+              : scenario.canceledBy && scenario.canceledBy !== role
+                ? `This trade has been cancelled. The ${scenario.canceledBy}'s reputation has been affected.`
+                : scenario.canceledBy
+                  ? "This trade has been cancelled. Your reputation has been affected."
+                  : "This trade has been cancelled."}</span>
           </div>
         )}
 

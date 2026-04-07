@@ -384,6 +384,7 @@ export default function TradeExecution() {
           cancelationRequested: c.cancelationRequested ?? prev.cancelationRequested,
           canceled: c.canceled ?? prev.canceled,
           canceledBy: c.canceledBy ?? prev.canceledBy,
+          paymentTimedOut: prev.paymentTimedOut || newStatus === "paymentTooLate",
           disputeActive: c.disputeActive ?? prev.disputeActive,
           disputeReason: c.disputeReason ?? prev.disputeReason,
           disputeInitiator: c.disputeInitiator ?? prev.disputeInitiator,
@@ -485,6 +486,7 @@ export default function TradeExecution() {
           cancelationRequested: c.cancelationRequested ?? false,
           canceled: c.canceled ?? false,
           canceledBy: c.canceledBy ?? null,
+          paymentTimedOut: (c.tradeStatus ?? c.status) === "paymentTooLate",
           // Dispute fields
           disputeActive: c.disputeActive ?? false,
           disputeReason: c.disputeReason ?? null,
