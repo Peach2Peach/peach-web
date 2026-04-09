@@ -696,6 +696,8 @@ export default function TradesDashboard() {
       fiatAmount: c.price != null ? String(c.price) : "—",
       currency: c.currency ?? "",
       tradeStatus: c.tradeStatus ?? c.status ?? "unknown",
+      tradeStatusWithoutDispute: c.tradeStatusWithoutDispute ?? null,
+      disputeActive: !!c.disputeActive,
       createdAt: new Date(c.creationDate ?? Date.now()),
       unread: c.unreadMessages ?? 0,
       refunded: !!c.refunded,
@@ -988,7 +990,10 @@ export default function TradesDashboard() {
   const allItems = useMemo(() => rawItems.map(i =>
     i.kind === "contract" && liveUnread[i.id] != null ? { ...i, unread: liveUnread[i.id] } : i
   ), [rawItems, liveUnread]);
-  const activeItems = allItems.filter(i => !FINISHED_STATUSES.has(i.tradeStatus) && !PENDING_STATUSES.has(i.tradeStatus));
+  const activeItems = allItems.filter(i =>
+    i.disputeActive ||
+    (!FINISHED_STATUSES.has(i.tradeStatus) && !PENDING_STATUSES.has(i.tradeStatus))
+  );
   const historyItems = allItems.filter(i => FINISHED_STATUSES.has(i.tradeStatus));
 
   const pendingItems = livePending ?? [];

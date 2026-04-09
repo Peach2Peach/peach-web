@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { SatsAmount } from "../../components/BitcoinAmount.jsx";
 import { LIFECYCLE } from "../../data/statusConfig.js";
+import { isSystemMessageKey, resolveSystemMessage } from "../../data/chatSystemMessages.js";
 import { relTime, formatTradeId } from "../../utils/format.js";
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
@@ -15,6 +16,7 @@ export const IconLock      = () => <svg width="12" height="12" viewBox="0 0 12 1
 export const IconCopy      = () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><rect x="4" y="4" width="8" height="8" rx="1.5"/><path d="M2 9.5V2.5a1 1 0 0 1 1-1h7"/></svg>;
 export const IconCheck     = () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="2,7 5.5,10.5 12,4"/></svg>;
 export const IconAlert     = () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M7 2L1 12h12L7 2z"/><line x1="7" y1="6" x2="7" y2="9"/><circle cx="7" cy="11" r=".5" fill="currentColor"/></svg>;
+const IconInfo      = () => <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><circle cx="6" cy="6" r="5"/><line x1="6" y1="5.5" x2="6" y2="8.5"/><circle cx="6" cy="3.6" r=".6" fill="currentColor" stroke="none"/></svg>;
 export const IconClock     = () => <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><circle cx="6.5" cy="6.5" r="5"/><path d="M6.5 3.5v3l2 1.5"/></svg>;
 const IconQR        = () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><rect x="1" y="1" width="5" height="5" rx="1"/><rect x="10" y="1" width="5" height="5" rx="1"/><rect x="1" y="10" width="5" height="5" rx="1"/><rect x="2.5" y="2.5" width="2" height="2" fill="currentColor" stroke="none"/><rect x="11.5" y="2.5" width="2" height="2" fill="currentColor" stroke="none"/><rect x="2.5" y="11.5" width="2" height="2" fill="currentColor" stroke="none"/><line x1="10" y1="10" x2="10" y2="10"/><line x1="13" y1="10" x2="15" y2="10"/><line x1="10" y1="13" x2="10" y2="15"/><line x1="13" y1="13" x2="15" y2="15"/></svg>;
 const IconThumbUp   = () => <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l2-5c.5-1.5 2-1.5 2.5 0L11 7h3.5a1 1 0 0 1 1 1.2l-1 5a1 1 0 0 1-1 .8H7a1 1 0 0 1-1-1V9z"/><path d="M6 9H4a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h2"/></svg>;
@@ -24,7 +26,7 @@ const IconChevronDown = () => <svg width="14" height="14" viewBox="0 0 14 14" fi
 const IconChevronUp   = () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="3,9 7,5 11,9"/></svg>;
 
 // ─── HORIZONTAL STEPPER (bottom bar) ─────────────────────────────────────────
-export function HorizontalStepper({ status }) {
+export function HorizontalStepper({ status, statusWithoutDispute }) {
   const stepMap = {
     createEscrow:0, fundEscrow:0, waitingForFunding:0, escrowWaitingForConfirmation:0,
     fundingAmountDifferent:0,
@@ -37,8 +39,12 @@ export function HorizontalStepper({ status }) {
     wrongAmountFundedOnContract:0, wrongAmountFundedOnContractRefundWaiting:0,
     fundingExpired:0,
   };
-  const activeStep = stepMap[status] ?? 0;
-  const isAborted = status === "dispute" || status === "disputeWithoutEscrowFunded"
+  const isDispute = status === "dispute" || status === "disputeWithoutEscrowFunded";
+  // When a dispute is open, prefer the underlying lifecycle status so the
+  // stepper marks the correct step as aborted instead of the hardcoded fallback.
+  const stepKey = (isDispute && statusWithoutDispute) ? statusWithoutDispute : status;
+  const activeStep = stepMap[stepKey] ?? 0;
+  const isAborted = isDispute
     || status === "tradeCanceled" || status === "confirmCancelation" || status === "offerCanceled";
 
   return (
@@ -1309,10 +1315,14 @@ export function ActionPanel({ scenario, onAction, showPostCancel = false, pendin
 
         {/* Buyer: send payment */}
         {status === "paymentRequired" && role === "buyer" && <>
-          <SlideToConfirm
-            label="I've sent the payment"
-            onConfirm={() => onAction("payment_sent")}
-          />
+          {pendingTask === "confirmPayment" ? (
+            <PendingBtn label="Payment confirmation pending in mobile app"/>
+          ) : (
+            <SlideToConfirm
+              label="I've sent the payment"
+              onConfirm={() => onAction("payment_sent")}
+            />
+          )}
         </>}
 
         {/* Seller: waiting for buyer to send payment */}
@@ -1578,7 +1588,7 @@ export function RatingPanel({ counterparty, onRate, pending, onPendingClick }) {
 }
 
 // ─── CHAT PANEL ───────────────────────────────────────────────────────────────
-export function ChatPanel({ messages, tradeId, role, disabled, status, onSend, onDisputeSubmit, hasMore, loadingMore, onLoadOlder }) {
+export function ChatPanel({ messages, tradeId, role, disabled, status, onSend, onDisputeSubmit, hasMore, loadingMore, onLoadOlder, counterpartyPeachId }) {
   const disputeOpen = status === "dispute" || status === "disputeWithoutEscrowFunded";
   const [text, setText] = useState("");
   const [localMsgs, setLocalMsgs] = useState(messages);
@@ -1679,6 +1689,21 @@ export function ChatPanel({ messages, tradeId, role, disabled, status, onSend, o
           </div>
         )}
         {localMsgs.map(msg => {
+          // System messages render as a centred notice, not a chat bubble.
+          // We trust either the API flag (from === "system") or the i18n key prefix.
+          const isSystem = msg.from === "system" || isSystemMessageKey(msg.text);
+          if (isSystem) {
+            const resolved = resolveSystemMessage(msg.text, { counterpartyPeachId });
+            return (
+              <div key={msg.id} className="chat-system-row">
+                <div className="chat-system-label">
+                  <IconInfo/> Peach system message
+                </div>
+                <div className="chat-system-text">{resolved}</div>
+                <div className="chat-system-ts">{relTime(msg.ts)}</div>
+              </div>
+            );
+          }
           const isMe = msg.from === "me";
           return (
             <div key={msg.id} className={`chat-bubble-row${isMe ? " chat-bubble-row-me" : ""}`}>

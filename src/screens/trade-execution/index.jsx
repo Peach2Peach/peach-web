@@ -172,6 +172,26 @@ const CSS = `
   .chat-text{font-size:.85rem}
   .chat-ts{font-size:.65rem;opacity:.65;margin-top:3px;text-align:right}
   .chat-bubble-them .chat-ts{text-align:left}
+  .chat-system-row{
+    display:flex;flex-direction:column;align-items:center;gap:4px;
+    padding:10px 14px;margin:4px auto;
+    max-width:78%;border-radius:10px;
+    background:rgba(245,101,34,.06);
+    border:1px dashed rgba(245,101,34,.3);
+    text-align:center;
+  }
+  .chat-system-label{
+    display:inline-flex;align-items:center;gap:5px;
+    font-size:.62rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--primary-dark,#C45104);
+  }
+  .chat-system-text{
+    font-size:.8rem;line-height:1.5;color:var(--black,#2B1911);
+    white-space:pre-wrap;
+  }
+  .chat-system-ts{
+    font-size:.62rem;color:var(--black-65,#7D675E);opacity:.8;
+  }
   .chat-input-row{
     display:flex;align-items:flex-end;gap:10px;
     padding:12px 18px;border-top:1px solid var(--black-10);
@@ -247,7 +267,7 @@ export default function TradeExecution() {
   const [chatSymKey, setChatSymKey] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [signingModal, setSigningModal] = useState(null); // { title, description, taskType } or null
-  const [pendingTaskType, setPendingTaskType] = useState(null); // "release" | "refund" | "rate" | "fundEscrow" | null
+  const [pendingTaskType, setPendingTaskType] = useState(null); // "release" | "refund" | "rate" | "fundEscrow" | "confirmPayment" | null
   const [fundEscrowLoading, setFundEscrowLoading] = useState(false);
   const [fundEscrowError, setFundEscrowError]     = useState(null);
   const [chatPage, setChatPage] = useState(0);
@@ -262,7 +282,7 @@ export default function TradeExecution() {
   // ── Restore pending task state from localStorage on mount ──
   useEffect(() => {
     if (!routeId) return;
-    for (const type of ["release", "refund", "rate", "fundEscrow"]) {
+    for (const type of ["release", "refund", "rate", "fundEscrow", "confirmPayment"]) {
       if (hasPendingTask(routeId, type)) { setPendingTaskType(type); break; }
     }
   }, [routeId]);
@@ -278,6 +298,14 @@ export default function TradeExecution() {
     if (c.mobileActionFundEscrowWasTriggered && pendingTaskType !== "fundEscrow") {
       setPendingTaskType("fundEscrow");
       if (routeId) savePendingTask(routeId, "fundEscrow");
+    }
+    if (c.mobileActionPaymentMadeWasTriggered && pendingTaskType !== "confirmPayment") {
+      setPendingTaskType("confirmPayment");
+      if (routeId) savePendingTask(routeId, "confirmPayment");
+    }
+    if (c.mobileActionPaymentConfirmedWasTriggered && pendingTaskType !== "release") {
+      setPendingTaskType("release");
+      if (routeId) savePendingTask(routeId, "release");
     }
   }, [liveContract, routeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -422,7 +450,7 @@ export default function TradeExecution() {
     counterparty: null, paymentDetails: null, paymentDetailsError: null,
   };
   const messages = liveMessages ?? [];
-  const { contract, counterparty: rawCounterparty, tradeStatus: status, role, paymentDetails, paymentDetailsError } = scenario;
+  const { contract, counterparty: rawCounterparty, tradeStatus: status, tradeStatusWithoutDispute, role, paymentDetails, paymentDetailsError } = scenario;
   const counterparty = rawCounterparty ?? { initials: "??", color: "#7D675E", name: "Unknown", rep: 0, trades: 0, badges: [], online: false };
 
   useEffect(() => {
@@ -506,6 +534,7 @@ export default function TradeExecution() {
           paymentTimedOut: (c.tradeStatus ?? c.status) === "paymentTooLate",
           // Dispute fields
           disputeActive: c.disputeActive ?? false,
+          tradeStatusWithoutDispute: c.tradeStatusWithoutDispute ?? null,
           disputeReason: c.disputeReason ?? null,
           disputeInitiator: c.disputeInitiator ?? null,
           disputeOutcome: c.disputeOutcome ?? null,
@@ -595,7 +624,10 @@ export default function TradeExecution() {
           if (decrypted) text = decrypted;
         }
         return {
-          id: m.id ?? m.date ?? Math.random(),
+          // Stable, collision-proof id. Server system messages often lack an id
+          // (and multiple events can share a date), so we fall back to a content
+          // fingerprint instead of Math.random() which would churn every poll.
+          id: m.id != null ? String(m.id) : `${m.date ?? "nodate"}|${m.from ?? "anon"}|${(m.message ?? m.text ?? "").slice(0, 48)}`,
           from: m.from === peachId ? "me" : (m.from === "system" ? "system" : "them"),
           text,
           ts: m.date ? new Date(m.date).getTime() : Date.now(),
@@ -645,7 +677,10 @@ export default function TradeExecution() {
             if (decrypted) text = decrypted;
           }
           return {
-            id: m.id ?? m.date ?? Math.random(),
+            // Stable, collision-proof id. Server system messages often lack an id
+          // (and multiple events can share a date), so we fall back to a content
+          // fingerprint instead of Math.random() which would churn every poll.
+          id: m.id != null ? String(m.id) : `${m.date ?? "nodate"}|${m.from ?? "anon"}|${(m.message ?? m.text ?? "").slice(0, 48)}`,
             from: m.from === peachId ? "me" : (m.from === "system" ? "system" : "them"),
             text,
             ts: m.date ? new Date(m.date).getTime() : Date.now(),
@@ -690,7 +725,10 @@ export default function TradeExecution() {
           if (decrypted) text = decrypted;
         }
         return {
-          id: m.id ?? m.date ?? Math.random(),
+          // Stable, collision-proof id. Server system messages often lack an id
+          // (and multiple events can share a date), so we fall back to a content
+          // fingerprint instead of Math.random() which would churn every poll.
+          id: m.id != null ? String(m.id) : `${m.date ?? "nodate"}|${m.from ?? "anon"}|${(m.message ?? m.text ?? "").slice(0, 48)}`,
           from: m.from === peachId ? "me" : (m.from === "system" ? "system" : "them"),
           text,
           ts: m.date ? new Date(m.date).getTime() : Date.now(),
@@ -1039,14 +1077,14 @@ export default function TradeExecution() {
                 && status !== "wrongAmountFundedOnContract"
                 && status !== "wrongAmountFundedOnContractRefundWaiting" && (
                 <ActionPanel scenario={scenario} showPostCancel={showPostCancel} pendingTask={pendingTaskType} onPendingClick={() => {
-                  // Refund no longer opens the modal — inline pending state only.
-                  if (pendingTaskType === "refund") return;
-                  const labels = {
-                    release: { title: "Release Bitcoin", description: "Approve the Bitcoin release on your Peach mobile app. A push notification has been sent to your phone." },
-                    rate: { title: "Sign Rating", description: "Approve the rating on your Peach mobile app. A push notification has been sent to your phone." },
-                  };
-                  const l = labels[pendingTaskType] || labels.release;
-                  setSigningModal({ ...l, taskType: pendingTaskType });
+                  // refund / fund-escrow / confirm-payment / release — inline pending state only, no modal.
+                  if (pendingTaskType === "refund" || pendingTaskType === "confirmPayment" || pendingTaskType === "release") return;
+                  // rate still uses the modal
+                  setSigningModal({
+                    title: "Sign Rating",
+                    description: "Approve the rating on your Peach mobile app. A push notification has been sent to your phone.",
+                    taskType: "rate",
+                  });
                 }} onAction={async (action, arg) => {
                   if (action === "extend_time") {
                     try {
@@ -1126,7 +1164,6 @@ export default function TradeExecution() {
                       }
                       savePendingTask(routeId, "confirmPayment");
                       setPendingTaskType("confirmPayment");
-                      setSigningModal({ title: "Confirm Payment", description: "Please confirm your payment on the Peach mobile app. Open the trade on your phone and slide to confirm you've sent the payment.", taskType: "confirmPayment" });
                     } catch (e) {
                       setActionError("Failed to request confirmation: " + e.message);
                     }
@@ -1141,7 +1178,6 @@ export default function TradeExecution() {
                       }
                       savePendingTask(routeId, "release");
                       setPendingTaskType("release");
-                      setSigningModal({ title: "Release Bitcoin", description: "Approve the Bitcoin release on your Peach mobile app. A push notification has been sent to your phone.", taskType: "release" });
                     } catch (e) {
                       setActionError("Failed to request signing: " + e.message);
                     }
@@ -1233,7 +1269,7 @@ export default function TradeExecution() {
 
           {/* ── RIGHT: Chat ── */}
           <div className={`split-right${mobileTab === "chat" ? " mobile-active" : ""}`}>
-            <ChatPanel messages={messages} tradeId={contract.id} role={role} disabled={status === "fundEscrow" || status === "createEscrow" || status === "waitingForFunding" || status === "fundingAmountDifferent" || status === "wrongAmountFundedOnContract" || status === "wrongAmountFundedOnContractRefundWaiting"} status={status} hasMore={chatHasMore} loadingMore={chatLoadingMore} onLoadOlder={loadOlderChat} onSend={async (plaintext) => {
+            <ChatPanel messages={messages} tradeId={contract.id} role={role} counterpartyPeachId={counterparty.name} disabled={status === "fundEscrow" || status === "createEscrow" || status === "waitingForFunding" || status === "fundingAmountDifferent" || status === "wrongAmountFundedOnContract" || status === "wrongAmountFundedOnContractRefundWaiting"} status={status} hasMore={chatHasMore} loadingMore={chatLoadingMore} onLoadOlder={loadOlderChat} onSend={async (plaintext) => {
               if (!chatSymKey || !auth?.pgpPrivKey) return false;
               try {
                 const encrypted = await encryptSymmetric(plaintext, chatSymKey);
@@ -1309,7 +1345,7 @@ export default function TradeExecution() {
       {/* ── HORIZONTAL STEPPER (fixed bottom) ── */}
       {!contractLoading && (
       <div className="h-stepper-wrap">
-        <HorizontalStepper status={status}/>
+        <HorizontalStepper status={status} statusWithoutDispute={tradeStatusWithoutDispute}/>
       </div>
       )}
 
