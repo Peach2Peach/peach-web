@@ -760,9 +760,7 @@ export default function TradesDashboard() {
             if (!pd) continue;
             for (const [method, data] of Object.entries(pd)) {
               if (data?.selfEncrypted) {
-                decryptPGPMessage(data.selfEncrypted, auth.pgpPrivKey).then(decrypted => {
-                  console.log(`[Trades] Offer ${o.id} → ${method} selfEncrypted:`, decrypted);
-                }).catch(() => {});
+                decryptPGPMessage(data.selfEncrypted, auth.pgpPrivKey).catch(() => {});
               }
             }
           }
@@ -1288,7 +1286,6 @@ export default function TradesDashboard() {
             if (res.ok) {
               const data = await res.json();
               const requests = Array.isArray(data) ? data : (data?.tradeRequests ?? []);
-              console.log("[Trades] On-demand trade requests for", trade.id, ":", requests);
               const userProfiles = await Promise.all(
                 requests.map(tr =>
                   tr.userId
@@ -1473,7 +1470,6 @@ export default function TradesDashboard() {
             if (!valid) throw new Error("selfEncrypted signature verification failed");
           }
           pmData = JSON.parse(decrypted);
-          console.log("[Trades] Using selfEncrypted PM data for:", paymentMethod);
         }
       }
 
@@ -1495,7 +1491,6 @@ export default function TradesDashboard() {
         if (auth?.pgpPrivKey && match._raw?.symmetricKeyEncrypted) {
           const raw = await decryptPGPMessage(match._raw.symmetricKeyEncrypted, auth.pgpPrivKey);
           symmetricKey = raw ? raw.trim() : null;
-          console.log("[Trades] decrypted symmetricKey:", symmetricKey ? `len=${symmetricKey.length} first8=${symmetricKey.slice(0,8)} rawLen=${raw.length}` : "null");
         }
 
         let paymentDataEncrypted = null;
@@ -1504,24 +1499,12 @@ export default function TradesDashboard() {
           const pmJson = JSON.stringify(cleanData);
           paymentDataEncrypted = await encryptSymmetric(pmJson, symmetricKey);
           paymentDataSignature = await signPGPMessage(pmJson, auth.pgpPrivKey);
-          // Debug: verify round-trip + log formats
-          console.log("[Trades] pmJson length:", pmJson.length);
-          console.log("[Trades] encrypted starts:", paymentDataEncrypted?.slice(0, 60));
-          console.log("[Trades] signature starts:", paymentDataSignature?.slice(0, 80));
-          try {
-            const { decryptSymmetric: testDecrypt } = await import("../../utils/pgp.js");
-            const roundTrip = await testDecrypt(paymentDataEncrypted, symmetricKey);
-            console.log("[Trades] Round-trip decrypt OK:", roundTrip === pmJson, "decrypted length:", roundTrip?.length);
-          } catch (e) { console.warn("[Trades] Round-trip decrypt FAILED:", e.message); }
         }
 
         const userId = match._raw.tradeRequestUserId;
         const offerType = trade.direction === "buy" ? "buyOffer" : "sellOffer";
         const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
         const acceptUrl = `${v069Base}/${offerType}/${trade.id}/tradeRequestReceived/${userId}/accept`;
-
-        console.log("[Trades] v069 accept URL:", acceptUrl);
-        console.log("[Trades] v069 accept payload has paymentDataEncrypted:", !!paymentDataEncrypted);
 
         const res = await fetchWithSessionCheck(acceptUrl, {
           method: "POST",
@@ -1558,7 +1541,6 @@ export default function TradesDashboard() {
           const counterpartyKeys = (match._raw?.pgpPublicKeys ?? [])
             .map(k => typeof k === "string" ? k : k?.publicKey)
             .filter(Boolean);
-          console.log("[Trades] counterpartyKeys count:", counterpartyKeys.length, "| raw pgpPublicKeys:", match._raw?.pgpPublicKeys);
           const keyResult = await encryptForRecipients(symmetricKey, counterpartyKeys, auth.pgpPrivKey);
           if (keyResult) {
             symmetricKeyEncrypted = keyResult.encrypted;
@@ -1582,7 +1564,6 @@ export default function TradesDashboard() {
         if (paymentDataSignature) payload.paymentDataSignature = paymentDataSignature;
         if (hashedPaymentData) payload.paymentData = hashedPaymentData;
 
-        console.log("[Trades] v1 match accept payload keys:", Object.keys(payload));
         const res = await post(`/offer/${trade.id}/match`, payload);
         if (res.ok) {
           const data = await res.json();

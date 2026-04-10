@@ -1,10 +1,23 @@
+const ALLOWED_ORIGINS = [
+  'https://nuxblock.github.io',
+  'http://localhost:5173',
+  'http://localhost:4173',
+];
+
+function getCorsOrigin(request) {
+  const origin = request.headers.get('Origin') || '';
+  return ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+}
+
 export default {
   async fetch(request) {
+    const corsOrigin = getCorsOrigin(request);
+
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Origin': corsOrigin,
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type, Authorization',
           'Access-Control-Max-Age': '86400',
         },
@@ -34,8 +47,8 @@ export default {
     });
 
     const headers = new Headers(response.headers);
-    headers.set('Access-Control-Allow-Origin', '*');
-    headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    headers.set('Access-Control-Allow-Origin', corsOrigin);
+    headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
     headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });

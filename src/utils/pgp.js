@@ -351,7 +351,6 @@ export async function decryptPaymentMethods(apiResponse, armoredPrivKey) {
   try {
     // Shape 1: entire response is a single PGP blob
     if (isPGPString(apiResponse)) {
-      console.log("[PGP] Detected shape: single PGP blob");
       const plaintext = await decryptPGPMessage(apiResponse, armoredPrivKey);
       if (!plaintext) return null;
       return JSON.parse(plaintext);
@@ -359,7 +358,6 @@ export async function decryptPaymentMethods(apiResponse, armoredPrivKey) {
 
     // Shape 2: array of PGP strings
     if (Array.isArray(apiResponse) && apiResponse.length > 0 && isPGPString(apiResponse[0])) {
-      console.log("[PGP] Detected shape: array of PGP strings");
       const results = await Promise.all(
         apiResponse.map(msg => decryptPGPMessage(msg, armoredPrivKey))
       );
@@ -372,7 +370,6 @@ export async function decryptPaymentMethods(apiResponse, armoredPrivKey) {
     if (Array.isArray(apiResponse) && apiResponse.length > 0 && typeof apiResponse[0] === "object") {
       const encKey = findEncryptedKey(apiResponse[0]);
       if (encKey) {
-        console.log(`[PGP] Detected shape: array of objects with encrypted field "${encKey}"`);
         const results = await Promise.all(
           apiResponse.map(async (item) => {
             const plaintext = await decryptPGPMessage(item[encKey], armoredPrivKey);
@@ -385,7 +382,6 @@ export async function decryptPaymentMethods(apiResponse, armoredPrivKey) {
         return results.filter(Boolean);
       }
       // Array of plain objects — pass through (Shape 5)
-      console.log("[PGP] Detected shape: plain array (no encryption)");
       return apiResponse;
     }
 
@@ -398,7 +394,6 @@ export async function decryptPaymentMethods(apiResponse, armoredPrivKey) {
       }
       const firstKey = Object.keys(apiResponse)[0];
       if (firstKey && isPGPString(apiResponse[firstKey])) {
-        console.log("[PGP] Detected shape: object map with PGP values");
         const entries = await Promise.all(
           Object.entries(apiResponse).map(async ([key, val]) => {
             const plaintext = await decryptPGPMessage(val, armoredPrivKey);
@@ -409,7 +404,6 @@ export async function decryptPaymentMethods(apiResponse, armoredPrivKey) {
         return Object.fromEntries(entries.filter(Boolean));
       }
       // Plain object map — pass through (Shape 5)
-      console.log("[PGP] Detected shape: plain object (no encryption)");
       return apiResponse;
     }
 
@@ -436,7 +430,6 @@ export async function extractPMsFromProfile(profile, armoredPrivKey) {
 
   try {
     // Log all profile keys so we can see the response shape
-    console.log("[PGP] Profile keys:", Object.keys(profile));
 
     // Collect all PGP-encrypted fields — top-level and one level deep
     // Skip signature fields — they are PGP signed messages, not encrypted data
@@ -454,14 +447,12 @@ export async function extractPMsFromProfile(profile, armoredPrivKey) {
     }
 
     if (encryptedEntries.length === 0) {
-      console.log("[PGP] No encrypted fields found in profile (top-level or nested)");
       // Check if profile has a plain paymentData/paymentMethods field
       if (profile.paymentData) return profile.paymentData;
       if (profile.paymentMethods) return profile.paymentMethods;
       return null;
     }
 
-    console.log(`[PGP] Found ${encryptedEntries.length} encrypted field(s): ${encryptedEntries.map(e => e[0]).join(", ")}`);
 
     // Decrypt each encrypted field
     const decrypted = {};
@@ -470,10 +461,8 @@ export async function extractPMsFromProfile(profile, armoredPrivKey) {
       if (plaintext) {
         try {
           decrypted[key] = JSON.parse(plaintext);
-          console.log(`[PGP] Decrypted "${key}" →`, typeof decrypted[key], Array.isArray(decrypted[key]) ? `(array, ${decrypted[key].length} items)` : "");
         } catch {
           decrypted[key] = plaintext;
-          console.log(`[PGP] Decrypted "${key}" → raw string (${plaintext.length} chars)`);
         }
       } else {
         console.warn(`[PGP] Failed to decrypt field "${key}"`);
@@ -483,7 +472,6 @@ export async function extractPMsFromProfile(profile, armoredPrivKey) {
     // Look for PM-like data in the decrypted fields
     for (const pmKey of ["paymentData", "paymentMethods", "pgpPaymentData"]) {
       if (decrypted[pmKey]) {
-        console.log(`[PGP] Found PM data in decrypted field "${pmKey}":`, decrypted[pmKey]);
         return decrypted[pmKey];
       }
     }
@@ -491,12 +479,10 @@ export async function extractPMsFromProfile(profile, armoredPrivKey) {
     // If only one encrypted field, assume it's PMs
     if (encryptedEntries.length === 1) {
       const onlyKey = encryptedEntries[0][0];
-      console.log(`[PGP] Single encrypted field "${onlyKey}" — treating as PM data:`, decrypted[onlyKey]);
       return decrypted[onlyKey];
     }
 
     // Return all decrypted data and let the caller figure it out
-    console.log("[PGP] Multiple encrypted fields — returning all decrypted data:", Object.keys(decrypted));
     return decrypted;
   } catch (err) {
     console.warn("[PGP] extractPMsFromProfile failed:", err.message);
