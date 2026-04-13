@@ -573,23 +573,15 @@ export default function PeachMarket() {
             "id", "methodId", "type", "name", "label", "currencies", "hashes",
             "details", "data", "country", "anonymous",
           ]);
-          function mapD(d) {
-            const m = { ...d };
-            if (d.userName && !d.username) m.username = d.userName;
-            if (d.userName && !d.email)    m.email    = d.userName;
-            if (d.beneficiary && !d.holder) m.holder  = d.beneficiary;
-            return m;
-          }
           function shortId(raw) { return raw.replace(/-\d+$/, ""); }
           function sweepFields(obj) {
             const explicit = obj.data || obj.details || null;
+            if (explicit) return explicit;
             const swept = {};
-            if (!explicit) {
-              for (const [k, v] of Object.entries(obj)) {
-                if (!STRUCTURAL.has(k) && typeof v !== "object") swept[k] = v;
-              }
+            for (const [k, v] of Object.entries(obj)) {
+              if (!STRUCTURAL.has(k) && typeof v !== "object") swept[k] = v;
             }
-            return mapD(explicit || (Object.keys(swept).length ? swept : {}));
+            return swept;
           }
           if (Array.isArray(pms) && pms.length > 0) {
             setLiveUserPMs(pms.map(pm => ({

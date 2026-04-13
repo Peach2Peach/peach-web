@@ -147,8 +147,8 @@ export const METHOD_FIELDS = {
 export function methodLabel(pm) {
   const d = pm.details || {};
   if (d.iban)        return d.iban.replace(/\s/g,"").replace(/^(.{4})(.*)(.{4})$/, "$1 •••• $3");
-  if (d.email)       return d.email.replace(/(.{2})(.*)(@.*)/, "$1•••$3");
   if (d.userName)    return d.userName;
+  if (d.email)       return d.email.replace(/(.{2})(.*)(@.*)/, "$1•••$3");
   if (d.phone)       return d.phone.replace(/(.{5})(.*)(.{3})/, "$1•••$3");
   if (d.beneficiary) return d.beneficiary;
   if (d.ukSortCode)  return `${d.ukSortCode} / ${d.bankAccountNumber || ""}`;
@@ -272,12 +272,20 @@ export function AddPMFlow({ methods, onSave, onClose, editData }) {
       return;
     }
 
+    const allowedKeys = new Set(fields.map(f => f.key));
+    const cleanDetails = {};
+    for (const [k, v] of Object.entries(details)) {
+      if (allowedKeys.has(k)) cleanDetails[k] = v;
+    }
+    cleanDetails._payRefType = payRefType;
+    cleanDetails._payRefCustom = payRefCustom;
+
     const pm = {
       id:         editData?.id || `${selMethodId}-${Date.now()}`,
       methodId:   selMethodId,
       name:       selMethod?.name || selMethodId,
       currencies: selCurrencies,
-      details:    { ...details, _payRefType: payRefType, _payRefCustom: payRefCustom },
+      details:    cleanDetails,
     };
     onSave(pm);
   }

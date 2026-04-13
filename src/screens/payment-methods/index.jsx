@@ -125,52 +125,42 @@ export default function PeachPaymentMethods() {
           "details", "data", "country", "anonymous",
         ]);
 
-        function mapDetails(d) {
-          const m = { ...d };
-          if (d.userName && !d.username) m.username = d.userName;
-          if (d.userName && !d.email)    m.email    = d.userName;
-          if (d.beneficiary && !d.holder) m.holder  = d.beneficiary;
-          return m;
-        }
-
         function shortMethodId(raw) {
           return raw.replace(/-\d+$/, "");
         }
 
+        function sweepDetails(obj) {
+          const explicit = obj?.details || obj?.data || null;
+          if (explicit) return explicit;
+          const swept = {};
+          if (obj && typeof obj === "object") {
+            for (const [k, v] of Object.entries(obj)) {
+              if (!STRUCTURAL.has(k) && typeof v !== "object") swept[k] = v;
+            }
+          }
+          return swept;
+        }
+
         if (Array.isArray(pms)) {
           const normalised = pms.map((pm, i) => {
-            const explicit = pm.details || pm.data || null;
-            const swept = {};
-            if (!explicit) {
-              for (const [k, v] of Object.entries(pm)) {
-                if (!STRUCTURAL.has(k) && typeof v !== "object") swept[k] = v;
-              }
-            }
             const rawId = pm.methodId || pm.type || pm.id || "unknown";
             return {
               id:         pm.id        || `api-pm-${i}`,
               methodId:   shortMethodId(rawId),
               name:       pm.name      || pm.label || pm.type || "Payment Method",
               currencies: pm.currencies || [],
-              details:    mapDetails(explicit || (Object.keys(swept).length ? swept : {})),
+              details:    sweepDetails(pm),
             };
           });
           setSavedMethods(normalised);
         } else if (pms && typeof pms === "object") {
-          const normalised = Object.entries(pms).map(([key, val], i) => {
-            const explicit = val?.details || val?.data || null;
-            const swept = {};
-            if (!explicit && val && typeof val === "object") {
-              for (const [k, v] of Object.entries(val)) {
-                if (!STRUCTURAL.has(k) && typeof v !== "object") swept[k] = v;
-              }
-            }
+          const normalised = Object.entries(pms).map(([key, val]) => {
             return {
               id:         val?.id || key,
               methodId:   shortMethodId(key),
               name:       val?.name || val?.label || key,
               currencies: val?.currencies || [],
-              details:    mapDetails(explicit || (Object.keys(swept).length ? swept : {})),
+              details:    sweepDetails(val),
             };
           });
           setSavedMethods(normalised);
