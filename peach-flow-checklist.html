@@ -166,71 +166,76 @@ const DATA = [
     "Trade request: select PM \u2192 send request \u2192 loading state \u2192 \"Trade requested\" animation",
     "Own offer: edit premium inline, withdraw (buy = immediate, sell = mobile signing)",
   ]},
-  { title: "4. Create Buy Offer", items: [
+  { title: "4. Payment Methods (Add + Save)", items: [
+    "Navigate to <code>/payment-methods</code> — saved PMs load (or empty state)",
+    "Add PM: select type (grouped by category) \u2192 fill fields \u2192 select currencies \u2192 save",
+    "Edit and delete existing PMs work (delete has confirmation)",
+    "New PM appears in <code>/offer/new</code> dropdown. PMs sync to server (PGP-encrypted)",
+    "<strong>Test creating all payment methods:</strong>",
+    "&nbsp;&nbsp;\u2022 <em>Bank transfer:</em> SEPA, SEPA Instant, Faster Payments",
+    "&nbsp;&nbsp;\u2022 <em>Online wallet:</em> Revolut, Wise, PayPal, Advcash, Strike, N26, Dollar On Chain (DOC), LNURL BTC Swap, USDT, USDC",
+    "&nbsp;&nbsp;\u2022 <em>Gift card:</em> Amazon Gift Card",
+    "&nbsp;&nbsp;\u2022 <em>National:</em> Bizum, Twint, Swish, MobilePay, Vipps, Satispay, MB Way, IRIS, Paylib, Verse, BLIK",
+  ]},
+  { title: "5. Create Buy Offer", items: [
     "Navigate to <code>/offer/new</code> — select \"Buy\" toggle",
     "Amount slider and input sync, fiat equivalent updates in real time. Range mode works",
     "Set premium, select PMs (or add new PM inline), currencies auto-populate",
     "\"Next\" \u2192 review step shows all values. \"Confirm\" \u2192 success",
     "New offer appears on <code>/trades</code> Pending tab",
   ]},
-  { title: "5. Create Sell Offer", items: [
+  { title: "6. Create Sell Offer", items: [
     "Select \"Sell\" toggle — same config steps as buy, plus auto-confirm toggle",
     "\"Confirm\" \u2192 escrow step: Bitcoin address with copy button and QR",
     "Funding status updates (mempool \u2192 confirmed). Wrong amount detected",
     "Multi-escrow toggle works for creating multiple offers at once",
   ]},
-  { title: "6. Accept Match \u2192 Start Trade", items: [
+  { title: "7. Accept Match \u2192 Start Trade", items: [
     "On <code>/trades</code> Pending tab — click \"View matches\" \u2192 MatchesPopup opens",
     "Match list shows avatar, PeachID, rating, amount, premium, PMs",
     "Click match \u2192 detail view \u2192 \"Confirm & Continue\" \u2192 contract created",
     "Navigates to <code>/trade/:contractId</code>",
   ]},
-  { title: "7. Trade Execution — Buyer Path", items: [
+  { title: "8. Trade Execution — Buyer Path", items: [
     "Trade execution loads — counterparty info, trade summary, stepper visible",
     "Seller's payment details display (PGP-decrypted), copy buttons work",
     "\"I've sent the payment\" button works \u2192 status advances",
     "After seller confirms + releases \u2192 tradeCompleted. \"Rate\" button appears",
   ]},
-  { title: "8. Trade Execution — Seller Path", items: [
+  { title: "9. Trade Execution — Seller Path", items: [
     "Trade execution loads — escrow address and funding amount visible",
     "\"Confirm payment received\" button appears after buyer marks payment sent",
     "\"Release Bitcoin\" \u2192 mobile signing modal \u2192 after signing \u2192 tradeCompleted",
     "\"Rate\" button appears",
   ]},
-  { title: "9. Trade Execution — Chat", items: [
+  { title: "10. Trade Execution — Chat", items: [
     "Chat panel loads (right side on desktop, Chat tab on mobile)",
     "Send and receive messages (PGP-encrypted), timestamps display",
     "Older messages load via pagination, auto-scroll to latest",
     "Unread badge updates on sidebar",
   ]},
-  { title: "10. Cancellation Flow", items: [
+  { title: "11. Cancellation Flow", items: [
     "\"Request cancellation\" sends request to counterparty",
     "Counterparty can confirm or reject cancellation",
     "Accept \u2192 trade cancelled. Reject \u2192 trade continues",
   ]},
-  { title: "11. Dispute Flow", items: [
+  { title: "12. Dispute Flow", items: [
     "\"Open dispute\" available when payment issues occur",
     "Dispute system messages render in chat, notifications fire",
     "Dispute count visible on dashboard",
   ]},
-  { title: "12. Mobile Signing Modal", items: [
+  { title: "13. Mobile Signing Modal", items: [
     "Modal triggers for escrow funding, release, refund, and rating",
     "Shows task info, QR/deep link, status updates (pending \u2192 signed \u2192 complete)",
     "Cancel option available, modal dismisses on completion",
   ]},
-  { title: "13. Trades Dashboard", items: [
+  { title: "14. Trades Dashboard", items: [
     "Navigate to <code>/trades</code> — Active/Pending/History tabs load",
     "Active: trade cards with direction badge, counterparty, amount, status, unread count. Click \u2192 opens trade",
     "Pending: offers with \"View matches\" button",
     "History: completed/cancelled trades, search by trade ID",
     "Filters work: payment method, currency, status. Grid/List view toggle (desktop)",
     "QR code toggle for address only / address + amount",
-  ]},
-  { title: "14. Payment Methods (Add + Save)", items: [
-    "Navigate to <code>/payment-methods</code> — saved PMs load (or empty state)",
-    "Add PM: select type (grouped by category) \u2192 fill fields \u2192 select currencies \u2192 save",
-    "Edit and delete existing PMs work (delete has confirmation)",
-    "New PM appears in <code>/offer/new</code> dropdown. PMs sync to server (PGP-encrypted)",
   ]},
   { title: "15. Notifications", items: [
     "Bell icon shows unread count badge, click opens NotificationPanel",
