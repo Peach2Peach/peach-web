@@ -8,39 +8,19 @@
 import { encryptPGPMessage, signPGPMessage } from "./pgp.js";
 import { fetchWithSessionCheck } from "./sessionGuard.js";
 
-// Translate a PM's in-memory details (UI-friendly keys like `username`, `holder`)
-// into the canonical server-side keys the API and the hash function expect
-// (`userName`, `beneficiary`). Also strips UI-only state (keys starting with `_`)
-// and drops redundant `email` when it equals `userName`.
-// Single source of truth for field normalization — used by both serializePMs
-// (outgoing encrypted PM blob) and the offer-creation hash path.
-export function canonicalizeDetails(details = {}) {
-  const out = {};
-  for (const [k, v] of Object.entries(details)) {
-    if (k.startsWith("_")) continue;
-    out[k] = v;
-  }
-  if (out.username && !out.userName) {
-    out.userName = out.username;
-    delete out.username;
-  }
-  if (out.holder && !out.beneficiary) {
-    out.beneficiary = out.holder;
-    delete out.holder;
-  }
-  if (out.email && out.userName && out.email === out.userName) {
-    delete out.email;
-  }
-  return out;
-}
-
 // Convert internal PM array → API object-map format.
 // Internal shape: { id, methodId, name, currencies, details:{..., _payRefType, _payRefCustom} }
 // API shape:      { [id]: { id, label, currencies, ...flatDetails } }
+// Strips keys starting with `_` — those are UI-only state and must not be
+// serialised into the encrypted blob.
 export function serializePMs(pms) {
   const map = {};
   for (const pm of pms) {
-    const apiDetails = canonicalizeDetails(pm.details);
+    const details = pm.details || {};
+    const apiDetails = {};
+    for (const [k, v] of Object.entries(details)) {
+      if (!k.startsWith("_")) apiDetails[k] = v;
+    }
     map[pm.id] = {
       id: pm.id,
       label: pm.name,

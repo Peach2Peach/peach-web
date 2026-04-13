@@ -22,7 +22,7 @@ import {
 import {
   AddPMFlow, FALLBACK_METHODS, methodLabel,
 } from "../../components/AddPMFlow.jsx";
-import { syncPMsToServer, canonicalizeDetails } from "../../utils/pmSync.js";
+import { syncPMsToServer } from "../../utils/pmSync.js";
 
 
 // ─── MAIN ───────────────────────────────────────────────────────────────────
@@ -343,10 +343,12 @@ export default function OfferCreation({ initialType="buy" }) {
     for(const pm of selectedSaved){
       const methodType = (pm.methodId||"").replace(/-\d+$/, "");
       if(paymentData[methodType]) continue;
-      const details = canonicalizeDetails(pm.details || {});
-      console.log("[OfferPublish] PM:", pm.methodId, "id:", pm.id, "detail keys:", Object.keys(details));
+      const rawDetails = pm.details || {};
+      const details = {};
+      for (const [k, v] of Object.entries(rawDetails)) {
+        if (!k.startsWith("_")) details[k] = v;
+      }
       const hashed = await hashPaymentFields(methodType, details, details.country);
-      console.log("[OfferPublish] hashed result:", hashed);
       Object.assign(paymentData, hashed);
 
       const cleanData = details;
