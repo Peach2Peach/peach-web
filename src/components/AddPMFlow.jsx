@@ -106,24 +106,24 @@ export const PHONE_PREFIX_MAP = {
 };
 
 export const METHOD_FIELDS = {
-  sepa:           [{ key:"holder", label:"Account holder name", placeholder:"Full name" },
+  sepa:           [{ key:"beneficiary", label:"Account holder name", placeholder:"Full name" },
                    { key:"iban",   label:"IBAN",                placeholder:"DE89 3704 0044 0532 0130 00" },
                    { key:"bic",    label:"BIC",                 placeholder:"COBADEFFXXX", optional:true }],
-  instantSepa:    [{ key:"holder", label:"Account holder name", placeholder:"Full name" },
+  instantSepa:    [{ key:"beneficiary", label:"Account holder name", placeholder:"Full name" },
                    { key:"iban",   label:"IBAN",                placeholder:"DE89 3704 0044 0532 0130 00" },
                    { key:"bic",    label:"BIC",                 placeholder:"COBADEFFXXX", optional:true }],
-  fasterPayments: [{ key:"holder",    label:"Account holder name", placeholder:"Full name" },
-                   { key:"sortCode",  label:"Sort code",           placeholder:"12-34-56" },
-                   { key:"accountNo", label:"Account number",      placeholder:"12345678" }],
-  revolut:        [{ key:"username", label:"Revolut username or phone", placeholder:"@username or +33..." }],
+  fasterPayments: [{ key:"beneficiary",        label:"Account holder name", placeholder:"Full name" },
+                   { key:"ukSortCode",        label:"Sort code",           placeholder:"12-34-56" },
+                   { key:"bankAccountNumber", label:"Account number",      placeholder:"12345678" }],
+  revolut:        [{ key:"userName", label:"Revolut username or phone", placeholder:"@username or +33..." }],
   wise:           [{ key:"email",    label:"Email or @handle",         placeholder:"you@example.com" }],
   paypal:         [{ key:"email",    label:"PayPal email",             placeholder:"you@example.com" }],
   advcash:        [{ key:"email",    label:"Advcash email",            placeholder:"you@example.com" }],
-  strike:         [{ key:"username", label:"Strike username",          placeholder:"@username" }],
+  strike:         [{ key:"userName", label:"Strike username",          placeholder:"@username" }],
   n26:            [{ key:"email",    label:"N26 email or IBAN",        placeholder:"you@example.com" }],
   amazonGiftCard: [{ key:"email",    label:"Email for gift card code", placeholder:"you@example.com" }],
   dollarOnChain:  [{ key:"address",  label:"Wallet address",           placeholder:"0x... or RSK address" }],
-  lnurlBtcSwap:   [{ key:"lnurl",    label:"LNURL or Lightning address", placeholder:"LNURL1... or user@domain.com" }],
+  lnurlBtcSwap:   [{ key:"lnurlAddress", label:"LNURL or Lightning address", placeholder:"LNURL1... or user@domain.com" }],
   usdt:           [{ key:"address",  label:"Wallet address",           placeholder:"Network + address" },
                    { key:"network",  label:"Network",                  placeholder:"Ethereum, Tron, etc." }],
   usdc:           [{ key:"address",  label:"Wallet address",           placeholder:"Network + address" },
@@ -146,12 +146,12 @@ export const METHOD_FIELDS = {
 // Derive a short display label for a saved PM (used by both screens in PM lists)
 export function methodLabel(pm) {
   const d = pm.details || {};
-  if (d.iban)      return d.iban.replace(/\s/g,"").replace(/^(.{4})(.*)(.{4})$/, "$1 •••• $3");
-  if (d.email)     return d.email.replace(/(.{2})(.*)(@.*)/, "$1•••$3");
-  if (d.username || d.userName) return d.username || d.userName;
-  if (d.phone)     return d.phone.replace(/(.{5})(.*)(.{3})/, "$1•••$3");
-  if (d.holder || d.beneficiary) return d.holder || d.beneficiary;
-  if (d.sortCode)  return `${d.sortCode} / ${d.accountNo || ""}`;
+  if (d.iban)        return d.iban.replace(/\s/g,"").replace(/^(.{4})(.*)(.{4})$/, "$1 •••• $3");
+  if (d.email)       return d.email.replace(/(.{2})(.*)(@.*)/, "$1•••$3");
+  if (d.userName)    return d.userName;
+  if (d.phone)       return d.phone.replace(/(.{5})(.*)(.{3})/, "$1•••$3");
+  if (d.beneficiary) return d.beneficiary;
+  if (d.ukSortCode)  return `${d.ukSortCode} / ${d.bankAccountNumber || ""}`;
   return "—";
 }
 
@@ -262,7 +262,7 @@ export function AddPMFlow({ methods, onSave, onClose, editData }) {
       } else if (f.key === "phone") {
         const r = validatePhone(details[f.key], PHONE_PREFIX_MAP[selMethodId]);
         if (!r.valid) newErrors[f.key] = r.error;
-      } else if (f.key === "holder") {
+      } else if (f.key === "beneficiary") {
         const r = validateHolder(details[f.key]);
         if (!r.valid) newErrors[f.key] = r.error;
       }

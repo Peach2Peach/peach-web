@@ -22,7 +22,7 @@ import {
 import {
   AddPMFlow, FALLBACK_METHODS, methodLabel,
 } from "../../components/AddPMFlow.jsx";
-import { syncPMsToServer } from "../../utils/pmSync.js";
+import { syncPMsToServer, canonicalizeDetails } from "../../utils/pmSync.js";
 
 
 // ─── MAIN ───────────────────────────────────────────────────────────────────
@@ -333,7 +333,7 @@ export default function OfferCreation({ initialType="buy" }) {
   async function buildPaymentPayload(serverPGPKey){
     const meansOfPayment = {};
     for(const pm of selectedSaved){
-      const methodType = (pm.methodId||"").replace(/-\d+$/, "").toLowerCase();
+      const methodType = (pm.methodId||"").replace(/-\d+$/, "");
       for(const cur of (pm.currencies||[])){
         if(!meansOfPayment[cur]) meansOfPayment[cur] = [];
         if(!meansOfPayment[cur].includes(methodType)) meansOfPayment[cur].push(methodType);
@@ -341,13 +341,15 @@ export default function OfferCreation({ initialType="buy" }) {
     }
     const paymentData = {};
     for(const pm of selectedSaved){
-      const methodType = (pm.methodId||"").replace(/-\d+$/, "").toLowerCase();
+      const methodType = (pm.methodId||"").replace(/-\d+$/, "");
       if(paymentData[methodType]) continue;
-      const details = pm.details || {};
+      const details = canonicalizeDetails(pm.details || {});
+      console.log("[OfferPublish] PM:", pm.methodId, "id:", pm.id, "detail keys:", Object.keys(details));
       const hashed = await hashPaymentFields(methodType, details, details.country);
+      console.log("[OfferPublish] hashed result:", hashed);
       Object.assign(paymentData, hashed);
 
-      const cleanData = cleanPMData(pm);
+      const cleanData = details;
 
       // Self-encrypt PM details with user's own PGP key
       if (auth?.pgpPrivKey && Object.keys(cleanData).length > 0) {

@@ -835,10 +835,10 @@ export default function PeachMarket() {
                     {matching.map(pm => {
                       const sel = selectedPM === pm.id;
                       const detailStr = pm.type === "SEPA"
-                        ? `${pm.details.holder} · ${pm.details.iban?.slice(0,8)}…`
+                        ? `${pm.details.beneficiary} · ${pm.details.iban?.slice(0,8)}…`
                         : pm.type === "Revolut"
-                          ? pm.details.username
-                          : pm.details.email || pm.details.username || "—";
+                          ? pm.details.userName
+                          : pm.details.email || pm.details.userName || "—";
                       return (
                         <button key={pm.id}
                           className={`popup-pm-option${sel ? " selected" : ""}`}
