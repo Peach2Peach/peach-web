@@ -923,7 +923,7 @@ export default function TradeExecution() {
 
               {/* Payment deadline — inside actions */}
               {/* Payment deadline pill — not shown for seller when paymentRequired (has its own merged bar) */}
-              {deadlineStr && !(status === "paymentRequired" && role === "seller") && !(status === "confirmPaymentRequired" && role === "seller") && !(status === "releaseEscrow" && role === "seller") && status !== "dispute" && status !== "disputeWithoutEscrowFunded" && status !== "tradeCanceled" && status !== "refundOrReviveRequired" && status !== "confirmCancelation" && status !== "fundEscrow" && status !== "createEscrow" && status !== "waitingForFunding" && status !== "escrowWaitingForConfirmation" && status !== "fundingAmountDifferent" && status !== "wrongAmountFundedOnContract" && status !== "wrongAmountFundedOnContractRefundWaiting" && (
+              {deadlineStr && !(status === "paymentRequired" && role === "seller") && !(status === "confirmPaymentRequired" && role === "seller") && !(status === "releaseEscrow" && role === "seller") && !(status === "rateUser" && role === "seller") && status !== "tradeCompleted" && status !== "dispute" && status !== "disputeWithoutEscrowFunded" && status !== "tradeCanceled" && status !== "refundOrReviveRequired" && status !== "confirmCancelation" && status !== "fundEscrow" && status !== "createEscrow" && status !== "waitingForFunding" && status !== "escrowWaitingForConfirmation" && status !== "fundingAmountDifferent" && status !== "wrongAmountFundedOnContract" && status !== "wrongAmountFundedOnContractRefundWaiting" && (
                 <div style={{
                   display:"flex", alignItems:"center", gap:12,
                   background:"var(--primary-mild)", border:"1.5px solid rgba(196,81,4,.2)",
@@ -933,6 +933,32 @@ export default function TradeExecution() {
                   <div>
                     <div style={{ fontSize:".72rem", fontWeight:700, color:"var(--primary-dark)", textTransform:"uppercase", letterSpacing:".05em", marginBottom:1 }}>Payment deadline</div>
                     <div style={{ fontSize:"1.05rem", fontWeight:800, color:"var(--primary-dark)" }}>{deadlineStr} remaining</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Trade complete success card */}
+              {status === "tradeCompleted" && (
+                <div style={{
+                  display:"flex", alignItems:"center", gap:12,
+                  background:"var(--success-bg)", border:"1px solid rgba(5,168,90,.2)",
+                  borderRadius:12, padding:"12px 16px", marginBottom:12,
+                }}>
+                  <span style={{
+                    flexShrink:0, width:28, height:28, borderRadius:"50%",
+                    background:"var(--success)", color:"#fff",
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    fontSize:"1rem", fontWeight:800, lineHeight:1,
+                  }} aria-hidden="true">✓</span>
+                  <div>
+                    <div style={{ fontSize:"1rem", fontWeight:800, color:"var(--success)", marginBottom:2 }}>
+                      Trade Complete!{role === "buyer" ? " 🎉" : ""}
+                    </div>
+                    <div style={{ fontSize:".8rem", fontWeight:500, color:"var(--black-65)", lineHeight:1.5 }}>
+                      {role === "buyer"
+                        ? "Your sats are on their way"
+                        : "You've successfully sold Bitcoin"}
+                    </div>
                   </div>
                 </div>
               )}
@@ -1218,12 +1244,14 @@ export default function TradeExecution() {
                     Send the exact fiat amount to the payment details below, then confirm using the slider.
                   </p>
                 )}
-                <p style={{ fontSize:".83rem", color:"var(--error)", fontWeight:600, marginBottom:10 }}>
-                  {role === "buyer"
-                    ? "Make sure to include the reference with your payment"
-                    : "make sure the payment you'll receive comes from the provenance announced below."}
-                </p>
-                <PaymentDetailsCard details={paymentDetails} tradeId={liveContract?.id}/>
+                {status !== "tradeCompleted" && (
+                  <p style={{ fontSize:".83rem", color:"var(--error)", fontWeight:600, marginBottom:10 }}>
+                    {role === "buyer"
+                      ? "Make sure to include the reference with your payment"
+                      : "make sure the payment you'll receive comes from the provenance announced below."}
+                  </p>
+                )}
+                <PaymentDetailsCard details={paymentDetails} tradeId={liveContract?.id} compact={status === "tradeCompleted"}/>
               </div>
             )}
 
@@ -1252,7 +1280,7 @@ export default function TradeExecution() {
             )}
 
             {/* Rating panel — buyer only (seller rates during release modal) */}
-            {(status === "rateUser" || status === "tradeCompleted") && role === "buyer" && (
+            {status === "rateUser" && role === "buyer" && (
               <div className="panel-section">
                 <RatingPanel counterparty={counterparty} pending={pendingTaskType === "rate"} onPendingClick={() => setSigningModal({ title: "Sign Rating", description: "Approve the rating on your Peach mobile app. A push notification has been sent to your phone.", taskType: "rate" })} onRate={async (r) => {
                   const rating = r === 5 ? 1 : -1;

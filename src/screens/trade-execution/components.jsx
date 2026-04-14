@@ -111,7 +111,7 @@ const MONO_FIELDS = new Set([
   "receiveAddressSolana", "receiveAddressTron", "receiveAddressEthereum",
 ]);
 
-export function PaymentDetailsCard({ details, tradeId }) {
+export function PaymentDetailsCard({ details, tradeId, compact = false }) {
   const [copied, setCopied] = useState(null);
 
   function copy(val, key) {
@@ -123,7 +123,7 @@ export function PaymentDetailsCard({ details, tradeId }) {
   // Derive rows from the raw decrypted PM object. Any non-meta key with a
   // non-empty string value becomes a row, labelled via getFieldMeta().
   const payRefType = details?._payRefType;
-  const rows = [];
+  let rows = [];
   const seen = new Set();
   for (const [k, v] of Object.entries(details || {})) {
     if (PM_META_KEYS.has(k) || k.startsWith("_")) continue;
@@ -147,6 +147,16 @@ export function PaymentDetailsCard({ details, tradeId }) {
   }
 
   const methodLabel = details?.type ? methodDisplayName(details.type) : "";
+
+  if (compact) {
+    const compactRows = [];
+    if (methodLabel) {
+      compactRows.push({ fid: "_paidTo", label: "Paid to", value: methodLabel, mono: false });
+    }
+    const refRow = rows.find(r => r.fid === "reference");
+    if (refRow) compactRows.push(refRow);
+    rows = compactRows;
+  }
 
   return (
     <div style={{
