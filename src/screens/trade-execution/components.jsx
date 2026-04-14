@@ -8,6 +8,7 @@ import { SatsAmount } from "../../components/BitcoinAmount.jsx";
 import { LIFECYCLE } from "../../data/statusConfig.js";
 import { isSystemMessageKey, resolveSystemMessage } from "../../data/chatSystemMessages.js";
 import { relTime, formatTradeId } from "../../utils/format.js";
+import { getFieldMeta, methodDisplayName, humanizeId } from "../../data/paymentMethodMeta.js";
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 export const IconBack      = () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="10,3 5,8 10,13"/></svg>;
@@ -95,7 +96,22 @@ export function HorizontalStepper({ status, statusWithoutDispute }) {
 
 
 // ─── PAYMENT DETAILS CARD ────────────────────────────────────────────────────
-export function PaymentDetailsCard({ details }) {
+// Schema-driven: renders every real field present in the decrypted PM object,
+// using getFieldMeta() for labels so create-PM and show-PM stay consistent.
+// Skips envelope/meta keys (type, id, hashes, _payRef*, _variants, …).
+const PM_META_KEYS = new Set([
+  "type", "id", "hashes", "currencies", "country", "anonymous", "label", "name",
+  "_variant", "_variants", "_payRefType", "_payRefCustom",
+]);
+
+// Field ids that deserve monospace treatment (long alphanumeric strings).
+const MONO_FIELDS = new Set([
+  "iban", "bic", "bankAccountNumber", "accountNumber", "ukSortCode",
+  "lnurlAddress", "bitcoinAddress", "receiveAddress",
+  "receiveAddressSolana", "receiveAddressTron", "receiveAddressEthereum",
+]);
+
+export function PaymentDetailsCard({ details, tradeId }) {
   const [copied, setCopied] = useState(null);
 
   function copy(val, key) {
@@ -104,13 +120,33 @@ export function PaymentDetailsCard({ details }) {
     setTimeout(() => setCopied(null), 1500);
   }
 
-  const rows = [
-    { label:"Bank",      value:details.bank },
-    { label:"IBAN",      value:details.iban },
-    { label:"BIC",       value:details.bic },
-    { label:"Name",      value:details.name },
-    { label:"Reference", value:details.reference },
-  ].filter(r => r.value);
+  // Derive rows from the raw decrypted PM object. Any non-meta key with a
+  // non-empty string value becomes a row, labelled via getFieldMeta().
+  const payRefType = details?._payRefType;
+  const rows = [];
+  const seen = new Set();
+  for (const [k, v] of Object.entries(details || {})) {
+    if (PM_META_KEYS.has(k) || k.startsWith("_")) continue;
+    if (typeof v !== "string" || !v.trim()) continue;
+    const meta = getFieldMeta(k);
+    rows.push({ fid: k, label: meta.label || humanizeId(k), value: v, mono: MONO_FIELDS.has(k) });
+    seen.add(k);
+  }
+  // Reference row honours the seller's payment-reference choice:
+  //  - custom with text → already emitted by the loop above via details.reference
+  //  - tradeID          → show the formatted trade id
+  //  - peachID          → TODO: needs buyer peach id threaded through; no row for now
+  //  - custom empty / no choice → no row at all
+  if (!seen.has("reference") && payRefType === "tradeID" && tradeId) {
+    rows.push({
+      fid: "reference",
+      label: getFieldMeta("reference").label || "Reference",
+      value: formatTradeId(tradeId),
+      mono: false,
+    });
+  }
+
+  const methodLabel = details?.type ? methodDisplayName(details.type) : "";
 
   return (
     <div style={{
@@ -123,27 +159,27 @@ export function PaymentDetailsCard({ details }) {
         fontSize:".72rem", fontWeight:700, color:"var(--primary-dark)",
         textTransform:"uppercase", letterSpacing:".05em",
       }}>
-        <IconLock/> Payment Details — {details.type}
+        <IconLock/> Payment Details{methodLabel ? ` — ${methodLabel}` : ""}
       </div>
       {rows.map(r => (
-        <div key={r.label} style={{
+        <div key={r.fid} style={{
           display:"flex", justifyContent:"space-between", alignItems:"center",
           padding:"8px 14px", borderBottom:"1px solid var(--black-5)",
         }}>
-          <div>
+          <div style={{ minWidth:0, flex:1 }}>
             <div style={{ fontSize:".68rem", color:"var(--black-65)", fontWeight:600, textTransform:"uppercase", letterSpacing:".04em" }}>{r.label}</div>
-            <div style={{ fontSize:".85rem", fontWeight:600, color:"var(--black)", fontFamily: r.label === "IBAN" || r.label === "BIC" ? "monospace" : "inherit" }}>{r.value}</div>
+            <div style={{ fontSize:".85rem", fontWeight:600, color:"var(--black)", fontFamily: r.mono ? "monospace" : "inherit", wordBreak:"break-all" }}>{r.value}</div>
           </div>
           <button
             style={{
               border:"none", background:"transparent", cursor:"pointer",
-              color: copied === r.label ? "var(--success)" : "var(--black-65)", padding:4, borderRadius:6,
-              transition:"color .2s",
+              color: copied === r.fid ? "var(--success)" : "var(--black-65)", padding:4, borderRadius:6,
+              transition:"color .2s", flexShrink:0,
             }}
-            onClick={() => copy(r.value, r.label)}
+            onClick={() => copy(r.value, r.fid)}
             title="Copy"
           >
-            {copied === r.label ? <IconCheck/> : <IconCopy/>}
+            {copied === r.fid ? <IconCheck/> : <IconCopy/>}
           </button>
         </div>
       ))}
@@ -1340,7 +1376,26 @@ export function ActionPanel({ scenario, onAction, showPostCancel = false, pendin
 
         {/* Seller: confirm receipt → releases bitcoin */}
         {(status === "confirmPaymentRequired" || status === "releaseEscrow") && role === "seller" && <>
-          <div className="action-hint">The buyer has marked the payment as sent. Check your account and confirm once the funds have arrived.</div>
+          <div style={{
+            display:"flex", alignItems:"center", gap:12,
+            background:"var(--primary-mild)", border:"1.5px solid rgba(196,81,4,.2)",
+            borderRadius:12, padding:"12px 16px", marginBottom:12,
+          }}>
+            <span style={{
+              flexShrink:0, width:28, height:28, borderRadius:"50%",
+              background:"#1FB86B", color:"#fff",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              fontSize:"1rem", fontWeight:800, lineHeight:1,
+            }} aria-hidden="true">✓</span>
+            <div>
+              <div style={{ fontSize:"1rem", fontWeight:800, color:"var(--primary-dark)", marginBottom:2 }}>
+                Payment made. Check your fiat account.
+              </div>
+              <div style={{ fontSize:".8rem", fontWeight:500, color:"var(--black-65)", lineHeight:1.5 }}>
+                The buyer has marked the payment as sent. Check your account and confirm once the funds have arrived.
+              </div>
+            </div>
+          </div>
           {pendingTask === "release" ? (
             <PendingBtn label="Release pending in mobile app"/>
           ) : (

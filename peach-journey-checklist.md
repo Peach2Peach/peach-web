@@ -42,6 +42,7 @@ Each journey records the exact UI string, expected state, and API call firing un
 **Prerequisites:** logged out, mobile app installed and provisioned.
 
 **Counterparty:** none
+
 **Expected duration:** ~1 min
 
 | # | Action | Expected UI | Expected state / API |

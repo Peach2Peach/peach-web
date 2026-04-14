@@ -593,15 +593,14 @@ export default function TradeExecution() {
           if (pmJson) {
             try {
               const pmData = JSON.parse(pmJson);
+              // Store the decrypted PM verbatim. PaymentDetailsCard renders
+              // every real field via getFieldMeta(), so we don't need to
+              // cherry-pick here — any field the mobile saved will show up.
+              // Ensure `type` (method id) is populated so the card can look up
+              // the display name.
               setLiveContract(prev => prev ? { ...prev, paymentDetails: {
+                ...pmData,
                 type: pmData.type ?? c.paymentMethod ?? "",
-                bank: pmData.bank ?? pmData.beneficiary ?? "",
-                iban: pmData.iban ?? "",
-                bic: pmData.bic ?? "",
-                name: pmData.userName ?? pmData.beneficiary ?? pmData.name ?? "",
-                email: pmData.email ?? "",
-                phone: pmData.phone ?? "",
-                reference: pmData.reference ?? `PEACH-${c.id}`,
               }} : prev);
             } catch (err) {
               console.warn("[Trade] PM JSON parse failed:", err.message);
@@ -923,7 +922,7 @@ export default function TradeExecution() {
 
               {/* Payment deadline — inside actions */}
               {/* Payment deadline pill — not shown for seller when paymentRequired (has its own merged bar) */}
-              {deadlineStr && !(status === "paymentRequired" && role === "seller") && status !== "dispute" && status !== "disputeWithoutEscrowFunded" && status !== "tradeCanceled" && status !== "refundOrReviveRequired" && status !== "confirmCancelation" && status !== "fundEscrow" && status !== "createEscrow" && status !== "waitingForFunding" && status !== "escrowWaitingForConfirmation" && status !== "fundingAmountDifferent" && status !== "wrongAmountFundedOnContract" && status !== "wrongAmountFundedOnContractRefundWaiting" && (
+              {deadlineStr && !(status === "paymentRequired" && role === "seller") && !(status === "confirmPaymentRequired" && role === "seller") && !(status === "releaseEscrow" && role === "seller") && status !== "dispute" && status !== "disputeWithoutEscrowFunded" && status !== "tradeCanceled" && status !== "refundOrReviveRequired" && status !== "confirmCancelation" && status !== "fundEscrow" && status !== "createEscrow" && status !== "waitingForFunding" && status !== "escrowWaitingForConfirmation" && status !== "fundingAmountDifferent" && status !== "wrongAmountFundedOnContract" && status !== "wrongAmountFundedOnContractRefundWaiting" && (
                 <div style={{
                   display:"flex", alignItems:"center", gap:12,
                   background:"var(--primary-mild)", border:"1.5px solid rgba(196,81,4,.2)",
@@ -1221,7 +1220,7 @@ export default function TradeExecution() {
                     ? "Make sure to include the reference with your payment"
                     : "make sure the payment you'll receive comes from the provenance announced below."}
                 </p>
-                <PaymentDetailsCard details={paymentDetails}/>
+                <PaymentDetailsCard details={paymentDetails} tradeId={liveContract?.id}/>
               </div>
             )}
 

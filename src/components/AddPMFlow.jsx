@@ -177,7 +177,12 @@ export function AddPMFlow({ methods, onSave, onClose, editData, error, onRetry }
   });
   const hasAnyTabs = resolvedSections.some((s) => s.alternatives.length > 1);
   const mandatoryFields = [...new Set(resolvedSections.flatMap((s) => s.activeFields))];
-  const optionalFields = (selMethod?.fields?.optional || []).filter((f) => !mandatoryFields.includes(f));
+  // Hide the raw `reference` optional field — the web's "Payment reference"
+  // widget below owns that concept and mirrors its value into details.reference
+  // on save (see handleSave).
+  const methodHasReference = (selMethod?.fields?.optional || []).includes("reference");
+  const optionalFields = (selMethod?.fields?.optional || [])
+    .filter((f) => !mandatoryFields.includes(f) && f !== "reference");
 
   const step3Ok = mandatoryFields.every((k) => (details[k] || "").trim().length > 0)
     && selCurrencies.length > 0
@@ -252,6 +257,13 @@ export function AddPMFlow({ methods, onSave, onClose, editData, error, onRetry }
     const cleanDetails = {};
     for (const [k, v] of Object.entries(details)) {
       if (allowedKeys.has(k)) cleanDetails[k] = v;
+    }
+    // Mirror the payment-reference widget's custom value into details.reference
+    // for methods that list `reference` as an API-optional field, so the wire
+    // format matches what mobile writes. peachID/tradeID modes are auto-filled
+    // downstream and do not populate details.reference at save time.
+    if (methodHasReference && payRefType === "custom" && payRefCustom.trim()) {
+      cleanDetails.reference = payRefCustom.trim();
     }
     cleanDetails._payRefType = payRefType;
     cleanDetails._payRefCustom = payRefCustom;
