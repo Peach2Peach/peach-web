@@ -14,7 +14,7 @@ import PeachRating from "../../components/PeachRating.jsx";
 import {
   IconBack, IconAlert,
   HorizontalStepper, PaymentDetailsCard, EscrowAddressCard,
-  EscrowFundingCard, WrongAmountFundedCard, ActionPanel, RatingPanel, ChatPanel,
+  EscrowFundingCard, WrongAmountFundedCard, ActionPanel, RatingPanel, ChatPanel, DisputeFlow,
 } from "./components.jsx";
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
@@ -274,6 +274,7 @@ export default function TradeExecution() {
   const [chatHasMore, setChatHasMore] = useState(false);
   const [chatLoadingMore, setChatLoadingMore] = useState(false);
   const [toast, setToast] = useState(null);
+  const [showDispute, setShowDispute] = useState(false);
   const [escrowFundedAmount, setEscrowFundedAmount] = useState(null);
   const [escrowLoading, setEscrowLoading] = useState(false);
   const signingStatusRef = useRef(null); // track the tradeStatus when signing modal opened
@@ -1199,6 +1200,8 @@ export default function TradeExecution() {
                       }
                     } catch {}
                     return false;
+                  } else if (action === "dispute") {
+                    setShowDispute(true);
                   } else {
                     console.log("action:", action);
                   }
@@ -1268,7 +1271,7 @@ export default function TradeExecution() {
 
           {/* ── RIGHT: Chat ── */}
           <div className={`split-right${mobileTab === "chat" ? " mobile-active" : ""}`}>
-            <ChatPanel messages={messages} tradeId={contract.id} role={role} counterpartyPeachId={counterparty.name} disabled={status === "fundEscrow" || status === "createEscrow" || status === "waitingForFunding" || status === "fundingAmountDifferent" || status === "wrongAmountFundedOnContract" || status === "wrongAmountFundedOnContractRefundWaiting"} status={status} hasMore={chatHasMore} loadingMore={chatLoadingMore} onLoadOlder={loadOlderChat} onSend={async (plaintext) => {
+            <ChatPanel messages={messages} counterpartyPeachId={counterparty.name} disabled={status === "fundEscrow" || status === "createEscrow" || status === "waitingForFunding" || status === "fundingAmountDifferent" || status === "wrongAmountFundedOnContract" || status === "wrongAmountFundedOnContractRefundWaiting"} status={status} hasMore={chatHasMore} loadingMore={chatLoadingMore} onLoadOlder={loadOlderChat} onOpenDispute={() => setShowDispute(true)} onSend={async (plaintext) => {
               if (!chatSymKey || !auth?.pgpPrivKey) return false;
               try {
                 const encrypted = await encryptSymmetric(plaintext, chatSymKey);
@@ -1277,60 +1280,6 @@ export default function TradeExecution() {
                 return res.ok;
               } catch (e) {
                 console.warn("[Chat] Send failed:", e.message);
-                return false;
-              }
-            }} onDisputeSubmit={async (body) => {
-              if (!chatSymKey || !auth?.pgpPrivKey) return false;
-              try {
-                // Get platform public key from /v1/info
-                const infoRes = await get('/info');
-                if (!infoRes.ok) return false;
-                const info = await infoRes.json();
-                const platformPubKey = info.peach?.pgpPublicKey;
-                if (!platformPubKey) {
-                  console.warn("[Dispute] Platform PGP key not found in /info response");
-                  return false;
-                }
-                // Re-encrypt symmetric key for the platform
-                const symmetricKeyEncrypted = await encryptForPublicKey(chatSymKey, platformPubKey);
-                if (!symmetricKeyEncrypted) return false;
-                // Decrypt payment data (may be symmetric or asymmetric PGP) then re-encrypt for platform
-                async function decryptPMField(encrypted) {
-                  const sym = await decryptSymmetric(encrypted, chatSymKey);
-                  if (sym) return sym;
-                  const asym = await decryptPGPMessage(encrypted, auth.pgpPrivKey);
-                  if (asym) return asym;
-                  return null;
-                }
-                let paymentDataSellerEncrypted = undefined;
-                let paymentDataBuyerEncrypted = undefined;
-                if (scenario.paymentDataEncrypted) {
-                  try {
-                    const sellerPM = await decryptPMField(scenario.paymentDataEncrypted);
-                    if (sellerPM) paymentDataSellerEncrypted = await encryptForPublicKey(sellerPM, platformPubKey);
-                  } catch (e) { console.warn("[Dispute] Seller PM re-encrypt failed:", e.message); }
-                }
-                if (scenario.buyerPaymentDataEncrypted) {
-                  try {
-                    const buyerPM = await decryptPMField(scenario.buyerPaymentDataEncrypted);
-                    if (buyerPM) paymentDataBuyerEncrypted = await encryptForPublicKey(buyerPM, platformPubKey);
-                  } catch (e) { console.warn("[Dispute] Buyer PM re-encrypt failed:", e.message); }
-                }
-                const res = await post('/contract/' + contract.id + '/dispute', {
-                  ...body,
-                  symmetricKeyEncrypted,
-                  paymentDataSellerEncrypted,
-                  paymentDataBuyerEncrypted,
-                });
-                if (res.ok) {
-                  setLiveContract(prev => prev ? { ...prev, tradeStatus: "dispute" } : prev);
-                  return true;
-                }
-                const err = await res.json().catch(() => ({}));
-                console.warn("[Dispute] Submit failed:", err.error || res.status);
-                return false;
-              } catch (e) {
-                console.warn("[Dispute] Submit error:", e.message);
                 return false;
               }
             }}/>
@@ -1355,6 +1304,67 @@ export default function TradeExecution() {
         description={signingModal?.description}
         onCancel={() => setSigningModal(null)}
       />
+
+      {/* ── DISPUTE FLOW ── */}
+      {showDispute && contract && (
+        <DisputeFlow
+          tradeId={contract.id}
+          role={role}
+          onClose={() => setShowDispute(false)}
+          onSubmit={async (body) => {
+            if (!chatSymKey || !auth?.pgpPrivKey) return false;
+            try {
+              const infoRes = await get('/info');
+              if (!infoRes.ok) return false;
+              const info = await infoRes.json();
+              const platformPubKey = info.peach?.pgpPublicKey;
+              if (!platformPubKey) {
+                console.warn("[Dispute] Platform PGP key not found in /info response");
+                return false;
+              }
+              const symmetricKeyEncrypted = await encryptForPublicKey(chatSymKey, platformPubKey);
+              if (!symmetricKeyEncrypted) return false;
+              async function decryptPMField(encrypted) {
+                const sym = await decryptSymmetric(encrypted, chatSymKey);
+                if (sym) return sym;
+                const asym = await decryptPGPMessage(encrypted, auth.pgpPrivKey);
+                if (asym) return asym;
+                return null;
+              }
+              let paymentDataSellerEncrypted = undefined;
+              let paymentDataBuyerEncrypted = undefined;
+              if (scenario.paymentDataEncrypted) {
+                try {
+                  const sellerPM = await decryptPMField(scenario.paymentDataEncrypted);
+                  if (sellerPM) paymentDataSellerEncrypted = await encryptForPublicKey(sellerPM, platformPubKey);
+                } catch (e) { console.warn("[Dispute] Seller PM re-encrypt failed:", e.message); }
+              }
+              if (scenario.buyerPaymentDataEncrypted) {
+                try {
+                  const buyerPM = await decryptPMField(scenario.buyerPaymentDataEncrypted);
+                  if (buyerPM) paymentDataBuyerEncrypted = await encryptForPublicKey(buyerPM, platformPubKey);
+                } catch (e) { console.warn("[Dispute] Buyer PM re-encrypt failed:", e.message); }
+              }
+              const res = await post('/contract/' + contract.id + '/dispute', {
+                ...body,
+                symmetricKeyEncrypted,
+                paymentDataSellerEncrypted,
+                paymentDataBuyerEncrypted,
+              });
+              if (res.ok) {
+                setLiveContract(prev => prev ? { ...prev, tradeStatus: "dispute" } : prev);
+                return true;
+              }
+              const err = await res.json().catch(() => ({}));
+              console.warn("[Dispute] Submit failed:", err.error || res.status);
+              return false;
+            } catch (e) {
+              console.warn("[Dispute] Submit error:", e.message);
+              return false;
+            }
+          }}
+        />
+      )}
 
       {/* ── TOAST ── */}
       {toast && (

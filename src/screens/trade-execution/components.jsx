@@ -250,7 +250,7 @@ const DISPUTE_REASONS_SELLER = [
   { key: "other", label: "SOMETHING ELSE" },
 ];
 
-function DisputeFlow({ tradeId, role, onClose, onSubmit }) {
+export function DisputeFlow({ tradeId, role, onClose, onSubmit }) {
   const [step, setStep] = useState(1); // 1=warning, 2=reason, 3=details
   const [reason, setReason] = useState("");
   const [email, setEmail] = useState("");
@@ -288,7 +288,7 @@ function DisputeFlow({ tradeId, role, onClose, onSubmit }) {
         alignItems:"center", justifyContent:"center", padding:20,
       }}>
         <div style={{
-          background:"white", borderRadius:16, padding:"32px 24px",
+          background:"var(--surface)", borderRadius:16, padding:"32px 24px",
           maxWidth:380, width:"100%", textAlign:"center",
           boxShadow:"0 20px 60px rgba(0,0,0,.25)",
           animation:"modalIn .18s ease",
@@ -321,7 +321,7 @@ function DisputeFlow({ tradeId, role, onClose, onSubmit }) {
       {/* ── Step 1: Warning ── */}
       {step === 1 && (
         <div style={{
-          background:"white", borderRadius:20, maxWidth:400, width:"100%",
+          background:"var(--surface)", borderRadius:20, maxWidth:400, width:"100%",
           boxShadow:"0 20px 60px rgba(0,0,0,.3)",
           animation:"modalIn .18s ease", overflow:"hidden",
         }}>
@@ -395,7 +395,7 @@ function DisputeFlow({ tradeId, role, onClose, onSubmit }) {
                 key={r.key}
                 style={{
                   border: reason === r.key ? "2px solid var(--error)" : "1.5px solid var(--black-25)",
-                  background: reason === r.key ? "var(--error-bg)" : "white",
+                  background: reason === r.key ? "var(--error-bg)" : "var(--surface)",
                   borderRadius:999, fontFamily:"Baloo 2, cursive",
                   fontWeight:700, fontSize:".82rem", letterSpacing:".04em",
                   color: reason === r.key ? "var(--error)" : "var(--black-75)",
@@ -438,7 +438,7 @@ function DisputeFlow({ tradeId, role, onClose, onSubmit }) {
             <input
               style={{
                 border:`1.5px solid ${email.trim().length > 0 && !emailValid ? "var(--error)" : "var(--black-25)"}`,
-                borderRadius:12, background:"white",
+                borderRadius:12, background:"var(--surface)",
                 fontFamily:"Baloo 2, cursive", fontSize:".9rem", color:"var(--black)",
                 padding:"12px 16px", outline:"none",
               }}
@@ -464,7 +464,7 @@ function DisputeFlow({ tradeId, role, onClose, onSubmit }) {
             />
             <textarea
               style={{
-                border:"1.5px solid var(--black-25)", borderRadius:12, background:"white",
+                border:"1.5px solid var(--black-25)", borderRadius:12, background:"var(--surface)",
                 fontFamily:"Baloo 2, cursive", fontSize:".9rem", color:"var(--black)",
                 padding:"12px 16px", outline:"none", resize:"none",
                 minHeight:100, lineHeight:1.5,
@@ -1643,11 +1643,10 @@ export function RatingPanel({ counterparty, onRate, pending, onPendingClick }) {
 }
 
 // ─── CHAT PANEL ───────────────────────────────────────────────────────────────
-export function ChatPanel({ messages, tradeId, role, disabled, status, onSend, onDisputeSubmit, hasMore, loadingMore, onLoadOlder, counterpartyPeachId }) {
+export function ChatPanel({ messages, disabled, status, onSend, onOpenDispute, hasMore, loadingMore, onLoadOlder, counterpartyPeachId }) {
   const disputeOpen = status === "dispute" || status === "disputeWithoutEscrowFunded";
   const [text, setText] = useState("");
   const [localMsgs, setLocalMsgs] = useState(messages);
-  const [showDispute, setShowDispute] = useState(false);
   const messagesRef = useRef(null);
   const prevScrollHeight = useRef(0);
 
@@ -1699,8 +1698,6 @@ export function ChatPanel({ messages, tradeId, role, disabled, status, onSend, o
 
   return (
     <div className="chat-panel" style={{ position:"relative" }}>
-      {showDispute && <DisputeFlow tradeId={tradeId} role={role} onClose={() => setShowDispute(false)} onSubmit={onDisputeSubmit}/>}
-
       {/* Disabled overlay */}
       {disabled && (
         <div style={{
@@ -1730,7 +1727,7 @@ export function ChatPanel({ messages, tradeId, role, disabled, status, onSend, o
       <TradingRulesCard
         disputeOpen={disputeOpen}
         disabled={disabled}
-        onOpenDispute={() => setShowDispute(true)}
+        onOpenDispute={onOpenDispute}
       />
 
       <div className="chat-enc-notice">
