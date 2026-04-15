@@ -592,10 +592,11 @@ export default function TradesDashboard() {
     return () => document.removeEventListener("click", close);
   }, [showAvatarMenu]);
 
-  const [allPrices,           setAllPrices]           = useState({ EUR: BTC_PRICE });
+  const [allPrices,           setAllPrices]           = useState(null);
   const [availableCurrencies, setAvailableCurrencies] = useState(["EUR","CHF","GBP"]);
   const [selectedCurrency,    setSelectedCurrency]    = useState("EUR");
-  const btcPrice = Math.round(allPrices[selectedCurrency] ?? BTC_PRICE);
+  const pricesLoaded = allPrices !== null;
+  const btcPrice = Math.round(allPrices?.[selectedCurrency] ?? BTC_PRICE);
 
   useEffect(() => {
     async function fetchPrices() {
@@ -909,7 +910,9 @@ export default function TradesDashboard() {
             Promise.all(
               matchable.map(async (offer) => {
                 try {
-                  if (offer.tradeStatus === "acceptTradeRequest") {
+                  // Sell offers always use v069 (see note in handleTradeSelect).
+                  const useV069 = offer.tradeStatus === "acceptTradeRequest" || offer.direction === "sell";
+                  if (useV069) {
                     const offerType = offer.direction === "buy" ? "buyOffer" : "sellOffer";
                     const res = await fetchWithSessionCheck(`${v069Base}/${offerType}/${offer.id}/tradeRequestReceived/`, { headers: hdrs });
                     if (!res.ok) return { offerId: offer.id, matches: [], totalMatches: 0 };
@@ -1014,7 +1017,7 @@ export default function TradesDashboard() {
   // Trading limits — API returns CHF: { daily, dailyAmount, yearly, yearlyAmount, monthlyAnonymous, monthlyAnonymousAmount }
   // "daily" = ceiling (CHF), "dailyAmount" = already used (CHF)
   const chfToDisplay = (chf) => {
-    const rate = allPrices[selectedCurrency] && allPrices.CHF
+    const rate = allPrices?.[selectedCurrency] && allPrices?.CHF
       ? allPrices[selectedCurrency] / allPrices.CHF : 1;
     return Math.round(chf * rate);
   };
@@ -1092,6 +1095,8 @@ export default function TradesDashboard() {
 
   // ── Offer detail popup state ──
   const [offerDetailPopup, setOfferDetailPopup] = useState(null);   // pending offer object or null
+  const [canceledOfferPopup, setCanceledOfferPopup] = useState(null);     // canceled sell offer (never-matched) or null
+  const [canceledOfferDetails, setCanceledOfferDetails] = useState(null); // /offer/:id/details for canceled popup
   const [odEditingPremium, setOdEditingPremium] = useState(false);
   const [odEditPremiumVal, setOdEditPremiumVal] = useState("");
   const [odEditSaving, setOdEditSaving]         = useState(false);
@@ -1108,6 +1113,8 @@ export default function TradesDashboard() {
   const [odFundMobileLoading, setOdFundMobileLoading]     = useState(false);
   const [odFundMobileRequested, setOdFundMobileRequested] = useState(false);
   const [odFundMobileError, setOdFundMobileError]         = useState(null);
+  // Mobile refund pending action — set from /offer/:id/details `mobileActionRefundWasTriggered`
+  const [odRefundRequested, setOdRefundRequested]         = useState(false);
 
   function openOfferDetail(offer) {
     setOdEditingPremium(false); setOdEditError(null);
@@ -1121,6 +1128,7 @@ export default function TradesDashboard() {
     setOdEscrowAddress(null); setOdCopiedAddr(false);
     setOdAcceptingWrong(false); setOdAcceptWrongError(null);
     setOdFundMobileLoading(false); setOdFundMobileRequested(false); setOdFundMobileError(null);
+    setOdRefundRequested(false);
   }
 
   // ── Offer details fetch (sell offers only — endpoint is sell-exclusive by design) ──
@@ -1147,6 +1155,8 @@ export default function TradesDashboard() {
           if (body?.escrow && typeof body.escrow === "string") setOdEscrowAddress(body.escrow);
           // Respect the backend "mobile fund-escrow action was triggered" flag.
           if (body?.mobileActionFundEscrowWasTriggered) setOdFundMobileRequested(true);
+          // Same for the refund pending action — hide Withdraw if already in flight.
+          if (body?.mobileActionRefundWasTriggered) setOdRefundRequested(true);
         }
       } catch {
         if (!cancelled) setOfferDetails(null);
@@ -1175,19 +1185,41 @@ export default function TradesDashboard() {
     return () => { cancelled = true; };
   }, [offerDetailPopup?.id, offerDetailPopup?.direction, offerDetailPopup?.tradeStatus, odEscrowAddress]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Canceled-offer details fetch (escrow address + tolerant refund tx fields) ──
+  useEffect(() => {
+    if (!canceledOfferPopup?.id) { setCanceledOfferDetails(null); return; }
+    const offerId = canceledOfferPopup.id;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await get(`/offer/${offerId}/details`);
+        if (cancelled || !res.ok) return;
+        const body = await res.json();
+        if (!cancelled) setCanceledOfferDetails(body);
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [canceledOfferPopup?.id]);
+
   async function handleSaveOfferPremium(offer) {
     const val = parseFloat(odEditPremiumVal);
     if (isNaN(val)) { setOdEditError("Enter a valid number"); return; }
     setOdEditSaving(true); setOdEditError(null);
     try {
-      // v069 offers use PATCH /v069/{buyOffer|sellOffer}/:id (v1 returns 401 for numeric IDs)
-      const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
-      const offerType = offer.direction === "buy" ? "buyOffer" : "sellOffer";
-      const res = await fetchWithSessionCheck(`${v069Base}/${offerType}/${offer.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.token}` },
-        body: JSON.stringify({ premium: val }),
-      });
+      // Endpoint differs by direction:
+      //   buy  → PATCH /v069/buyOffer/:id        (v069, per mobile app)
+      //   sell → PATCH /v1/offer/:id             (v1, per mobile app)
+      let res;
+      if (offer.direction === "buy") {
+        const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
+        res = await fetchWithSessionCheck(`${v069Base}/buyOffer/${offer.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.token}` },
+          body: JSON.stringify({ premium: val }),
+        });
+      } else {
+        res = await patch(`/offer/${offer.id}`, { premium: val });
+      }
       if (!res.ok) {
         const d = await res.json().catch(() => null);
         throw new Error(d?.error || d?.message || `Server error ${res.status}`);
@@ -1220,17 +1252,21 @@ export default function TradesDashboard() {
         setLivePending(prev => prev?.filter(o => String(o.id) !== String(offer.id)));
         setToast("Offer withdrawn"); setTimeout(() => setToast(null), 3000);
       } else {
-        // Sell offers: cancel first, then request refund via mobile pending action
-        res = await post(`/offer/${offer.id}/cancel`, {});
-        const data = await res.json().catch(() => null);
-        if (!res.ok) throw new Error(data?.error || data?.message || `Server error ${res.status}`);
+        // Sell offers: cancel first (skip if already canceled), then request refund
+        // via mobile pending action.
+        if (offer.tradeStatus !== "offerCanceled") {
+          res = await post(`/offer/${offer.id}/cancel`, {});
+          const data = await res.json().catch(() => null);
+          if (!res.ok) throw new Error(data?.error || data?.message || `Server error ${res.status}`);
+        }
         // Offer is now cancelled — trigger refund pending action for mobile signing
         const refundRes = await post(`/offer/${offer.id}/refundPendingAction`);
         if (!refundRes.ok) {
           const err = await refundRes.json().catch(() => null);
           throw new Error(err?.error || err?.message || `Refund request failed: HTTP ${refundRes.status}`);
         }
-        closeOfferDetail();
+        setOdRefundRequested(true);
+        setOdWithdrawConfirm(false);
         setLivePending(prev => prev?.filter(o => String(o.id) !== String(offer.id)));
         setToast("Refund requested — check your phone"); setTimeout(() => setToast(null), 4000);
       }
@@ -1276,8 +1312,11 @@ export default function TradesDashboard() {
         setMatchesLoading(true);
         try {
           let transformed = [];
-          if (trade.tradeStatus === "acceptTradeRequest") {
-            // v069: fetch trade requests
+          // Sell offers always use v069 tradeRequestReceived (v1 /offer/:id/matches
+          // doesn't cover v069 trade requests, and the v1 summary sometimes reports
+          // hasMatchesAvailable for sell offers whose requests are actually on v069).
+          const useV069 = trade.tradeStatus === "acceptTradeRequest" || trade.direction === "sell";
+          if (useV069) {
             const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
             const offerType = trade.direction === "buy" ? "buyOffer" : "sellOffer";
             const res = await fetchWithSessionCheck(`${v069Base}/${offerType}/${trade.id}/tradeRequestReceived/`, {
@@ -1296,7 +1335,7 @@ export default function TradesDashboard() {
               transformed = requests.map((tr, i) => transformTradeRequest(tr, trade, userProfiles[i]));
             }
           } else {
-            // v1: fetch system matches
+            // v1: fetch system matches (buy offers only)
             const res = await get(`/offer/${trade.id}/matches?page=0&size=21&sortBy=bestReputation`);
             if (res.ok) {
               const data = await res.json();
@@ -1309,6 +1348,16 @@ export default function TradesDashboard() {
         } catch {}
         setMatchesLoading(false);
       }
+      return;
+    }
+    // Never-matched canceled sell offer (contract-shaped in /contracts/summary
+    // but bare offer-style ID, no "-peerId"). Trade-execution expects a matched
+    // contract, so routing there calls /v1/contract/:id on an offer id and breaks.
+    // Show a read-only popup with refund status instead.
+    if (trade.kind === "contract"
+        && !String(trade.id).includes("-")
+        && (trade.tradeStatus === "offerCanceled" || trade.tradeStatus === "tradeCanceled")) {
+      setCanceledOfferPopup(trade);
       return;
     }
     // Only contracts have valid IDs for trade execution
@@ -1603,6 +1652,7 @@ export default function TradesDashboard() {
         showAvatarMenu={showAvatarMenu}
         setShowAvatarMenu={setShowAvatarMenu}
         btcPrice={btcPrice}
+        pricesLoaded={pricesLoaded}
         selectedCurrency={selectedCurrency}
         availableCurrencies={availableCurrencies}
         onCurrencyChange={c => setSelectedCurrency(c)}
@@ -1617,8 +1667,8 @@ export default function TradesDashboard() {
           <div className="mobile-price-pill">
             <IcoBtc size={16}/>
             <div className="mobile-price-text">
-              <span className="mobile-price-main">{btcPrice.toLocaleString("fr-FR")} {selectedCurrency}</span>
-              <span className="mobile-price-sats">{satsPerCur.toLocaleString()} sats / {selectedCurrency.toLowerCase()}</span>
+              <span className="mobile-price-main">{pricesLoaded ? btcPrice.toLocaleString("fr-FR") : "?"} {selectedCurrency}</span>
+              <span className="mobile-price-sats">{pricesLoaded ? satsPerCur.toLocaleString() : "?"} sats / {selectedCurrency.toLowerCase()}</span>
             </div>
             <div className="topbar-cur-select mobile-cur-select">
               <span className="cur-select-label">{selectedCurrency}</span>
@@ -1732,7 +1782,7 @@ export default function TradesDashboard() {
 
         {/* ── TRADE HISTORY ── */}
         {mainTab === "history" && (
-          <HistoryTable rows={historyItems} selectedCurrency={selectedCurrency} tab="history" onRefresh={handleRefreshTrades} isLoading={tradesLoading}/>
+          <HistoryTable rows={historyItems} onTradeSelect={handleTradeSelect} selectedCurrency={selectedCurrency} tab="history" onRefresh={handleRefreshTrades} isLoading={tradesLoading}/>
         )}
         </>)}
       </main>
@@ -1942,42 +1992,53 @@ export default function TradesDashboard() {
 
                       {/* Fund via mobile app — alternative to scanning QR */}
                       <div style={{marginBottom:12}}>
-                        <div style={{fontSize:".68rem",fontWeight:700,color:"var(--black-65)",textTransform:"uppercase",letterSpacing:".05em",marginBottom:6,textAlign:"center"}}>
-                          Or fund from your Peach mobile app
-                        </div>
-                        <button
-                          disabled={odFundMobileLoading || odFundMobileRequested}
-                          onClick={async () => {
-                            setOdFundMobileError(null);
-                            setOdFundMobileLoading(true);
-                            try {
-                              const res = await post(`/offer/${o.id}/fundEscrowPendingAction`);
-                              if (!res.ok) {
-                                const err = await res.json().catch(() => null);
-                                throw new Error(err?.error || err?.message || `HTTP ${res.status}`);
-                              }
-                              setOdFundMobileRequested(true);
-                              setToast("Request sent — check your phone");
-                              setTimeout(() => setToast(null), 3000);
-                            } catch (e) {
-                              setOdFundMobileError("Failed to request funding: " + e.message);
-                            } finally {
-                              setOdFundMobileLoading(false);
-                            }
-                          }}
-                          style={{
-                            width:"100%",padding:"10px 14px",borderRadius:999,border:"none",
-                            background: odFundMobileRequested ? "var(--black-5)" : "var(--grad)",
-                            color: odFundMobileRequested ? "var(--black-65)" : "white",
-                            fontFamily:"var(--font)",fontSize:".8rem",fontWeight:800,
-                            cursor:(odFundMobileLoading||odFundMobileRequested)?"default":"pointer",
-                            opacity: odFundMobileLoading ? 0.6 : 1,
-                          }}
-                        >
-                          {odFundMobileLoading ? "Sending request…" : odFundMobileRequested ? "Request sent — check your phone" : "Fund via mobile app"}
-                        </button>
-                        {odFundMobileError && (
-                          <div style={{color:"var(--error)",fontSize:".74rem",fontWeight:600,marginTop:6,textAlign:"center"}}>{odFundMobileError}</div>
+                        {odFundMobileRequested ? (
+                          <div style={{
+                            padding:"10px 14px",borderRadius:8,
+                            background:"var(--black-5)",color:"var(--black-65)",
+                            fontSize:".78rem",fontWeight:700,textAlign:"center",
+                          }}>
+                            ✓ Funding request sent — check your phone
+                          </div>
+                        ) : (
+                          <>
+                            <div style={{fontSize:".68rem",fontWeight:700,color:"var(--black-65)",textTransform:"uppercase",letterSpacing:".05em",marginBottom:6,textAlign:"center"}}>
+                              Or fund from your Peach mobile app
+                            </div>
+                            <button
+                              disabled={odFundMobileLoading}
+                              onClick={async () => {
+                                setOdFundMobileError(null);
+                                setOdFundMobileLoading(true);
+                                try {
+                                  const res = await post(`/offer/${o.id}/fundEscrowPendingAction`);
+                                  if (!res.ok) {
+                                    const err = await res.json().catch(() => null);
+                                    throw new Error(err?.error || err?.message || `HTTP ${res.status}`);
+                                  }
+                                  setOdFundMobileRequested(true);
+                                  setToast("Request sent — check your phone");
+                                  setTimeout(() => setToast(null), 3000);
+                                } catch (e) {
+                                  setOdFundMobileError("Failed to request funding: " + e.message);
+                                } finally {
+                                  setOdFundMobileLoading(false);
+                                }
+                              }}
+                              style={{
+                                width:"100%",padding:"10px 14px",borderRadius:999,border:"none",
+                                background:"var(--grad)",color:"white",
+                                fontFamily:"var(--font)",fontSize:".8rem",fontWeight:800,
+                                cursor: odFundMobileLoading ? "default" : "pointer",
+                                opacity: odFundMobileLoading ? 0.6 : 1,
+                              }}
+                            >
+                              {odFundMobileLoading ? "Sending request…" : "Fund via mobile app"}
+                            </button>
+                            {odFundMobileError && (
+                              <div style={{color:"var(--error)",fontSize:".74rem",fontWeight:600,marginTop:6,textAlign:"center"}}>{odFundMobileError}</div>
+                            )}
+                          </>
                         )}
                       </div>
 
@@ -2015,25 +2076,40 @@ export default function TradesDashboard() {
 
               {/* Footer — actions */}
               <div className="offer-detail-footer">
-                {/* Default: Edit + Withdraw buttons */}
-                {!odEditingPremium && !odWithdrawConfirm && (
-                  <div style={{display:"flex",gap:8}}>
-                    <button className="offer-detail-btn offer-detail-btn-edit"
-                      onClick={() => { setOdEditPremiumVal(String(o.premium ?? 0)); setOdEditingPremium(true); setOdEditError(null); }}>
-                      Edit premium
-                    </button>
-                    <button className="offer-detail-btn offer-detail-btn-withdraw"
-                      onClick={() => { setOdWithdrawConfirm(true); setOdWithdrawError(null); }}>
-                      Withdraw
-                    </button>
-                  </div>
+                {/* Default: Edit + Withdraw buttons (or refund-in-flight message).
+                    Hidden entirely for unfunded sell offers (fundEscrow) — the escrow-
+                    address/QR/fund-mobile block above is the primary call to action there. */}
+                {!odEditingPremium && !odWithdrawConfirm
+                 && !(o.direction === "sell" && o.tradeStatus === "fundEscrow") && (
+                  odRefundRequested ? (
+                    <div style={{
+                      padding:"10px 14px",borderRadius:8,
+                      background:"var(--black-5)",color:"var(--black-65)",
+                      fontSize:".78rem",fontWeight:700,textAlign:"center",
+                    }}>
+                      ✓ Refund request sent — check your phone
+                    </div>
+                  ) : (
+                    <div style={{display:"flex",gap:8}}>
+                      {!FINISHED_STATUSES.has(o.tradeStatus) && (
+                        <button className="offer-detail-btn offer-detail-btn-edit"
+                          onClick={() => { setOdEditPremiumVal(String(o.premium ?? 0)); setOdEditingPremium(true); setOdEditError(null); }}>
+                          Edit premium
+                        </button>
+                      )}
+                      <button className="offer-detail-btn offer-detail-btn-withdraw"
+                        onClick={() => { setOdWithdrawConfirm(true); setOdWithdrawError(null); }}>
+                        Withdraw
+                      </button>
+                    </div>
+                  )
                 )}
 
                 {/* Edit premium mode — mobile-inspired layout */}
                 {odEditingPremium && (() => {
                   const pVal = parseFloat(odEditPremiumVal) || 0;
                   const dispCur = o.currency || selectedCurrency;
-                  const curPrice = allPrices[dispCur] ?? btcPrice;
+                  const curPrice = allPrices?.[dispCur] ?? btcPrice;
                   const fiatWithPremium = satsToFiatRaw(o.amount, curPrice) * (1 + pVal / 100);
                   const step = 0.2;
                   const clamp = (v) => String(Math.round(Math.max(-50, Math.min(50, v)) * 10) / 10);
@@ -2129,6 +2205,86 @@ export default function TradesDashboard() {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── CANCELED SELL OFFER POPUP (never-matched, refund in-flight or done) ── */}
+      {canceledOfferPopup && (() => {
+        const o = canceledOfferPopup;
+        const d = canceledOfferDetails;
+        // Tolerant read — backend doesn't expose a refund tx id field yet; these are
+        // candidate names so the link lights up automatically once it does.
+        const refundTxId = d?.refundTxId ?? d?.refundTxHash ?? d?.refundTx
+                        ?? d?.refund?.txId ?? d?.refund?.txHash ?? null;
+        const escrow = d?.escrow ?? null;
+        const isRefunded = !!o.refunded || !!d?.refunded;
+        const close = () => setCanceledOfferPopup(null);
+        return (
+          <div className="matches-overlay" onClick={e => { if (e.target === e.currentTarget) close(); }}>
+            <div className="matches-popup">
+              <div className="matches-header">
+                <span style={{fontWeight:800,fontSize:".95rem"}}>Canceled sell offer</span>
+                <span style={{fontSize:".78rem",color:"var(--black-50)",fontWeight:600}}>{o.tradeId}</span>
+                <button className="matches-close" onClick={close}>✕</button>
+              </div>
+
+              <div className="offer-detail-body">
+                <div className="offer-detail-row">
+                  <span className="offer-detail-label">Direction</span>
+                  <span className="offer-detail-value" style={{color:"var(--error)"}}>Sell</span>
+                </div>
+                <div className="offer-detail-row">
+                  <span className="offer-detail-label">Amount</span>
+                  <span className="offer-detail-value"><SatsAmount sats={o.amount}/></span>
+                </div>
+                <div className="offer-detail-row">
+                  <span className="offer-detail-label">Premium</span>
+                  <span className="offer-detail-value" style={{color: (o.premium ?? 0) > 0 ? "var(--success)" : (o.premium ?? 0) < 0 ? "var(--error)" : "var(--black)"}}>
+                    {(o.premium ?? 0) > 0 ? "+" : ""}{(o.premium ?? 0).toFixed(1)}%
+                  </span>
+                </div>
+                {o.methods?.length > 0 && (
+                  <div className="offer-detail-row">
+                    <span className="offer-detail-label">Payment methods</span>
+                    <div className="offer-detail-chips">
+                      {o.methods.map(m => <span key={m} className="method-chip">{m}</span>)}
+                    </div>
+                  </div>
+                )}
+                <div className="offer-detail-row">
+                  <span className="offer-detail-label">Status</span>
+                  <span className="offer-detail-value">Offer Cancelled</span>
+                </div>
+                <div className="offer-detail-row">
+                  <span className="offer-detail-label">Refund</span>
+                  <span className="offer-detail-value" style={{color: isRefunded ? "var(--success)" : "var(--black-65)", fontWeight:700}}>
+                    {isRefunded ? "✓ Refunded" : "Pending — awaiting mobile signature / broadcast"}
+                  </span>
+                </div>
+                <div className="offer-detail-row">
+                  <span className="offer-detail-label">Created</span>
+                  <span className="offer-detail-value">{o.createdAt ? new Date(o.createdAt).toLocaleDateString() : "—"}</span>
+                </div>
+              </div>
+
+              {(refundTxId || escrow) && (
+                <div style={{padding:"12px 20px 16px", borderTop:"1px solid var(--black-10)", textAlign:"right"}}>
+                  <a
+                    href={refundTxId
+                      ? `https://mempool.space/tx/${refundTxId}`
+                      : `https://mempool.space/address/${escrow}`}
+                    target="_blank" rel="noopener noreferrer"
+                    style={{fontSize:".72rem",fontWeight:600,color:"var(--black-65)",textDecoration:"none",display:"inline-flex",alignItems:"center",gap:4}}
+                    onMouseEnter={e => e.currentTarget.style.color="var(--primary)"}
+                    onMouseLeave={e => e.currentTarget.style.color="var(--black-65)"}
+                  >
+                    {refundTxId ? "View refund tx on mempool.space" : "View escrow on mempool.space"}
+                    <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M2 9L9 2M9 2H5M9 2v4"/></svg>
+                  </a>
+                </div>
+              )}
             </div>
           </div>
         );

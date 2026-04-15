@@ -84,10 +84,11 @@ const Step = ({ n, children }) => (
 export default function PeachAuth() {
   const navigate = useNavigate();
   const TOTAL = 30;
-  const [allPrices,           setAllPrices]           = useState({ EUR: 87432 });
+  const [allPrices,           setAllPrices]           = useState(null);
   const [availableCurrencies, setAvailableCurrencies] = useState(["EUR","CHF","GBP"]);
   const [selectedCurrency,    setSelectedCurrency]    = useState("EUR");
-  const btcPrice = Math.round(allPrices[selectedCurrency] ?? 87432);
+  const pricesLoaded = allPrices !== null;
+  const btcPrice = Math.round(allPrices?.[selectedCurrency] ?? 87432);
   const [isMobile,  setIsMobile]  = useState(false);
 
   // ─── QR AUTH (real handshake) ──────────────────────────────────────────────
@@ -174,6 +175,7 @@ export default function PeachAuth() {
           showAvatarMenu={false}
           setShowAvatarMenu={() => {}}
           btcPrice={btcPrice}
+          pricesLoaded={pricesLoaded}
           selectedCurrency={selectedCurrency}
           availableCurrencies={availableCurrencies}
           onCurrencyChange={c => setSelectedCurrency(c)}
@@ -186,8 +188,8 @@ export default function PeachAuth() {
             <div style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0"}}>
               <IcoBtc size={16}/>
               <div style={{display:"flex",flexDirection:"column"}}>
-                <span style={{fontSize:".78rem",fontWeight:800,color:"var(--black)"}}>{btcPrice.toLocaleString("fr-FR")} {selectedCurrency}</span>
-                <span style={{fontSize:".65rem",fontWeight:500,color:"var(--black-65)"}}>{satsPerCur.toLocaleString()} sats / {selectedCurrency.toLowerCase()}</span>
+                <span style={{fontSize:".78rem",fontWeight:800,color:"var(--black)"}}>{pricesLoaded ? btcPrice.toLocaleString("fr-FR") : "?"} {selectedCurrency}</span>
+                <span style={{fontSize:".65rem",fontWeight:500,color:"var(--black-65)"}}>{pricesLoaded ? satsPerCur.toLocaleString() : "?"} sats / {selectedCurrency.toLowerCase()}</span>
               </div>
             </div>
           }
@@ -384,6 +386,7 @@ export default function PeachAuth() {
         showAvatarMenu={false}
         setShowAvatarMenu={() => {}}
         btcPrice={btcPrice}
+        pricesLoaded={pricesLoaded}
         selectedCurrency={selectedCurrency}
         availableCurrencies={availableCurrencies}
         onCurrencyChange={c => setSelectedCurrency(c)}

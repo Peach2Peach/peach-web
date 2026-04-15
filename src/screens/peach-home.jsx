@@ -268,10 +268,11 @@ const css = `
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function PeachHome() {
   const navigate = useNavigate();
-  const [allPrices,           setAllPrices]           = useState({ EUR: BTC_PRICE });
+  const [allPrices,           setAllPrices]           = useState(null);
   const [availableCurrencies, setAvailableCurrencies] = useState(["EUR","CHF","GBP"]);
   const [selectedCurrency,    setSelectedCurrency]    = useState("EUR");
-  const btcPrice = Math.round(allPrices[selectedCurrency] ?? BTC_PRICE);
+  const pricesLoaded = allPrices !== null;
+  const btcPrice = Math.round(allPrices?.[selectedCurrency] ?? BTC_PRICE);
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const [marketStats, setMarketStats] = useState(null);
@@ -461,6 +462,7 @@ export default function PeachHome() {
           showAvatarMenu={showAvatarMenu}
           setShowAvatarMenu={setShowAvatarMenu}
           btcPrice={btcPrice}
+          pricesLoaded={pricesLoaded}
           selectedCurrency={selectedCurrency}
           availableCurrencies={availableCurrencies}
           onCurrencyChange={c => setSelectedCurrency(c)}
@@ -475,8 +477,8 @@ export default function PeachHome() {
             <div className="mobile-price-pill">
               <IcoBtc size={16}/>
               <div className="mobile-price-text">
-                <span className="mobile-price-main">{btcPrice.toLocaleString("fr-FR")} {selectedCurrency}</span>
-                <span className="mobile-price-sats">{satsPerCur.toLocaleString()} sats / {selectedCurrency.toLowerCase()}</span>
+                <span className="mobile-price-main">{pricesLoaded ? btcPrice.toLocaleString("fr-FR") : "?"} {selectedCurrency}</span>
+                <span className="mobile-price-sats">{pricesLoaded ? satsPerCur.toLocaleString() : "?"} sats / {selectedCurrency.toLowerCase()}</span>
               </div>
               <div className="topbar-cur-select mobile-cur-select">
                 <span className="cur-select-label">{selectedCurrency}</span>

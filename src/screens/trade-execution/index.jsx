@@ -247,10 +247,11 @@ export default function TradeExecution() {
 
   const [mobileOpen, setMobileOpen]   = useState(false);
   const [mobileTab, setMobileTab]     = useState("details");   // "details" | "chat"
-  const [allPrices,           setAllPrices]           = useState({ EUR: BTC_PRICE });
+  const [allPrices,           setAllPrices]           = useState(null);
   const [availableCurrencies, setAvailableCurrencies] = useState(["EUR","CHF","GBP"]);
   const [selectedCurrency,    setSelectedCurrency]    = useState("EUR");
-  const btcPrice = Math.round(allPrices[selectedCurrency] ?? BTC_PRICE);
+  const pricesLoaded = allPrices !== null;
+  const btcPrice = Math.round(allPrices?.[selectedCurrency] ?? BTC_PRICE);
 
   useEffect(() => {
     if (!showAvatarMenu) return;
@@ -786,6 +787,7 @@ export default function TradeExecution() {
         showAvatarMenu={showAvatarMenu}
         setShowAvatarMenu={setShowAvatarMenu}
         btcPrice={btcPrice}
+        pricesLoaded={pricesLoaded}
         selectedCurrency={selectedCurrency}
         availableCurrencies={availableCurrencies}
         onCurrencyChange={c => setSelectedCurrency(c)}
@@ -800,8 +802,8 @@ export default function TradeExecution() {
           <div className="mobile-price-pill">
             <IcoBtc size={16}/>
             <div className="mobile-price-text">
-              <span className="mobile-price-main">{btcPrice.toLocaleString("fr-FR")} {selectedCurrency}</span>
-              <span className="mobile-price-sats">{satsPerCur.toLocaleString()} sats / {selectedCurrency.toLowerCase()}</span>
+              <span className="mobile-price-main">{pricesLoaded ? btcPrice.toLocaleString("fr-FR") : "?"} {selectedCurrency}</span>
+              <span className="mobile-price-sats">{pricesLoaded ? satsPerCur.toLocaleString() : "?"} sats / {selectedCurrency.toLowerCase()}</span>
             </div>
             <div className="topbar-cur-select mobile-cur-select">
               <span className="cur-select-label">{selectedCurrency}</span>
@@ -976,8 +978,7 @@ export default function TradeExecution() {
                     setFundEscrowError(null);
                     setFundEscrowLoading(true);
                     try {
-                      const offerId = String(contract.id).split("-")[0];
-                      const res = await post(`/offer/${offerId}/fundEscrowPendingAction`);
+                      const res = await post(`/contract/${contract.id}/createFundEscrowContractPendingAction`);
                       if (!res.ok) {
                         const err = await res.json().catch(() => null);
                         throw new Error(err?.error || err?.message || `HTTP ${res.status}`);
@@ -1026,8 +1027,7 @@ export default function TradeExecution() {
                   onRefundEscrow={async () => {
                     setActionError(null);
                     try {
-                      const offerId = String(contract.id).split("-")[0];
-                      const res = await post(`/offer/${offerId}/refundPendingAction`);
+                      const res = await post(`/contract/${contract.id}/createRefundEscrowContractPendingAction`);
                       if (!res.ok) {
                         const err = await res.json().catch(() => null);
                         throw new Error(err?.error || err?.message || `HTTP ${res.status}`);
@@ -1169,8 +1169,7 @@ export default function TradeExecution() {
                   } else if (action === "refund_escrow") {
                     setActionError(null);
                     try {
-                      const offerId = String(contract.id).split("-")[0];
-                      const res = await post(`/offer/${offerId}/refundPendingAction`);
+                      const res = await post(`/contract/${contract.id}/createRefundEscrowContractPendingAction`);
                       if (!res.ok) {
                         const err = await res.json().catch(() => null);
                         throw new Error(err?.error || err?.message || `HTTP ${res.status}`);

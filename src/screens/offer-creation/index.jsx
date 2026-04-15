@@ -30,10 +30,11 @@ export default function OfferCreation({ initialType="buy" }) {
   const navigate = useNavigate();
   const [type,         setType]         = useState(initialType);
   const [step,         setStep]         = useState(0);
-  const [allPrices,           setAllPrices]           = useState({ EUR: BTC_PRICE_INIT });
+  const [allPrices,           setAllPrices]           = useState(null);
   const [availableCurrencies, setAvailableCurrencies] = useState(["EUR","CHF","GBP"]);
   const [selectedCurrency,    setSelectedCurrency]    = useState("EUR");
-  const btcPrice = Math.round(allPrices[selectedCurrency] ?? BTC_PRICE_INIT);
+  const pricesLoaded = allPrices !== null;
+  const btcPrice = Math.round(allPrices?.[selectedCurrency] ?? BTC_PRICE_INIT);
   const [done,         setDone]         = useState(false);
   const [copiedAddr,   setCopiedAddr]   = useState(false);
   const [qrWithAmount, setQrWithAmount] = useState(true);
@@ -77,7 +78,10 @@ export default function OfferCreation({ initialType="buy" }) {
         const pms = auth?.pgpPrivKey
           ? await extractPMsFromProfile(profile, auth.pgpPrivKey)
           : null;
-        if (!pms) throw new Error("No PM data found in profile");
+        if (!pms) {
+          setSavedMethods([]);
+          return;
+        }
         // Keys that belong to the PM structure — everything else is a detail field
         const STRUCTURAL = new Set([
           "id", "methodId", "type", "name", "label", "currencies", "hashes",
@@ -719,6 +723,7 @@ export default function OfferCreation({ initialType="buy" }) {
         showAvatarMenu={showAvatarMenu}
         setShowAvatarMenu={setShowAvatarMenu}
         btcPrice={btcPrice}
+        pricesLoaded={pricesLoaded}
         selectedCurrency={selectedCurrency}
         availableCurrencies={availableCurrencies}
         onCurrencyChange={c => setSelectedCurrency(c)}
@@ -733,8 +738,8 @@ export default function OfferCreation({ initialType="buy" }) {
           <div className="mobile-price-pill">
             <IcoBtc size={16}/>
             <div className="mobile-price-text">
-              <span className="mobile-price-main">{btcPrice.toLocaleString("fr-FR")} {selectedCurrency}</span>
-              <span className="mobile-price-sats">{Math.round(SAT/btcPrice).toLocaleString()} sats / {selectedCurrency.toLowerCase()}</span>
+              <span className="mobile-price-main">{pricesLoaded ? btcPrice.toLocaleString("fr-FR") : "?"} {selectedCurrency}</span>
+              <span className="mobile-price-sats">{pricesLoaded ? Math.round(SAT/btcPrice).toLocaleString() : "?"} sats / {selectedCurrency.toLowerCase()}</span>
             </div>
             <div className="topbar-cur-select mobile-cur-select">
               <span className="cur-select-label">{selectedCurrency}</span>
@@ -800,6 +805,7 @@ export default function OfferCreation({ initialType="buy" }) {
         showAvatarMenu={showAvatarMenu}
         setShowAvatarMenu={setShowAvatarMenu}
         btcPrice={btcPrice}
+        pricesLoaded={pricesLoaded}
         selectedCurrency={selectedCurrency}
         availableCurrencies={availableCurrencies}
         onCurrencyChange={c => setSelectedCurrency(c)}
@@ -814,8 +820,8 @@ export default function OfferCreation({ initialType="buy" }) {
           <div className="mobile-price-pill">
             <IcoBtc size={16}/>
             <div className="mobile-price-text">
-              <span className="mobile-price-main">{btcPrice.toLocaleString("fr-FR")} {selectedCurrency}</span>
-              <span className="mobile-price-sats">{Math.round(SAT/btcPrice).toLocaleString()} sats / {selectedCurrency.toLowerCase()}</span>
+              <span className="mobile-price-main">{pricesLoaded ? btcPrice.toLocaleString("fr-FR") : "?"} {selectedCurrency}</span>
+              <span className="mobile-price-sats">{pricesLoaded ? Math.round(SAT/btcPrice).toLocaleString() : "?"} sats / {selectedCurrency.toLowerCase()}</span>
             </div>
             <div className="topbar-cur-select mobile-cur-select">
               <span className="cur-select-label">{selectedCurrency}</span>
@@ -1027,7 +1033,7 @@ export default function OfferCreation({ initialType="buy" }) {
                   <div style={{flex:1,textAlign:"center"}}>
                     <div style={{fontSize:".65rem",fontWeight:700,color:"var(--black-65)",
                       textTransform:"uppercase",letterSpacing:".06em",marginBottom:2}}>Market</div>
-                    <div style={{fontSize:".88rem",fontWeight:800}}>€{btcPrice.toLocaleString()}</div>
+                    <div style={{fontSize:".88rem",fontWeight:800}}>€{pricesLoaded ? btcPrice.toLocaleString() : "?"}</div>
                   </div>
                   <div style={{width:1,background:"var(--black-10)"}}/>
                   <div style={{flex:1,textAlign:"center"}}>

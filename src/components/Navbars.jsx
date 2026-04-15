@@ -109,6 +109,7 @@ export function Topbar({
   availableCurrencies,
   onCurrencyChange,
   showPrice = true,
+  pricesLoaded = true,
 }) {
   const { total: unreadTotal } = useUnread();
   const { notifications, unreadCount: unreadNotifs, readIds, markAllRead, markRead } = useNotifications();
@@ -158,8 +159,8 @@ export function Topbar({
         {showPrice && (
           <div className="topbar-price">
             <IcoBtc size={18}/>
-            <span className="topbar-price-main">{btcPrice.toLocaleString("fr-FR")} {selectedCurrency}</span>
-            <span className="topbar-price-sats">{satsPerCur.toLocaleString()} sats / {selectedCurrency.toLowerCase()}</span>
+            <span className="topbar-price-main">{pricesLoaded ? btcPrice.toLocaleString("fr-FR") : "?"} {selectedCurrency}</span>
+            <span className="topbar-price-sats">{pricesLoaded ? satsPerCur.toLocaleString() : "?"} sats / {selectedCurrency.toLowerCase()}</span>
             <div className="topbar-cur-select">
               <span className="cur-select-label">{selectedCurrency}</span>
               <svg className="cur-select-arrow" width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{pointerEvents:"none",flexShrink:0}}><polyline points="1,1 5,5 9,1"/></svg>

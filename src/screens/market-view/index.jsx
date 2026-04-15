@@ -41,7 +41,7 @@ export default function PeachMarket() {
   const [showMyOffers,        setShowMyOffers]        = useState(false);
   const [showMyOffersInfo,    setShowMyOffersInfo]    = useState(false);
   const infoRef = useRef(null);
-  const [allPrices,           setAllPrices]           = useState({ EUR: BTC_PRICE });
+  const [allPrices,           setAllPrices]           = useState(null);
   const [availableCurrencies, setAvailableCurrencies] = useState(["EUR"]);
   const [selectedCurrency,    setSelectedCurrency]    = useState("EUR");
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
@@ -94,7 +94,8 @@ export default function PeachMarket() {
   const isSellTab = tab === "sell";
 
   // Derive current BTC price in selected currency
-  const btcPrice = Math.round(allPrices[selectedCurrency] ?? BTC_PRICE);
+  const pricesLoaded = allPrices !== null;
+  const btcPrice = Math.round(allPrices?.[selectedCurrency] ?? BTC_PRICE);
 
   // ── Popup helpers ──
   function openPopup(offer) {
@@ -563,7 +564,10 @@ export default function PeachMarket() {
           const pms = auth?.pgpPrivKey
             ? await extractPMsFromProfile(profile, auth.pgpPrivKey)
             : null;
-          if (!pms) throw new Error("No PM data found in profile");
+          if (!pms) {
+            setLiveUserPMs([]);
+            return;
+          }
           // Keys that belong to the PM structure — everything else is a detail field
           const STRUCTURAL = new Set([
             "id", "methodId", "type", "name", "label", "currencies", "hashes",
@@ -1015,6 +1019,7 @@ export default function PeachMarket() {
           showAvatarMenu={showAvatarMenu}
           setShowAvatarMenu={setShowAvatarMenu}
           btcPrice={btcPrice}
+          pricesLoaded={pricesLoaded}
           selectedCurrency={selectedCurrency}
           availableCurrencies={availableCurrencies}
           onCurrencyChange={c => setSelectedCurrency(c)}
@@ -1029,8 +1034,8 @@ export default function PeachMarket() {
             <div className="mobile-price-pill">
               <IcoBtc size={16}/>
               <div className="mobile-price-text">
-                <span className="mobile-price-main">{btcPrice.toLocaleString("fr-FR")} {selectedCurrency}</span>
-                <span className="mobile-price-sats">{satsPerCur.toLocaleString()} sats / {selectedCurrency.toLowerCase()}</span>
+                <span className="mobile-price-main">{pricesLoaded ? btcPrice.toLocaleString("fr-FR") : "?"} {selectedCurrency}</span>
+                <span className="mobile-price-sats">{pricesLoaded ? satsPerCur.toLocaleString() : "?"} sats / {selectedCurrency.toLowerCase()}</span>
               </div>
               <div className="topbar-cur-select mobile-cur-select">
                 <span className="cur-select-label">{selectedCurrency}</span>
