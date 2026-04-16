@@ -37,6 +37,8 @@ await fetch(`${v069Base}/selfUser`, {
 | GET | `/info` | trade-execution (dispute flow) | Platform info: PGP key, fees, payment methods list. Used to get the platform PGP public key when filing a dispute. |
 | GET | `/info/paymentMethods` | payment-methods | List all supported payment methods with their currencies. Used to build the PM catalogue. |
 | GET | `/estimateFees` | settings | Current Bitcoin fee estimates (sat/vB). Used in the network fees sub-screen. |
+| GET | `/market/offers/stats` | peach-home | Live market stats. Response: `{ buy: { open }, sell: { open }, totalAvgPremium }`. Polled every 60s for the home screen "Peach Stats" widget. |
+| GET | `/market/tradePricePeaks` | peach-home | ATH trade prices per currency and period. Response: `{ tradePeaks: { [period]: { [currency]: price } } }`. Public endpoint — fetched directly via `VITE_API_BASE` (not through `useApi`). |
 
 ---
 
@@ -50,6 +52,7 @@ await fetch(`${v069Base}/selfUser`, {
 | PATCH | `/user/batching` | settings | Join or leave GroupHug batching program. Body: `{ enable: bool }`. |
 | PUT | `/user/:userId/block` | settings | Block a user. |
 | POST | `/contact/report` | settings | Submit abuse report. Body: `{ email, topic, reason, message }`. |
+| GET | `/user/me` | useQRAuth | Fetch own user profile after QR authentication. Returns full profile with `pgpPublicKey`, `id`, etc. Used to verify PGP key match and populate `window.__PEACH_AUTH__`. |
 
 ---
 
@@ -64,7 +67,8 @@ await fetch(`${v069Base}/selfUser`, {
 | POST | `/offer/:offerId/revive` | trade-execution | Republish an expired/cancelled sell offer. |
 | POST | `/offer/:offerId/escrow` | offer-creation | Create escrow for a sell offer. Body: `{ publicKey }`. |
 | GET | `/offer/:offerId/escrow` | offer-creation | Get escrow funding status. |
-| POST | `/offer/:offerId/escrow/confirm` | offer-creation | Confirm escrow has been funded. |
+| POST | `/offer/:offerId/escrow/confirm` | offer-creation, trades-dashboard, trade-execution | Confirm escrow has been funded. |
+| GET | `/offer/:offerId/details` | trades-dashboard | Enriched sell offer details. Response: `{ funding: { status, amounts }, matches: [...], prices: {...}, escrow, mobileActionFundEscrowWasTriggered, mobileActionRefundWasTriggered }`. **Sell offers only** — buy offers return 401 by design. Used in the offer detail popup and for canceled-offer detail views. |
 
 ---
 
@@ -125,6 +129,7 @@ The web app cannot sign Bitcoin transactions directly (private key stays on mobi
 | POST | `/v069/buyOffer` | offer-creation | Create a **buy offer** (v069). Sell offers use `POST /offer` (v1). |
 | PATCH | `/v069/:offerType/:id` | trades-dashboard | Edit offer premium via v069. `:offerType` = `buyOffer` or `sellOffer`. |
 | DELETE | `/v069/buyOffer/:id` | trades-dashboard | Delete/withdraw a buy offer. |
+| GET | `/v069/sellOffer/:offerId` | market-view | Fetch individual sell offer details. Returns full offer object with `user` (including `pgpPublicKeys`), `escrow` address, `meansOfPayment`, etc. Fetched when a sell offer popup is opened; polled every 10s to keep details fresh. |
 
 **V069 response field differences from v1:**
 - Buy offers: amount field is `amountSats` (number), has `premium` (number), `id` is a number (not string)
@@ -144,9 +149,14 @@ The web app cannot sign Bitcoin transactions directly (private key stays on mobi
 | POST | `/v069/:offerType/:id/tradeRequestReceived/:userId/accept` | trades-dashboard | Accept an incoming trade request → creates a contract. |
 | DELETE | `/v069/:offerType/:id/tradeRequestReceived/:userId` | trades-dashboard | Reject an incoming trade request. |
 | GET | `/v069/:offerType/:id/tradeRequestReceived/:userId/chat` | MatchesPopup | Chat with a specific trade request sender. |
+| DELETE | `/v069/:offerType/:offerId/tradeRequestPerformed` | market-view | Cancel/undo a sent trade request. Called from the "Undo request" button on the offer popup. |
+| POST | `/v069/:offerType/:offerId/tradeRequestPerformed/chat` | MatchesPopup | Send pre-contract chat message as the trade requester. Body: `{ messageEncrypted, signature }`. |
+| POST | `/v069/:offerType/:offerId/tradeRequestReceived/:userId/chat` | MatchesPopup | Send pre-contract chat message as the offer owner. Body: `{ messageEncrypted, signature }`. |
 | POST | `/v069/:offerType/:id/performInstantTrade` | market-view | Execute an instant trade. |
 
 `:offerType` = `buyOffer` or `sellOffer` in all cases.
+
+**Pre-contract chat note:** There are 4 chat endpoints (2 GET + 2 POST) covering two perspectives — the trade requester (`tradeRequestPerformed/chat`) and the offer owner (`tradeRequestReceived/:userId/chat`). Messages use symmetric-key encryption (`messageEncrypted`) and PGP signatures (`signature`).
 
 ---
 
@@ -159,6 +169,26 @@ The web app cannot sign Bitcoin transactions directly (private key stays on mobi
 
 ---
 
+## V069 — Desktop Authentication
+
+Desktop QR authentication flow. The web app generates an ephemeral PGP keypair, creates a connection on the server, displays a QR code for the mobile app to scan, then polls for the mobile's encrypted response. On success, validates with the server and receives an access token. Implemented in `src/hooks/useQRAuth.js`.
+
+| Method | Endpoint | Used in | Description |
+|--------|----------|---------|-------------|
+| POST | `/v069/desktop/desktopConnection` | useQRAuth | Create a desktop connection. Body: `{ pgpPublicKey }` (ephemeral PGP public key). Response: `{ encryptedDesktopConnectionId, signatureDesktopConnectionId }`. The connection ID is PGP-encrypted for the desktop; the signature is verified against the server's PGP key from `/v1/info`. |
+| GET | `/v069/desktop/desktopConnection/:connId/` | useQRAuth | Poll for mobile response. Returns `{ desktopConnectionEncryptedData }` when mobile has responded. Returns 401 while waiting. Polled every ~2s with a 30s auto-refresh cycle. |
+| POST | `/v069/desktop/desktopConnection/:connId/validate` | useQRAuth | Validate the connection. Body: `{ password }` (the `validationPassword` decrypted from mobile's encrypted response). Response: `{ accessToken }`. |
+
+**QR auth flow summary:**
+1. `POST /desktopConnection` — get encrypted connection ID
+2. Display QR with `{ desktopConnectionId, ephemeralPgpPublicKey, peachDesktopConnectionVersion: 1 }`
+3. `GET /desktopConnection/:id/` — poll until 200 with `desktopConnectionEncryptedData`
+4. Decrypt mobile response to get `{ validationPassword, pgpPrivateKey, xpub, multisigXpub }`
+5. `POST /desktopConnection/:id/validate` — exchange password for `accessToken`
+6. `GET /v1/user/me` — fetch profile, verify PGP key match, populate `window.__PEACH_AUTH__`
+
+---
+
 ## Planned — Not Yet Implemented
 
 These endpoints exist in the API but are not wired in the web app yet.
@@ -166,7 +196,6 @@ These endpoints exist in the API but are not wired in the web app yet.
 | Method | Endpoint | Purpose | Notes |
 |--------|----------|---------|-------|
 | DELETE | `/user/:userId/block` | Unblock a user | Need to implement alongside existing block |
-| GET | `/market/tradePricePeaks` | All-time high trade prices per currency | Planned for home screen peach stats |
 | GET | `/user/:userId/ratings` | Get ratings for a user | Planned for user profile screen (new screen to visualize other users) |
 | GET | `/user/referral` | Check validity of a referral code | Planned |
 | PATCH | `/user/referral/redeem/referralCode` | Redeem Peach points for a new referral code | Planned |
@@ -193,7 +222,6 @@ These endpoints exist in the API but are not wired in the web app yet.
 | `GET /user/me/paymentMethods` | Returns `{"forbidden":{"buy":[],"sell":[]}}` — use `GET /v069/selfUser` instead |
 | `GET /v069/sellOffer?ownOffers=true` | `ownOffers` param is silently ignored for sell offers (backend asymmetry). Use `GET /v069/user/:publicKeyId/offers` instead |
 | `GET /v069/sellOffer` (market browse) | Excludes your own offers from results — by design, not a bug |
-| `GET /user/me` | Works but web app doesn't use it — profile data comes from `window.__PEACH_AUTH__` auth object |
 
 ---
 
@@ -232,4 +260,4 @@ This file contains a hardcoded regtest token and a standalone `PEACH_API` object
 
 ---
 
-*Last updated: 2026-03-26 — audited against actual codebase API calls*
+*Last updated: 2026-04-16 — audited against actual codebase API calls*

@@ -108,6 +108,11 @@ Archive of all completed features, fixes, and resolved blockers. Moved here from
 - **Homepage: Peach Bitcoin price card** — max BTC price on Peach card added to homepage. (`peach-home.jsx`)
 - **Market View: instant buy escrow address generation** — logic to derive escrow address when matching an instant buy offer. (`market-view/index.jsx`)
 - **Market View: search bar fix** — fixed search bar functionality. (`market-view/index.jsx`)
+- **Dark mode theme** — warm/soft palette wired via CSS variables in `global.css`. (`styles/global.css`)
+- **Global: Peach Web logo file** — replaced inline SVG with a proper logo asset used consistently across screens.
+- **Global: PM user labels** — custom user labels (e.g. "SEPA - main", "SEPA - 2") to distinguish multiple PMs of the same type. Legacy aliasing helpers removed, field names canonicalized. (`payment-methods/index.jsx`, `offer-creation/index.jsx`, `market-view/index.jsx`)
+- **Offer Creation: experience level filter improvements** — filter available on both buy and sell. Instant Match section now includes "No new users", "Minimum reputation: 4.5", and badge filter chips (Fast trader / super trader). `experienceLevelCriteria` sent in both payloads. Experience level badges shown in Market View and Trades Dashboard. (`offer-creation/index.jsx`, `market-view/index.jsx`, `trades-dashboard/index.jsx`)
+- **Trade Execution: remove QR/address on tx detection** — once a funding transaction is detected, the escrow QR code and address are hidden since they're no longer needed. (`trade-execution/index.jsx`)
 
 ---
 
