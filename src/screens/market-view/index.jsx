@@ -472,9 +472,10 @@ export default function PeachMarket() {
     if (tradeLoading || !auth) return;
     setTradeLoading(true);
     try {
+      const offerType = offer.type === "bid" ? "buyOffer" : "sellOffer";
       const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
       const res = await fetchWithSessionCheck(
-        `${v069Base}/sellOffer/${offer.id}/tradeRequestPerformed`,
+        `${v069Base}/${offerType}/${offer.id}/tradeRequestPerformed`,
         { method: "DELETE", headers: { Authorization: `Bearer ${auth.token}` } },
       );
       if (!res.ok) {
