@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { SideNav, Topbar } from "../../components/Navbars.jsx";
 import { SatsAmount, IcoBtc } from "../../components/BitcoinAmount.jsx";
 import { useAuth } from "../../hooks/useAuth.js";
@@ -9,6 +9,7 @@ import { extractPMsFromProfile, isApiError, generateSymmetricKey, encryptForReci
 import { getCached, setCache, clearCache } from "../../hooks/useApi.js";
 import { BTC_PRICE_FALLBACK as BTC_PRICE, fmtPct, fmtFiat, formatTradeId, toPeaches } from "../../utils/format.js";
 import PeachRating from "../../components/PeachRating.jsx";
+import RequestedOfferPopup from "../../components/RequestedOfferPopup.jsx";
 import { CSS } from "./styles.js";
 import { premiumStats, premiumCls, currSym, MultiSelect, Chips, RepCell, AmountCell, PriceCell } from "./components.jsx";
 import { CATEGORY_META } from "../../components/AddPMFlow.jsx";
@@ -30,6 +31,7 @@ const CATEGORY_ID_BY_LABEL = Object.fromEntries(
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 export default function PeachMarket() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [tab,            setTab]            = useState("buy");
   const [sortKey,        setSortKey]        = useState("premium");
   const [sortDir,        setSortDir]        = useState(1);
@@ -128,13 +130,15 @@ export default function PeachMarket() {
   //     · 404 → no request exists (treat same as APISuccess)
   // Skipped for own offers (the second endpoint is only meaningful for browsers).
   useEffect(() => {
-    if (!popupOffer || popupOffer.type !== "ask" || !auth) {
+    if (!popupOffer || !auth) {
       setDetailsLoading(false);
       setOfferDetails(null);
       return;
     }
     const offerId = popupOffer.id;
     const isOwn = popupOffer.isOwn;
+    const isSell = popupOffer.type === "ask";
+    const offerTypePath = isSell ? "sellOffer" : "buyOffer";
     let cancelled = false;
     setDetailsLoading(true);
     setOfferDetails(null);
@@ -144,13 +148,16 @@ export default function PeachMarket() {
         const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
         const hdrs = { Authorization: `Bearer ${auth.token}` };
         const [detailsRes, tradeReqRes] = await Promise.all([
-          fetchWithSessionCheck(`${v069Base}/sellOffer/${offerId}`, { headers: hdrs }),
+          // Sell-offer details endpoint is sell-exclusive; skip for buy offers.
+          isSell
+            ? fetchWithSessionCheck(`${v069Base}/sellOffer/${offerId}`, { headers: hdrs })
+            : Promise.resolve(null),
           isOwn
             ? Promise.resolve(null)
-            : fetchWithSessionCheck(`${v069Base}/sellOffer/${offerId}/tradeRequestPerformed`, { headers: hdrs }),
+            : fetchWithSessionCheck(`${v069Base}/${offerTypePath}/${offerId}/tradeRequestPerformed`, { headers: hdrs }),
         ]);
         if (cancelled) return;
-        const details = detailsRes.ok ? await detailsRes.json().catch(() => null) : null;
+        const details = detailsRes && detailsRes.ok ? await detailsRes.json().catch(() => null) : null;
         let tradeReq = null;
         let tradeReqExists = false;
         if (tradeReqRes) {
@@ -468,36 +475,6 @@ export default function PeachMarket() {
     }
   }
 
-  async function handleUndoRequest(offer) {
-    if (tradeLoading || !auth) return;
-    setTradeLoading(true);
-    try {
-      const offerType = offer.type === "bid" ? "buyOffer" : "sellOffer";
-      const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
-      const res = await fetchWithSessionCheck(
-        `${v069Base}/${offerType}/${offer.id}/tradeRequestPerformed`,
-        { method: "DELETE", headers: { Authorization: `Bearer ${auth.token}` } },
-      );
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        setToast("Undo failed: " + (err?.error || err?.message || "try again"));
-        setTimeout(() => setToast(null), 4000);
-        setTradeLoading(false);
-        return;
-      }
-      // Success: close popup, play undo animation, clear local state, refresh list.
-      closePopup();
-      setUndoAnim(offer.id);
-      setLocalRequested(prev => { const s = new Set(prev); s.delete(offer.id); return s; });
-      clearCache("market-offers");
-      fetchMarket();
-      setTimeout(() => setUndoAnim(null), 1200);
-    } catch (e) {
-      setToast("Undo error: " + e.message);
-      setTimeout(() => setToast(null), 4000);
-      setTradeLoading(false);
-    }
-  }
 
   useEffect(() => {
     async function fetchPrices() {
@@ -712,6 +689,46 @@ export default function PeachMarket() {
   const marketOffers = liveOffers ?? [];
   const userPMs = liveUserPMs ?? [];
 
+  // ── Open popup from navigation state (e.g. clicked a sent trade request on TRADES) ──
+  // Once handled, clear the state so a remount/rerender doesn't reopen it.
+  const navHandledRef = useRef(false);
+  useEffect(() => {
+    if (navHandledRef.current) return;
+    const navState = location.state;
+    if (!navState?.openOfferId) return;
+    const found = marketOffers.find(o => String(o.id) === String(navState.openOfferId));
+    if (found) {
+      navHandledRef.current = true;
+      openPopup(found);
+      navigate(location.pathname, { replace: true, state: null });
+      return;
+    }
+    // Not in list — construct a minimal stub so the popup can fetch full details.
+    if (navState.openOfferData) {
+      navHandledRef.current = true;
+      const d = navState.openOfferData;
+      const stub = {
+        id: String(d.id ?? navState.openOfferId),
+        tradeId: d.tradeId ?? formatTradeId(d.id ?? navState.openOfferId, "offer"),
+        type: navState.openOfferType === "buyOffer" ? "bid" : "ask",
+        amount: d.amount ?? 0,
+        premium: d.premium ?? 0,
+        methods: d.methods ?? [],
+        currencies: d.currencies ?? [],
+        rep: 0, trades: 0, badges: [],
+        auto: false,
+        experienceLevel: null,
+        online: false,
+        userId: "",
+        peachId: "",
+        isOwn: false,
+        hasPerformedTradeRequest: true,
+      };
+      openPopup(stub);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.state, marketOffers]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const offerType = isSellTab ? "bid" : "ask";
 
   // Dynamic currency list derived from actual offers
@@ -831,6 +848,27 @@ export default function PeachMarket() {
             </div>
           </div>
         </div>
+      );
+    }
+
+    // ── Already-requested offer → use the shared RequestedOfferPopup component
+    // (same modal as TRADES screen for sent trade requests).
+    if (isReq && !isOwn) {
+      return (
+        <RequestedOfferPopup
+          offer={offer}
+          auth={auth}
+          selectedCurrency={selectedCurrency}
+          btcPrice={btcPrice}
+          onClose={closePopup}
+          onUndoSuccess={(offerId) => {
+            setLocalRequested(prev => { const s = new Set(prev); s.delete(offerId); return s; });
+            setUndoAnim(offerId);
+            setTimeout(() => setUndoAnim(null), 1200);
+            clearCache("market-offers");
+            fetchMarket();
+          }}
+        />
       );
     }
 
@@ -1024,15 +1062,6 @@ export default function PeachMarket() {
               </>
             )}
 
-            {/* ── ALREADY REQUESTED variant: read-only state ── */}
-            {!isOwn && isReq && (
-              <div className="popup-requested-state">
-                <div className="popup-requested-badge">✓ Trade requested</div>
-                <div style={{fontSize:".78rem",color:"var(--black-65)",marginTop:4}}>
-                  Waiting for the {isSellTab ? "buyer" : "seller"} to respond.
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Footer actions */}
@@ -1052,21 +1081,6 @@ export default function PeachMarket() {
                   {tradeLoading ? "Sending…" : "Request trade"}
                 </button>
               )
-            )}
-
-            {/* ── Already requested ── */}
-            {!isOwn && isReq && (
-              <div style={{display:"flex",gap:8,width:"100%"}}>
-                <button className="popup-btn popup-btn-undo"
-                  disabled={tradeLoading}
-                  onClick={() => handleUndoRequest(offer)}>
-                  {tradeLoading ? "Undoing…" : "Undo request"}
-                </button>
-                <button className="popup-btn popup-btn-chat" style={{opacity:.45,cursor:"not-allowed"}}
-                  title="Coming soon" disabled>
-                  💬 Chat
-                </button>
-              </div>
             )}
 
             {/* ── Own offer ── */}

@@ -61,6 +61,7 @@ export const PENDING_STATUSES = new Set([
   "searchingForPeer", "waitingForTradeRequest",
   "hasMatchesAvailable", "acceptTradeRequest",
   "offerHidden", "offerHiddenWithMatchesAvailable",
+  "escrowWaitingForConfirmation",
 ]);
 
 // Trade lifecycle steps in order (used by HorizontalStepper in trade execution)

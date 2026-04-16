@@ -340,7 +340,7 @@ export function HistorySatsAmount({ sats }) {
 
 export const CURRENCY_SYMBOLS = { EUR: "€", CHF: "CHF ", GBP: "£", USD: "$", SEK: "kr ", NOK: "kr ", DKK: "kr ", PLN: "zł", CZK: "Kč " };
 
-export function HistoryTable({ rows, onTradeSelect, selectedCurrency, tab, onRefresh, isLoading }) {
+export function HistoryTable({ rows, onTradeSelect, selectedCurrency, tab, onRefresh, isLoading, emptyMessage, hideStatus }) {
   const navigate = useNavigate();
   const [sortKey, setSortKey] = useState("createdAt");
   const [sortDir, setSortDir] = useState(-1);
@@ -436,16 +436,8 @@ export function HistoryTable({ rows, onTradeSelect, selectedCurrency, tab, onRef
     );
   }
 
-  if (!rows.length) {
-    return (
-      <div className="empty-state">
-        <IconEmpty/>
-        <p>No trade history yet.</p>
-      </div>
-    );
-  }
-
   const statusColor = { completed:"var(--success)", cancelled:"var(--black-65)" };
+  const emptyText = emptyMessage ?? "No trade history yet.";
 
   return (
     <div>
@@ -498,7 +490,7 @@ export function HistoryTable({ rows, onTradeSelect, selectedCurrency, tab, onRef
             <tr>
               <th>Trade ID</th>
               <th>Type</th>
-              <Th col="status" label="Status"/>
+              {!hideStatus && <Th col="status" label="Status"/>}
               <Th col="amount" label="Amount"/>
               <Th col="fiatAmount" label="Fiat"/>
               <Th col="premium" label="Premium" align="right"/>
@@ -506,19 +498,28 @@ export function HistoryTable({ rows, onTradeSelect, selectedCurrency, tab, onRef
             </tr>
           </thead>
           <tbody>
+            {sorted.length === 0 && (
+              <tr>
+                <td colSpan={hideStatus ? 6 : 7} style={{ textAlign:"center", padding:"32px 16px", color:"var(--black-65)", fontSize:".88rem" }}>
+                  {emptyText}
+                </td>
+              </tr>
+            )}
             {sorted.map(r => (
               <tr key={r.id} className="hist-row" style={{cursor:"pointer"}} onClick={() => onTradeSelect ? onTradeSelect(r) : navigate(`/trade/${r.id}`)}>
                 <td><span style={{ fontFamily:"monospace", fontSize:".78rem", color:"var(--black-65)" }}>{r.tradeId}</span></td>
                 <td>
                   <span className={`direction-badge direction-${r.direction}`}>{r.direction.toUpperCase()}</span>
                 </td>
-                <td>
-                  <span style={{ display:"inline-flex", alignItems:"center", gap:6 }}>
-                    <StatusChip status={r.tradeStatus} showAction role={r.direction === "sell" ? "seller" : "buyer"}/>
-                    {r.experienceLevel&&<span title={r.experienceLevel==="experiencedUsersOnly"?"Experienced users only":"New users only"} style={{fontSize:".72rem"}}>{r.experienceLevel==="experiencedUsersOnly"?"👤":"🆕"}</span>}
-                    {r.unread > 0 && <span className="unread-badge"><span style={{ lineHeight:1 }}>{r.unread}</span><IconMsg/></span>}
-                  </span>
-                </td>
+                {!hideStatus && (
+                  <td>
+                    <span style={{ display:"inline-flex", alignItems:"center", gap:6 }}>
+                      <StatusChip status={r.tradeStatus} showAction role={r.direction === "sell" ? "seller" : "buyer"}/>
+                      {r.experienceLevel&&<span title={r.experienceLevel==="experiencedUsersOnly"?"Experienced users only":"New users only"} style={{fontSize:".72rem"}}>{r.experienceLevel==="experiencedUsersOnly"?"👤":"🆕"}</span>}
+                      {r.unread > 0 && <span className="unread-badge"><span style={{ lineHeight:1 }}>{r.unread}</span><IconMsg/></span>}
+                    </span>
+                  </td>
+                )}
                 <td><HistorySatsAmount sats={r.amount}/></td>
                 <td style={{ fontWeight:600 }}>{fiatDisplay(r)}</td>
                 <td style={{ textAlign:"right" }}>
@@ -540,6 +541,11 @@ export function HistoryTable({ rows, onTradeSelect, selectedCurrency, tab, onRef
 
       {/* ── Mobile list ── */}
       <div className="hist-mobile">
+        {sorted.length === 0 && (
+          <div style={{ textAlign:"center", padding:"32px 16px", color:"var(--black-65)", fontSize:".88rem" }}>
+            {emptyText}
+          </div>
+        )}
         {sorted.map(r => (
           <div key={r.id} className="hist-mob-row" onClick={() => onTradeSelect ? onTradeSelect(r) : navigate(`/trade/${r.id}`)}>
             <div className="hist-mob-left">
@@ -561,10 +567,6 @@ export function HistoryTable({ rows, onTradeSelect, selectedCurrency, tab, onRef
         ))}
       </div>
 
-      <div style={{ marginTop:12, fontSize:".78rem", color:"var(--black-65)" }}>
-        {sorted.length} trade{sorted.length !== 1 ? "s" : ""}
-        {histSearch && ` matching "${histSearch}"`}
-      </div>
     </div>
   );
 }
