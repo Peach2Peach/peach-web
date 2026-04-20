@@ -572,6 +572,7 @@ export default function TradeExecution() {
     counterparty: null,
     paymentDetails: null,
     paymentDetailsError: null,
+    ownPaymentDetails: null,
   };
   const messages = liveMessages ?? [];
   const {
@@ -582,6 +583,7 @@ export default function TradeExecution() {
     role,
     paymentDetails,
     paymentDetailsError,
+    ownPaymentDetails,
   } = scenario;
   const counterparty = rawCounterparty ?? {
     initials: "??",
@@ -675,6 +677,7 @@ export default function TradeExecution() {
           releaseAddress: c.releaseAddress ?? null,
           paymentDetails: null, // will be populated below after decryption
           paymentDetailsError: false,
+          ownPaymentDetails: null, // user's own PM, populated below after decryption
           // Keep raw encrypted fields for dispute re-encryption
           paymentDataEncrypted: c.paymentDataEncrypted ?? null,
           buyerPaymentDataEncrypted: c.buyerPaymentDataEncrypted ?? null,
@@ -718,11 +721,13 @@ export default function TradeExecution() {
         // if it says tradeCanceled, that's terminal.
 
         // Decrypt payment data if available
-        // As buyer: need seller's payment details (paymentDataEncrypted)
-        // As seller: need buyer's payment details (buyerPaymentDataEncrypted)
+        // paymentDataEncrypted = seller's PM; buyerPaymentDataEncrypted = buyer's PM
         const encryptedPM = isBuyer
           ? c.paymentDataEncrypted
           : c.buyerPaymentDataEncrypted;
+        const ownEncryptedPM = isBuyer
+          ? c.buyerPaymentDataEncrypted
+          : c.paymentDataEncrypted;
         const symKeyEnc = c.symmetricKeyEncrypted;
 
         // Decrypt symmetric key (needed for both PM data and chat)
@@ -739,49 +744,49 @@ export default function TradeExecution() {
           }
         }
 
-        // Decrypt payment data if available
-        if (encryptedPM) {
+        async function decryptPM(encrypted) {
+          if (!encrypted) return null;
           let pmJson = null;
-          // Try symmetric decryption first (standard trade flow)
           if (symKey) {
             try {
-              pmJson = await decryptSymmetric(encryptedPM, symKey);
+              pmJson = await decryptSymmetric(encrypted, symKey);
             } catch {}
           }
-          // Fallback to asymmetric decryption (mobile may encrypt with PGP public key)
           if (!pmJson && auth.pgpPrivKey) {
             try {
-              pmJson = await decryptPGPMessage(encryptedPM, auth.pgpPrivKey);
+              pmJson = await decryptPGPMessage(encrypted, auth.pgpPrivKey);
             } catch {}
           }
-          if (pmJson) {
-            try {
-              const pmData = JSON.parse(pmJson);
-              // Store the decrypted PM verbatim. PaymentDetailsCard renders
-              // every real field via getFieldMeta(), so we don't need to
-              // cherry-pick here — any field the mobile saved will show up.
-              // Ensure `type` (method id) is populated so the card can look up
-              // the display name.
-              setLiveContract((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      paymentDetails: {
-                        ...pmData,
-                        type: pmData.type ?? c.paymentMethod ?? "",
-                      },
-                    }
-                  : prev,
-              );
-            } catch (err) {
-              console.warn("[Trade] PM JSON parse failed:", err.message);
-              setLiveContract((prev) =>
-                prev ? { ...prev, paymentDetailsError: true } : prev,
-              );
-            }
+          if (!pmJson) return null;
+          try {
+            const pmData = JSON.parse(pmJson);
+            return { ...pmData, type: pmData.type ?? c.paymentMethod ?? "" };
+          } catch (err) {
+            console.warn("[Trade] PM JSON parse failed:", err.message);
+            return undefined; // undefined = parse error, null = no data
+          }
+        }
+
+        // Counterparty PM (existing behavior)
+        if (encryptedPM) {
+          const pmData = await decryptPM(encryptedPM);
+          if (pmData) {
+            setLiveContract((prev) =>
+              prev ? { ...prev, paymentDetails: pmData } : prev,
+            );
           } else {
             setLiveContract((prev) =>
               prev ? { ...prev, paymentDetailsError: true } : prev,
+            );
+          }
+        }
+
+        // User's own PM — best-effort; don't surface an error if it fails
+        if (ownEncryptedPM) {
+          const pmData = await decryptPM(ownEncryptedPM);
+          if (pmData) {
+            setLiveContract((prev) =>
+              prev ? { ...prev, ownPaymentDetails: pmData } : prev,
             );
           }
         }
@@ -969,13 +974,15 @@ export default function TradeExecution() {
   const elapsedStr =
     elapsedH > 0 ? `${elapsedH}h ${elapsedM}m` : `${elapsedM}m`;
 
-  // Deadline countdown
+  // Deadline countdown — hide when the deadline has already passed
   let deadlineStr = null;
   if (contract.paymentExpectedBy) {
     const left = contract.paymentExpectedBy - Date.now();
-    const h = Math.floor(left / 3600_000);
-    const m = Math.floor((left % 3600_000) / 60_000);
-    deadlineStr = `${h}h ${m}m`;
+    if (left > 0) {
+      const h = Math.floor(left / 3600_000);
+      const m = Math.floor((left % 3600_000) / 60_000);
+      deadlineStr = `${h}h ${m}m`;
+    }
   }
 
   // Premium color (perspective-aware)
@@ -1270,8 +1277,10 @@ export default function TradeExecution() {
                   <div className="panel-section-title">Actions</div>
 
                   {/* Payment deadline — inside actions */}
-                  {/* Payment deadline pill — not shown for seller when paymentRequired (has its own merged bar) */}
+                  {/* Payment deadline pill — hidden for seller when paymentRequired (has its own merged bar), and hidden in stalled states (cancellation, payment-too-late, escrow-funding-timeout) */}
                   {deadlineStr &&
+                    !scenario.paymentTimedOut &&
+                    !scenario.escrowFundingTimeLimitExpired &&
                     !(status === "paymentRequired" && role === "seller") &&
                     !(
                       status === "confirmPaymentRequired" && role === "seller"
@@ -1284,6 +1293,7 @@ export default function TradeExecution() {
                     status !== "tradeCanceled" &&
                     status !== "refundOrReviveRequired" &&
                     status !== "confirmCancelation" &&
+                    status !== "paymentTooLate" &&
                     status !== "fundEscrow" &&
                     status !== "createEscrow" &&
                     status !== "waitingForFunding" &&
@@ -1932,7 +1942,9 @@ export default function TradeExecution() {
                     "escrowWaitingForConfirmation",
                   ].includes(status) && (
                     <div className="panel-section">
-                      <div className="panel-section-title">Payment Details</div>
+                      <div className="panel-section-title">
+                        {role === "seller" ? "Buyer" : "Seller"} Payment Details
+                      </div>
                       {status === "paymentRequired" && role === "buyer" && (
                         <p
                           style={{
@@ -1956,7 +1968,7 @@ export default function TradeExecution() {
                         >
                           {role === "buyer"
                             ? "Make sure to include the reference with your payment"
-                            : "make sure the payment you'll receive comes from the provenance announced below."}
+                            : "make sure the payment you'll receive comes from the details announced below."}
                         </p>
                       )}
                       <PaymentDetailsCard
@@ -1964,6 +1976,21 @@ export default function TradeExecution() {
                         tradeId={liveContract?.id}
                         compact={status === "tradeCompleted"}
                       />
+                      {ownPaymentDetails && (
+                        <>
+                          <div
+                            className="panel-section-title"
+                            style={{ marginTop: 16 }}
+                          >
+                            Your Payment Details
+                          </div>
+                          <PaymentDetailsCard
+                            details={ownPaymentDetails}
+                            tradeId={liveContract?.id}
+                            compact={status === "tradeCompleted"}
+                          />
+                        </>
+                      )}
                     </div>
                   )}
 
