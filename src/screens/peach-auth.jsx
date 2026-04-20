@@ -318,6 +318,7 @@ export default function PeachAuth() {
 
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
   const [desktopShowCode, setDesktopShowCode] = useState(false);
+  const [mobileShowQR, setMobileShowQR] = useState(false);
 
   // Detect mobile
   useEffect(() => {
@@ -609,6 +610,75 @@ export default function PeachAuth() {
                         {connIdCopied ? "✓ Copied" : "Copy"}
                       </button>
                     </div>
+                  </div>
+                )}
+
+                {/* Show QR code (mobile collapsible) */}
+                {qrPayload && phase !== "success" && qrPhase !== "error" && (
+                  <div
+                    style={{ display: "flex", flexDirection: "column", gap: 8 }}
+                  >
+                    <button
+                      onClick={() => setMobileShowQR((s) => !s)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        padding: 0,
+                        width: "100%",
+                        textAlign: "left",
+                      }}
+                    >
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 12 12"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        style={{
+                          color: "var(--black-75)",
+                          transform: mobileShowQR
+                            ? "rotate(90deg)"
+                            : "rotate(0deg)",
+                          transition: "transform .2s",
+                        }}
+                      >
+                        <polyline points="4,2 8,6 4,10" />
+                      </svg>
+                      <span
+                        style={{
+                          fontSize: ".78rem",
+                          fontWeight: 700,
+                          color: "var(--black-75)",
+                          letterSpacing: ".02em",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        {mobileShowQR ? "Hide QR code" : "Show QR code"}
+                      </span>
+                    </button>
+
+                    {mobileShowQR && (
+                      <div
+                        style={{
+                          background: "#ffffff",
+                          borderRadius: 14,
+                          padding: 16,
+                          border: "1.5px solid var(--black-10)",
+                          display: "flex",
+                          justifyContent: "center",
+                          animation: "fadeIn .2s ease both",
+                        }}
+                      >
+                        <QRDisplay qrPayload={qrPayload} size={280} />
+                      </div>
+                    )}
                   </div>
                 )}
 
