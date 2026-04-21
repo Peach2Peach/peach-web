@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { SideNav, Topbar } from "../../components/Navbars.jsx";
+import { SideNav, Topbar, formatPeachId } from "../../components/Navbars.jsx";
 import { SatsAmount, IcoBtc } from "../../components/BitcoinAmount.jsx";
 import { useAuth } from "../../hooks/useAuth.js";
 import { useApi } from "../../hooks/useApi.js";
@@ -1010,11 +1010,31 @@ export default function PeachMarket() {
           <div className="popup-body">
             {/* Peer row */}
             <div className="popup-peer-row">
-              <div className="rep-avatar" style={{width:30,height:30,fontSize:".6rem"}}>
+              <div
+                className="rep-avatar"
+                style={{width:30,height:30,fontSize:".6rem", cursor: offer.userId && !isOwn ? "pointer" : "default"}}
+                onClick={(e) => { if (offer.userId && !isOwn) { e.stopPropagation(); closePopup(); navigate(`/user/${offer.userId}`); } }}
+                title={offer.userId && !isOwn ? "View user profile" : undefined}
+              >
                 {offer.id.toUpperCase().slice(0,2)}
                 {offer.online && <span className="online-dot"/>}
               </div>
               <div style={{flex:1}}>
+                {offer.userId && (
+                  <div
+                    onClick={(e) => { if (!isOwn) { e.stopPropagation(); closePopup(); navigate(`/user/${offer.userId}`); } }}
+                    style={{
+                      fontSize:".76rem", fontWeight:700, fontFamily:"monospace", letterSpacing:".04em",
+                      color: isOwn ? "var(--black-65)" : "var(--primary)",
+                      cursor: isOwn ? "default" : "pointer",
+                      textDecoration: isOwn ? "none" : "underline",
+                      marginBottom: 2,
+                    }}
+                    title={isOwn ? undefined : "View user profile"}
+                  >
+                    {formatPeachId(offer.userId).toLowerCase()}
+                  </div>
+                )}
                 <div style={{display:"flex",alignItems:"center",gap:5}}>
                   <PeachRating rep={offer.rep} size={16}/>
                   <span className="rep-trades">({offer.trades} trades)</span>

@@ -1169,7 +1169,12 @@ export default function TradeExecution() {
                 className={`split-left${mobileTab === "chat" ? " mobile-hidden" : ""}`}
               >
                 {/* Counterparty */}
-                <div className="counterparty-card">
+                <div
+                  className="counterparty-card"
+                  onClick={() => counterparty.id && counterparty.id !== "unknown" && navigate(`/user/${counterparty.id}`)}
+                  style={{ cursor: counterparty.id && counterparty.id !== "unknown" ? "pointer" : "default" }}
+                  title={counterparty.id && counterparty.id !== "unknown" ? "View user profile" : undefined}
+                >
                   <Avatar
                     initials={counterparty.initials}
                     color={counterparty.color}

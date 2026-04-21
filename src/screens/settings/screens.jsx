@@ -4,6 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { formatPeachId, PeachIcon } from "../../components/Navbars.jsx";
 import { useApi } from "../../hooks/useApi.js";
 import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
@@ -712,6 +713,7 @@ export function PayoutWalletSubScreen({ onBack }) {
 // ── BlockUsersSubScreen ──────────────────────────────────────────────────────
 
 export function BlockUsersSubScreen({ onBack }) {
+  const navigate = useNavigate();
   const { put, del, auth } = useApi();
   const [inputId, setInputId] = useState("");
   const [blocking, setBlocking] = useState(false);
@@ -847,8 +849,12 @@ export function BlockUsersSubScreen({ onBack }) {
                 padding:"12px 16px",
                 borderBottom: i < blockedUsers.length - 1 ? "1px solid var(--black-5)" : "none",
               }}>
-                <span style={{ fontSize:".8rem", fontWeight:700, letterSpacing:".04em",
-                  color:"var(--black)", fontFamily:"monospace" }}>
+                <span
+                  onClick={() => navigate(`/user/${user.id}`)}
+                  style={{ fontSize:".8rem", fontWeight:700, letterSpacing:".04em",
+                    color:"var(--primary)", fontFamily:"monospace", cursor:"pointer", textDecoration:"underline" }}
+                  title="View user profile"
+                >
                   {formatPeachId(user.id)}
                 </span>
                 <button onClick={() => handleUnblock(user.id)}

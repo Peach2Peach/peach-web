@@ -11,6 +11,7 @@ import TradesDashboard from './screens/trades-dashboard/index.jsx'
 import TradeExecution from './screens/trade-execution/index.jsx'
 import SettingsScreen from './screens/settings/index.jsx'
 import PeachPaymentMethods from './screens/payment-methods/index.jsx'
+import OtherUserPage from './screens/other-user/index.jsx'
 
 class ErrorBoundary extends Component {
   constructor(props) {
@@ -75,6 +76,7 @@ export default function App() {
           <Route path="/trade/:id" element={<TradeExecution />} />
           <Route path="/settings" element={<SettingsScreen />} />
           <Route path="/payment-methods" element={<PeachPaymentMethods />} />
+          <Route path="/user/:userId" element={<OtherUserPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </HashRouter>
