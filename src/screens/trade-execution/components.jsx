@@ -2495,8 +2495,11 @@ export function ActionPanel({
 }) {
   const { tradeStatus: status, role } = scenario;
   const [showConfirm, setShowConfirm] = useState(false);
-  const [buyerRating, setBuyerRating] = useState(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  // Bumped when the seller cancels the release-bitcoin modal, so the
+  // "I've received the payment" slider remounts and returns to its
+  // initial (un-slid) state.
+  const [confirmSliderKey, setConfirmSliderKey] = useState(0);
 
   const Btn = ({ label, bg, color, onClick }) => (
     <button
@@ -2572,34 +2575,19 @@ export function ActionPanel({
             <div
               style={{ fontWeight: 800, fontSize: "1.05rem", marginBottom: 8 }}
             >
-              Please rate the buyer in order to release the bitcoin
+              Confirm you received the payment
             </div>
             <div
               style={{
                 fontSize: ".88rem",
                 color: "var(--black-65)",
                 lineHeight: 1.6,
-                marginBottom: 20,
+                marginBottom: 24,
               }}
             >
               Only confirm if you have actually received the fiat payment in
-              your account.
-            </div>
-            <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
-              <button
-                className={`rating-btn${buyerRating === "negative" ? " rating-selected-bad" : ""}`}
-                onClick={() => setBuyerRating("negative")}
-              >
-                <IconThumbDown />
-                <span>Negative</span>
-              </button>
-              <button
-                className={`rating-btn${buyerRating === "positive" ? " rating-selected-good" : ""}`}
-                onClick={() => setBuyerRating("positive")}
-              >
-                <IconThumbUp />
-                <span>Positive</span>
-              </button>
+              your account. You'll be able to rate the buyer once the bitcoin
+              has been released.
             </div>
             <div style={{ display: "flex", gap: 10 }}>
               <button
@@ -2617,32 +2605,28 @@ export function ActionPanel({
                 }}
                 onClick={() => {
                   setShowConfirm(false);
-                  setBuyerRating(null);
+                  setConfirmSliderKey((k) => k + 1);
                 }}
               >
                 Cancel
               </button>
               <button
-                disabled={!buyerRating}
                 style={{
                   flex: 1,
                   border: "none",
-                  background: buyerRating
-                    ? "var(--success)"
-                    : "var(--black-25)",
+                  background: "var(--success)",
                   borderRadius: 999,
                   fontFamily: "Baloo 2, cursive",
                   fontWeight: 800,
                   fontSize: ".87rem",
                   color: "white",
                   padding: "10px",
-                  cursor: buyerRating ? "pointer" : "not-allowed",
+                  cursor: "pointer",
                   transition: "background .15s ease",
                 }}
                 onClick={() => {
                   setShowConfirm(false);
-                  onAction("release_bitcoin", buyerRating);
-                  setBuyerRating(null);
+                  onAction("release_bitcoin");
                 }}
               >
                 Release Bitcoin
@@ -2855,6 +2839,7 @@ export function ActionPanel({
                 <PendingBtn label="Release pending in mobile app" />
               ) : (
                 <SlideToConfirm
+                  key={confirmSliderKey}
                   label="I've received the payment"
                   onConfirm={() => setShowConfirm(true)}
                 />

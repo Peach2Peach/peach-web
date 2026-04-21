@@ -1860,13 +1860,8 @@ export default function TradeExecution() {
                           } else if (action === "release_bitcoin") {
                             setActionError(null);
                             try {
-                              // NOTE: { buyerRating } is silently ignored by the server and results in a
-                              // negative rating on the contract regardless of value. Held until backend
-                              // confirms the correct shape (or whether rating should be a separate call).
-                              const buyerRating = arg; // "positive" or "negative"
                               const res = await post(
                                 `/contract/${contract.id}/payment/createPaymentConfirmedPendingAction`,
-                                { buyerRating },
                               );
                               if (!res.ok) {
                                 const err = await res.json().catch(() => null);
@@ -2065,8 +2060,8 @@ export default function TradeExecution() {
                     </div>
                   )}
 
-                {/* Rating panel — buyer only (seller rates during release modal) */}
-                {status === "rateUser" && role === "buyer" && (
+                {/* Rating panel — both roles rate after bitcoin is released */}
+                {status === "rateUser" && (
                   <div className="panel-section">
                     <RatingPanel
                       counterparty={counterparty}
