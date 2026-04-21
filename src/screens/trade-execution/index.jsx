@@ -1288,8 +1288,10 @@ export default function TradeExecution() {
                 <div className="panel-section">
                   <div className="panel-section-title">Actions</div>
 
-                  {/* Funding deadline pill — only while waiting for seller to fund escrow */}
-                  {status === "waitingForFunding" && (
+                  {/* Funding deadline pill — while seller still needs to fund (or tx is in mempool) */}
+                  {(status === "fundEscrow" ||
+                    status === "createEscrow" ||
+                    status === "waitingForFunding") && (
                     <FundingDeadlinePill
                       deadline={contract.fundingExpectedBy}
                       role={role}
@@ -2122,7 +2124,8 @@ export default function TradeExecution() {
                     status === "waitingForFunding" ||
                     status === "fundingAmountDifferent" ||
                     status === "wrongAmountFundedOnContract" ||
-                    status === "wrongAmountFundedOnContractRefundWaiting"
+                    status === "wrongAmountFundedOnContractRefundWaiting" ||
+                    status === "escrowWaitingForConfirmation"
                   }
                   status={status}
                   hasMore={chatHasMore}

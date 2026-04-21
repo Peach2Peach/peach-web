@@ -251,9 +251,12 @@ export default function PeachMarket() {
     }
   }
 
-  // Find which of the user's PMs match the offer's methods
-  function matchingUserPMs(offer) {
-    return userPMs.filter(pm => offer.methods.includes(pm.type));
+  // Does a user's PM have a valid combination for a given currency on this offer?
+  // Requires BOTH: the offer accepts this PM type for that currency AND the user
+  // has configured that currency on their PM.
+  function pmWorksForCurrency(offer, pm, currency) {
+    const methods = offer._raw?.meansOfPayment?.[currency] ?? [];
+    return methods.includes(pm.type) && (pm.currencies ?? []).includes(currency);
   }
 
   // Resolve the offer owner's PGP public keys.
@@ -933,8 +936,18 @@ export default function PeachMarket() {
     const premCls = offer.premium === 0 ? "prem-zero" : isSellTab
       ? (offer.premium > 0 ? "prem-good" : "prem-bad")
       : (offer.premium < 0 ? "prem-good" : "prem-bad");
-    const matching = matchingUserPMs(offer);
-    const hasMissingPM = matching.length === 0;
+    // Compute valid PM/currency combinations: a row is valid iff the user's PM
+    // supports that currency AND the offer accepts the PM for that currency.
+    const validByPM = userPMs.map(pm => ({
+      pm,
+      currencies: offer.currencies.filter(c => pmWorksForCurrency(offer, pm, c)),
+    }));
+    const hasMissingPM = !validByPM.some(v => v.currencies.length > 0);
+    // PM list to render: when a currency is selected, narrow to PMs valid for it;
+    // otherwise show every PM that's valid for at least one offer currency.
+    const visiblePMs = popupCurrency
+      ? validByPM.filter(v => v.currencies.includes(popupCurrency)).map(v => v.pm)
+      : validByPM.filter(v => v.currencies.length > 0).map(v => v.pm);
 
     // ── "Trade Requested" success animation ──
     if (requestAnim) {
@@ -1135,19 +1148,41 @@ export default function PeachMarket() {
                       </button>
                     </div>
                   </div>
+                ) : visiblePMs.length === 0 ? (
+                  <div className="popup-pm-warning">
+                    <span style={{fontSize:"1rem",flexShrink:0}}>⚠️</span>
+                    <div>
+                      <div style={{fontWeight:700,fontSize:".82rem",color:"var(--black)",marginBottom:2}}>
+                        No payment method for {popupCurrency}
+                      </div>
+                      <div style={{fontSize:".76rem",color:"var(--black-65)",lineHeight:1.5}}>
+                        None of your configured payment methods support {popupCurrency} for this offer.
+                      </div>
+                    </div>
+                  </div>
                 ) : (
                   <div className="popup-pm-list">
-                    {matching.map(pm => {
+                    {visiblePMs.map(pm => {
                       const sel = selectedPM === pm.id;
                       const detailStr = pm.type === "SEPA"
                         ? `${pm.details.beneficiary} · ${pm.details.iban?.slice(0,8)}…`
                         : pm.type === "Revolut"
                           ? pm.details.userName
                           : pm.details.email || pm.details.userName || "—";
+                      const validChips = pm.currencies.filter(c => pmWorksForCurrency(offer, pm, c));
                       return (
                         <button key={pm.id}
                           className={`popup-pm-option${sel ? " selected" : ""}`}
-                          onClick={() => setSelectedPM(pm.id)}>
+                          onClick={() => {
+                            if (sel) { setSelectedPM(null); return; }
+                            setSelectedPM(pm.id);
+                            const currencyValid = popupCurrency && pmWorksForCurrency(offer, pm, popupCurrency);
+                            if (!currencyValid) {
+                              // Auto-pick the first offer currency this PM supports
+                              const firstValid = offer.currencies.find(c => pmWorksForCurrency(offer, pm, c)) ?? null;
+                              setPopupCurrency(firstValid);
+                            }
+                          }}>
                           <div className={`popup-pm-radio${sel ? " checked" : ""}`}>
                             {sel && <div className="popup-pm-radio-dot"/>}
                           </div>
@@ -1159,7 +1194,7 @@ export default function PeachMarket() {
                             </div>
                           </div>
                           <span style={{display:"flex",gap:3,flexShrink:0}}>
-                            {pm.currencies.filter(c => offer.currencies.includes(c)).map(c =>
+                            {validChips.map(c =>
                               <span key={c} className="currency-chip" style={{fontSize:".6rem"}}>{c}</span>
                             )}
                           </span>
@@ -1179,7 +1214,13 @@ export default function PeachMarket() {
                       {offer.currencies.map(c => (
                         <button key={c}
                           className={`popup-cur-pill${popupCurrency === c ? " selected" : ""}`}
-                          onClick={() => setPopupCurrency(c)}>
+                          onClick={() => {
+                            if (popupCurrency === c) { setPopupCurrency(null); return; }
+                            setPopupCurrency(c);
+                            // Clear PM if the new currency makes it invalid
+                            const pm = userPMs.find(p => p.id === selectedPM);
+                            if (pm && !pmWorksForCurrency(offer, pm, c)) setSelectedPM(null);
+                          }}>
                           {c}
                         </button>
                       ))}

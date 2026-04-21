@@ -4,6 +4,7 @@
 //           and by the main component's fetch logic.
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { SatsAmount, IcoBtc } from "../../components/BitcoinAmount.jsx";
 import { relTime as relativeTime, formatTradeId } from "../../utils/format.js";
 import { AVATAR_COLORS } from "../../data/constants.js";
@@ -107,6 +108,7 @@ export function transformMatch(apiMatch) {
     offerId: apiMatch.offerId,
     requestedAt: new Date(apiMatch.creationDate ?? Date.now()).getTime(),
     user: {
+      peachId,
       name: displayName,
       initials,
       color,
@@ -161,6 +163,7 @@ export function transformTradeRequest(tr, offer, userProfile) {
     offerId: String(tr.id), // trade request ID
     requestedAt: new Date(tr.creationDate ?? Date.now()).getTime(),
     user: {
+      peachId,
       name: displayName,
       initials,
       color,
@@ -224,6 +227,10 @@ export default function MatchesPopup({
 }) {
   const auth = window.__PEACH_AUTH__ ?? null;
   const isBuy = trade.direction === "buy";
+  const navigate = useNavigate();
+  const goToUser = (peachId) => {
+    if (peachId && peachId !== "unknown") navigate(`/user/${peachId}`);
+  };
 
   // ── Chat state (local to popup) ──
   const [chatMatch, setChatMatch] = useState(null);
@@ -696,9 +703,22 @@ export default function MatchesPopup({
                 color={m.user.color}
                 size={56}
               />
-              <div style={{ fontWeight: 800, fontSize: "1rem" }}>
+              <button
+                type="button"
+                onClick={() => goToUser(m.user.peachId)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  padding: 0,
+                  cursor: "pointer",
+                  color: "var(--primary)",
+                  fontWeight: 800,
+                  fontSize: "1rem",
+                  textDecoration: "underline",
+                }}
+              >
                 {m.user.name}
-              </div>
+              </button>
               <PeachRating rep={m.user.rep} size={20} />
               <span style={{ fontSize: ".82rem", color: "var(--black-65)" }}>
                 {m.user.trades} trades
@@ -951,9 +971,25 @@ export default function MatchesPopup({
                         flexWrap: "wrap",
                       }}
                     >
-                      <span style={{ fontWeight: 700, fontSize: ".88rem" }}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          goToUser(m.user.peachId);
+                        }}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          padding: 0,
+                          cursor: "pointer",
+                          color: "var(--primary)",
+                          fontWeight: 700,
+                          fontSize: ".88rem",
+                          textDecoration: "underline",
+                        }}
+                      >
                         {m.user.name}
-                      </span>
+                      </button>
                       <PeachRating rep={m.user.rep} />
                       <span
                         style={{
@@ -994,6 +1030,27 @@ export default function MatchesPopup({
                         {m.user.badges.includes("fast") && (
                           <Badge label="fast" icon="⚡" />
                         )}
+                      </div>
+                    )}
+                    {(m.methods?.length > 0 || m.currencies?.length > 0) && (
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 4,
+                          flexWrap: "wrap",
+                          marginTop: 4,
+                        }}
+                      >
+                        {m.methods.map((pm) => (
+                          <span key={pm} className="tag tag-method">
+                            {pm}
+                          </span>
+                        ))}
+                        {m.currencies.map((c) => (
+                          <span key={c} className="tag tag-currency">
+                            {c}
+                          </span>
+                        ))}
                       </div>
                     )}
                   </div>

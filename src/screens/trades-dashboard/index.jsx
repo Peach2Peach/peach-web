@@ -655,6 +655,14 @@ export default function TradesDashboard() {
   // ── NORMALIZE HELPERS (stable across renders — only depend on auth.peachId) ──
   const peachId = auth?.peachId;
 
+  // Instant trade is enabled iff at least one paymentData entry carries an
+  // `encrypted` blob (the counterparty-readable copy). `selfEncrypted` alone
+  // means the owner can read it back but no counterparty key was attached.
+  function hasInstantTradeEnabled(paymentData) {
+    if (!paymentData || typeof paymentData !== "object") return false;
+    return Object.values(paymentData).some((d) => d && d.encrypted);
+  }
+
   function normalizeOffer(o) {
     // Direction: prefer _direction tag (set from v069 endpoint), fall back to type field
     const rawType = (o.type ?? o.offerType ?? "").toLowerCase();
@@ -670,12 +678,34 @@ export default function TradesDashboard() {
         }
       }
     }
-    const firstCurrency = Object.keys(pricesObj)[0] ?? null;
-    const fiatAmount = firstCurrency ? String(pricesObj[firstCurrency]) : "—";
-    const currency = firstCurrency ?? "";
     const mop = o.meansOfPayment ?? {};
     const offerCurrencies = Object.keys(mop);
     const offerMethods = [...new Set(Object.values(mop).flat())];
+    const amtForPrice =
+      o.amountSats ?? (Array.isArray(o.amount) ? o.amount[0] : (o.amount ?? 0));
+    // Buy offers from v069 don't reliably expose priceIn{offerCurrency} — compute
+    // fiat locally from amountSats × BTC price × (1 + premium) for the offer's
+    // own currencies. Falls back to whatever v069 did return if allPrices is absent.
+    if (isBuy && offerCurrencies.length > 0) {
+      const factor = 1 + (o.premium ?? 0) / 100;
+      const computed = {};
+      for (const cur of offerCurrencies) {
+        const btc = allPrices?.[cur];
+        if (btc != null && amtForPrice) {
+          computed[cur] = (amtForPrice / 1e8) * btc * factor;
+        } else if (pricesObj[cur] != null) {
+          computed[cur] = pricesObj[cur];
+        }
+      }
+      pricesObj = computed;
+    }
+    const firstCurrency =
+      (isBuy ? offerCurrencies[0] : null) ?? Object.keys(pricesObj)[0] ?? null;
+    const fiatAmount =
+      firstCurrency && pricesObj[firstCurrency] != null
+        ? String(pricesObj[firstCurrency])
+        : "—";
+    const currency = firstCurrency ?? "";
     const amt =
       o.amountSats ?? (Array.isArray(o.amount) ? o.amount[0] : (o.amount ?? 0));
     const status = o.tradeStatusNew ?? o.tradeStatus ?? o.status ?? "unknown";
@@ -697,6 +727,11 @@ export default function TradesDashboard() {
         offerCurrencies.length > 0 ? offerCurrencies : (o.currencies ?? []),
       paymentData: o.paymentData ?? null,
       experienceLevel: o.experienceLevelCriteria ?? null,
+      // Sell offers: /v1/offers/summary returns `instantTradeEnabled` directly.
+      // Buy offers: derive from paymentData (v069 endpoint doesn't set the flag).
+      instantTrade: isBuy
+        ? hasInstantTradeEnabled(o.paymentData)
+        : !!o.instantTradeEnabled,
     };
   }
 
@@ -780,36 +815,14 @@ export default function TradesDashboard() {
             ownOffersRes.ok ? ownOffersRes.json() : null,
           ]);
 
-        // ── Build liveItems (Active + History tabs) from v1 summaries ──
         const offersArr = Array.isArray(offersData)
           ? offersData
           : (offersData?.offers ?? []);
         const contractsArr = Array.isArray(contractsData)
           ? contractsData
           : (contractsData?.contracts ?? []);
-        const items = [
-          ...offersArr.map(normalizeOffer),
-          ...contractsArr.map(normalizeContract),
-        ];
-        // Cache revive/refund state per contract — trade execution page reads this
-        // since /contract/:id doesn't return these fields
-        contractsArr.forEach((c) => {
-          if (c.refunded || c.newTradeId) {
-            try {
-              sessionStorage.setItem(
-                `contract-meta:${c.id}`,
-                JSON.stringify({
-                  refunded: !!c.refunded,
-                  newTradeId: c.newTradeId ?? null,
-                }),
-              );
-            } catch {}
-          }
-        });
-        setCache("trades-items", items);
-        setLiveItems(items);
 
-        // ── Build pending (Pending tab) from v069 buy offers + /user/{id}/offers ──
+        // ── Merge v1 + v069 offer data (used for both liveItems and pending) ──
         const v069BuyArr = Array.isArray(v069BuyData)
           ? v069BuyData
           : (v069BuyData?.offers ?? []);
@@ -838,34 +851,50 @@ export default function TradesDashboard() {
           }
         }
 
-        // Cross-reference sell offer status from v1 summary (since /user/{id}/offers lacks tradeStatus)
-        const v1StatusById = new Map(
-          offersArr.map((o) => [
-            o.id,
-            o.tradeStatusNew ?? o.tradeStatus ?? o.status,
-          ]),
-        );
-        ownSellArr.forEach((o) => {
-          if (!o.tradeStatus && !o.tradeStatusNew) {
-            o.tradeStatus = v1StatusById.get(o.id) ?? "searchingForPeer";
-          }
-        });
-
         // Also pull own buy offers from the /user/{id}/offers response as backup
         const ownBuyBackup = ownOffersData?.buyOffers ?? [];
 
-        // Merge and deduplicate by ID, preferring v069 buyOffer data (has full tradeStatus)
+        // Merge and deduplicate by ID. Sell offers come from /v1/offers/summary
+        // (type="ask") — that endpoint carries the owner's full paymentData with
+        // the `encrypted` blob that signals instant trade. /user/{id}/offers lacks it.
         const byId = new Map();
-        offersArr.forEach((o) => byId.set(o.id, o)); // v1 base layer
+        offersArr.forEach((o) => byId.set(o.id, o)); // v1 base layer — canonical for own sells
         ownBuyBackup.forEach((o) => {
           o._direction = "buy";
+          const existing = byId.get(o.id);
+          if (existing?.prices && !o.prices) o.prices = existing.prices;
           byId.set(o.id, o);
-        }); // backup buys
-        ownSellArr.forEach((o) => byId.set(o.id, o)); // sell offers (with cross-ref status)
-        v069BuyArr.forEach((o) => byId.set(o.id, o)); // v069 buy offers win (best data)
+        });
+        v069BuyArr.forEach((o) => {
+          // v069 has full tradeStatus but may omit `prices` — carry v1's over so
+          // buy-offer rows can display fiat without waiting for /market/prices.
+          const existing = byId.get(o.id);
+          if (existing?.prices && !o.prices) o.prices = existing.prices;
+          byId.set(o.id, o);
+        });
 
         const all = [...byId.values()].map(normalizeOffer);
         const pending = all.filter((i) => PENDING_STATUSES.has(i.tradeStatus));
+
+        // ── Build liveItems (Active + History tabs) from merged offers + contracts ──
+        const items = [...all, ...contractsArr.map(normalizeContract)];
+        // Cache revive/refund state per contract — trade execution page reads this
+        // since /contract/:id doesn't return these fields
+        contractsArr.forEach((c) => {
+          if (c.refunded || c.newTradeId) {
+            try {
+              sessionStorage.setItem(
+                `contract-meta:${c.id}`,
+                JSON.stringify({
+                  refunded: !!c.refunded,
+                  newTradeId: c.newTradeId ?? null,
+                }),
+              );
+            } catch {}
+          }
+        });
+        setCache("trades-items", items);
+        setLiveItems(items);
 
         // Merge with existing enrichment data (sent requests, matches) from slow tier
         setLivePending((prev) => {
@@ -1149,12 +1178,42 @@ export default function TradesDashboard() {
   const rawItems = liveItems ?? [];
   const allItems = useMemo(
     () =>
-      rawItems.map((i) =>
-        i.kind === "contract" && liveUnread[i.id] != null
-          ? { ...i, unread: liveUnread[i.id] }
-          : i,
-      ),
-    [rawItems, liveUnread],
+      rawItems.map((i) => {
+        let out = i;
+        if (i.kind === "contract" && liveUnread[i.id] != null) {
+          out = { ...out, unread: liveUnread[i.id] };
+        }
+        // Buy-offer fiat recompute: normalizeOffer may have run before allPrices
+        // loaded, leaving fiatAmount empty. Fill it in now using live BTC prices.
+        if (
+          out.kind === "offer" &&
+          out.direction === "buy" &&
+          allPrices &&
+          out.amount
+        ) {
+          const factor = 1 + (out.premium ?? 0) / 100;
+          const computed = {};
+          for (const cur of out.currencies ?? []) {
+            const btc = allPrices[cur];
+            if (btc != null) computed[cur] = (out.amount / 1e8) * btc * factor;
+          }
+          // Prefer the offer's own first currency over any stale cached `currency`
+          // (pre-fix caches stored the topbar currency, e.g. "CHF", which won't
+          // appear in `computed` and would silently skip the update).
+          const firstCur =
+            out.currencies?.[0] || Object.keys(computed)[0] || null;
+          if (firstCur && computed[firstCur] != null) {
+            out = {
+              ...out,
+              prices: computed,
+              currency: firstCur,
+              fiatAmount: String(computed[firstCur]),
+            };
+          }
+        }
+        return out;
+      }),
+    [rawItems, liveUnread, allPrices],
   );
   const activeItems = allItems.filter(
     (i) =>
@@ -1167,7 +1226,33 @@ export default function TradesDashboard() {
   );
 
   const pendingItems = livePending ?? [];
-  const ownPendingItems = pendingItems.filter((i) => i.kind !== "sentRequest");
+  const ownPendingItems = pendingItems
+    .filter((i) => i.kind !== "sentRequest")
+    .map((i) => {
+      // Same buy-offer fiat recompute as allItems — pending tab bypasses that useMemo.
+      if (
+        i.kind !== "offer" ||
+        i.direction !== "buy" ||
+        !allPrices ||
+        !i.amount
+      ) {
+        return i;
+      }
+      const factor = 1 + (i.premium ?? 0) / 100;
+      const computed = {};
+      for (const cur of i.currencies ?? []) {
+        const btc = allPrices[cur];
+        if (btc != null) computed[cur] = (i.amount / 1e8) * btc * factor;
+      }
+      const firstCur = i.currencies?.[0] || Object.keys(computed)[0] || null;
+      if (!firstCur || computed[firstCur] == null) return i;
+      return {
+        ...i,
+        prices: computed,
+        currency: firstCur,
+        fiatAmount: String(computed[firstCur]),
+      };
+    });
   const sentPendingItems = pendingItems
     .filter((i) => i.kind === "sentRequest")
     .map((r) => {
@@ -2557,6 +2642,21 @@ export default function TradesDashboard() {
                         </span>
                       </div>
                     )}
+                  {/* Live fiat price — buy offers (computed locally in allItems useMemo) */}
+                  {isBuy &&
+                    o.prices &&
+                    Object.keys(o.prices).length > 0 && (
+                      <div className="offer-detail-row">
+                        <span className="offer-detail-label">Live price</span>
+                        <span className="offer-detail-value">
+                          {Object.entries(o.prices).map(([cur, val]) => (
+                            <span key={cur} style={{ marginRight: 8 }}>
+                              {cur} {Number(val).toFixed(2)}
+                            </span>
+                          ))}
+                        </span>
+                      </div>
+                    )}
                   <div className="offer-detail-row">
                     <span className="offer-detail-label">Created</span>
                     <span className="offer-detail-value">
@@ -2565,18 +2665,28 @@ export default function TradesDashboard() {
                         : "—"}
                     </span>
                   </div>
-                  {o.experienceLevel && (
-                    <div className="offer-detail-row">
-                      <span className="offer-detail-label">
-                        Experience filter
-                      </span>
-                      <span className="offer-detail-value">
-                        {o.experienceLevel === "experiencedUsersOnly"
-                          ? "👤 Experienced users only"
-                          : "🆕 New users only"}
-                      </span>
-                    </div>
-                  )}
+                  <div className="offer-detail-row">
+                    <span className="offer-detail-label">Instant trade</span>
+                    <span className="offer-detail-value">
+                      {(offerDetails
+                        ? hasInstantTradeEnabled(offerDetails.paymentData)
+                        : o.instantTrade)
+                        ? "⚡ Enabled"
+                        : "Disabled"}
+                    </span>
+                  </div>
+                  <div className="offer-detail-row">
+                    <span className="offer-detail-label">
+                      Experience filter
+                    </span>
+                    <span className="offer-detail-value">
+                      {o.experienceLevel === "experiencedUsersOnly"
+                        ? "👤 Experienced users only"
+                        : o.experienceLevel === "newUsersOnly"
+                          ? "🆕 New users only"
+                          : "None"}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Escrow address + QR — sell offers in fundEscrow status */}
