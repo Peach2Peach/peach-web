@@ -32,7 +32,7 @@ function decodeJwtPayload(token) {
 }
 
 /** True if the token's `exp` claim is in the past (with grace window). */
-function isTokenExpired(token, graceSeconds = 30) {
+export function isTokenExpired(token, graceSeconds = 30) {
   const payload = decodeJwtPayload(token);
   if (!payload?.exp) return true;
   return (Date.now() / 1000) >= (payload.exp - graceSeconds);

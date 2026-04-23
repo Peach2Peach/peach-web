@@ -2,7 +2,7 @@ import { Component, useState, useEffect } from 'react'
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import SessionExpiredModal from './components/SessionExpiredModal.jsx'
 import { clearCache } from './hooks/useApi.js'
-import { resetSessionExpiredFlag } from './utils/sessionGuard.js'
+import { resetSessionExpiredFlag, isTokenExpired } from './utils/sessionGuard.js'
 import PeachAuth from './screens/peach-auth.jsx'
 import PeachHome from './screens/peach-home.jsx'
 import PeachMarket from './screens/market-view/index.jsx'
@@ -45,6 +45,14 @@ class ErrorBoundary extends Component {
   }
 }
 
+function ProtectedRoute({ children }) {
+  const token = window.__PEACH_AUTH__?.token;
+  if (!token || isTokenExpired(token)) {
+    return <Navigate to="/" replace />;
+  }
+  return children;
+}
+
 export default function App() {
   const [sessionExpired, setSessionExpired] = useState(false);
 
@@ -69,14 +77,14 @@ export default function App() {
       <HashRouter>
         <Routes>
           <Route path="/" element={<PeachAuth />} />
-          <Route path="/home" element={<PeachHome />} />
-          <Route path="/market" element={<PeachMarket />} />
-          <Route path="/offer/new" element={<OfferCreation />} />
-          <Route path="/trades" element={<TradesDashboard />} />
-          <Route path="/trade/:id" element={<TradeExecution />} />
-          <Route path="/settings" element={<SettingsScreen />} />
-          <Route path="/payment-methods" element={<PeachPaymentMethods />} />
-          <Route path="/user/:userId" element={<OtherUserPage />} />
+          <Route path="/home" element={<ProtectedRoute><PeachHome /></ProtectedRoute>} />
+          <Route path="/market" element={<ProtectedRoute><PeachMarket /></ProtectedRoute>} />
+          <Route path="/offer/new" element={<ProtectedRoute><OfferCreation /></ProtectedRoute>} />
+          <Route path="/trades" element={<ProtectedRoute><TradesDashboard /></ProtectedRoute>} />
+          <Route path="/trade/:id" element={<ProtectedRoute><TradeExecution /></ProtectedRoute>} />
+          <Route path="/settings" element={<ProtectedRoute><SettingsScreen /></ProtectedRoute>} />
+          <Route path="/payment-methods" element={<ProtectedRoute><PeachPaymentMethods /></ProtectedRoute>} />
+          <Route path="/user/:userId" element={<ProtectedRoute><OtherUserPage /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </HashRouter>
