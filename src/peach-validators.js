@@ -237,7 +237,7 @@ export function validateBtcAddress(addr) {
 
 
 /**
- * IBAN — format check only (no mod-97 checksum)
+ * IBAN — format check + mod-97 checksum (matches mobile's `IBAN.isValid()`).
  *
  * Rules:
  * - 2-letter country code (uppercase)
@@ -245,8 +245,27 @@ export function validateBtcAddress(addr) {
  * - Up to 30 alphanumeric characters
  * - Total length: 15–34 (shortest real IBAN is Norway at 15)
  * - Spaces are stripped before validation
+ * - Mod-97 of the rearranged numeric form must equal 1 (ISO 13616)
  */
 const IBAN_RE = /^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/;
+
+function ibanMod97(iban) {
+  // Move the first 4 characters to the end, then replace each letter with two
+  // digits (A=10, …, Z=35). Reduce mod 97 piecewise so we don't overflow.
+  const rearranged = iban.slice(4) + iban.slice(0, 4);
+  let remainder = 0;
+  for (let i = 0; i < rearranged.length; i++) {
+    const code = rearranged.charCodeAt(i);
+    if (code >= 48 && code <= 57) {
+      remainder = (remainder * 10 + (code - 48)) % 97;
+    } else if (code >= 65 && code <= 90) {
+      remainder = (remainder * 100 + (code - 55)) % 97;
+    } else {
+      return false;
+    }
+  }
+  return remainder === 1;
+}
 
 export function validateIBAN(raw) {
   if (!raw || !raw.trim()) return { valid: false, error: "IBAN is required" };
@@ -254,7 +273,155 @@ export function validateIBAN(raw) {
 
   if (clean.length < 15 || clean.length > 34) return { valid: false, error: "IBAN must be 15–34 characters" };
   if (!IBAN_RE.test(clean))                    return { valid: false, error: "Invalid IBAN format (expected: CC00 + alphanumeric)" };
+  if (!ibanMod97(clean))                       return { valid: false, error: "Invalid IBAN (checksum failed)" };
 
+  return { valid: true, error: null };
+}
+
+
+/**
+ * BIC / SWIFT code — 8 or 11 chars (4 letters + 2 letters + 2 alphanumeric +
+ * optional 3 alphanumeric branch suffix). Spaces inside are tolerated, mirroring
+ * the mobile formatter that groups as XXXX XX XX XXX.
+ */
+const BIC_RE = /^[A-Z]{4}\s*[A-Z]{2}\s*[A-Z0-9]{2}\s*([A-Z0-9]{3})?$/;
+
+export function validateBIC(raw) {
+  if (!raw || !raw.trim()) return { valid: false, error: "BIC is required" };
+  if (!BIC_RE.test(raw.trim().toUpperCase())) return { valid: false, error: "Invalid BIC" };
+  return { valid: true, error: null };
+}
+
+
+/**
+ * Email — RFC-ish regex, same as the mobile app.
+ */
+// eslint-disable-next-line prefer-named-capture-group
+const EMAIL_RE = /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
+
+export function validateEmail(raw) {
+  if (!raw || !raw.trim()) return { valid: false, error: "Email is required" };
+  if (!EMAIL_RE.test(raw.trim())) return { valid: false, error: "Invalid email address" };
+  return { valid: true, error: null };
+}
+
+
+/**
+ * UK sort code — exactly 6 digits (dashes/spaces stripped first).
+ */
+export function validateUKSortCode(raw) {
+  if (!raw || !raw.trim()) return { valid: false, error: "Sort code is required" };
+  const clean = raw.replace(/[\s-]/g, "");
+  if (!/^\d{6}$/.test(clean)) return { valid: false, error: "Sort code must be 6 digits" };
+  return { valid: true, error: null };
+}
+
+
+/**
+ * UK bank account number — 6 to 10 digits (dashes/spaces stripped first).
+ */
+export function validateUKBankAccount(raw) {
+  if (!raw || !raw.trim()) return { valid: false, error: "Account number is required" };
+  const clean = raw.replace(/[\s-]/g, "");
+  if (!/^\d{6,10}$/.test(clean)) return { valid: false, error: "UK account number must be 6–10 digits" };
+  return { valid: true, error: null };
+}
+
+
+/**
+ * Generic account number — 9 to 28 digits (dashes/spaces stripped first).
+ * Used for IBAN-less national transfers (Bulgaria, Czech Republic, Hungary, …).
+ */
+export function validateAccountNumber(raw) {
+  if (!raw || !raw.trim()) return { valid: false, error: "Account number is required" };
+  const clean = raw.replace(/[\s-]/g, "");
+  if (!/^\d{9,28}$/.test(clean)) return { valid: false, error: "Account number must be 9–28 digits" };
+  return { valid: true, error: null };
+}
+
+
+/**
+ * Username — `@` followed by alphanumerics/underscores, must start and end
+ * with alphanumeric, max 21 chars total. Lowercased before testing so the
+ * regex is case-insensitive in effect.
+ */
+const USERNAME_RE = /^@[a-z0-9](?:[a-z0-9_]*[a-z0-9])?$/i;
+const MAX_USERNAME_LENGTH = 21;
+
+export function validateUsername(raw) {
+  if (!raw || !raw.trim()) return { valid: false, error: "Username is required" };
+  const v = raw.trim();
+  if (v === "@") return { valid: false, error: "Username cannot be empty" };
+  if (v.length > MAX_USERNAME_LENGTH) return { valid: false, error: `Username must be at most ${MAX_USERNAME_LENGTH} characters` };
+  if (!USERNAME_RE.test(v)) return { valid: false, error: "Username must start with @ and contain only letters, numbers or underscores" };
+  return { valid: true, error: null };
+}
+
+
+/**
+ * ADV Cash wallet ID — single letter U/E/G followed by 12 letters/digits.
+ * Spaces inside the input are stripped to match the mobile formatter.
+ */
+const ADVCASH_RE = /^[ueg][a-z0-9]{12}$/i;
+
+export function validateAdvcashWallet(raw) {
+  if (!raw || !raw.trim()) return { valid: false, error: "Wallet ID is required" };
+  const clean = raw.trim().replace(/\s+/g, "");
+  if (!ADVCASH_RE.test(clean)) return { valid: false, error: "Wallet ID must start with U, E or G followed by 12 letters/digits" };
+  return { valid: true, error: null };
+}
+
+
+/**
+ * Payment reference — must not contain forbidden words. Empty is allowed
+ * (the reference itself is optional in the UI).
+ */
+const FORBIDDEN_REFERENCE_WORDS = ["bitcoin", "peach"];
+
+export function validatePaymentReference(raw) {
+  if (!raw || !raw.trim()) return { valid: true, error: null };
+  const lower = raw.toLowerCase();
+  for (const word of FORBIDDEN_REFERENCE_WORDS) {
+    if (lower.includes(word)) return { valid: false, error: `Reference cannot contain "${word}"` };
+  }
+  return { valid: true, error: null };
+}
+
+
+/**
+ * Ethereum address — `0x` + 40 hex characters. Mobile lowercases before
+ * checking, which bypasses EIP-55 checksum validation, so we do the same.
+ */
+const ETH_RE = /^0x[0-9a-f]{40}$/i;
+
+export function validateEthereumAddress(raw) {
+  if (!raw || !raw.trim()) return { valid: false, error: "Address is required" };
+  if (!ETH_RE.test(raw.trim())) return { valid: false, error: "Invalid Ethereum address" };
+  return { valid: true, error: null };
+}
+
+
+/**
+ * Tron address — base58 decodes to 25 bytes (base58check format) and starts
+ * with `T`. Mobile only checks length + leading char, not the checksum.
+ */
+export function validateTronAddress(raw) {
+  if (!raw || !raw.trim()) return { valid: false, error: "Address is required" };
+  const a = raw.trim();
+  if (!a.startsWith("T")) return { valid: false, error: "Tron address must start with T" };
+  const decoded = base58Decode(a);
+  if (!decoded || decoded.length !== 25) return { valid: false, error: "Invalid Tron address" };
+  return { valid: true, error: null };
+}
+
+
+/**
+ * Solana address — base58 decodes to exactly 32 bytes (Ed25519 public key).
+ */
+export function validateSolanaAddress(raw) {
+  if (!raw || !raw.trim()) return { valid: false, error: "Address is required" };
+  const decoded = base58Decode(raw.trim());
+  if (!decoded || decoded.length !== 32) return { valid: false, error: "Invalid Solana address" };
   return { valid: true, error: null };
 }
 

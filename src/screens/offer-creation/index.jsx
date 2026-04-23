@@ -1373,7 +1373,7 @@ export default function OfferCreation({ initialType="buy" }) {
                   </>
                   )}
                   {/* Or fund via mobile app */}
-                  {auth && sellOfferId && (
+                  {auth && sellOfferId && !fundingStatus && (
                     <div style={{marginBottom:20}}>
                       <div style={{fontSize:".68rem",fontWeight:700,color:"var(--black-65)",textTransform:"uppercase",letterSpacing:".05em",marginBottom:6,textAlign:"center"}}>
                         Or fund from your Peach mobile app

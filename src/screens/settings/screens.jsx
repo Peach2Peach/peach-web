@@ -377,14 +377,15 @@ export function NetworkFeesSubScreen({ onBack }) {
 // ── TxBatchingSubScreen ──────────────────────────────────────────────────────
 
 export function TxBatchingSubScreen({ onBack }) {
-  const { patch, auth } = useApi();
+  const { post, auth } = useApi();
   const [batching, setBatching] = useState(false);
 
   async function handleBatchingChange(value) {
     setBatching(value);
     if (!auth) return;
+    const body = value ? { enableBatching: true } : { enableBatching: false, riskAcknowledged: true };
     try {
-      await patch('/user/batching', { enable: value });
+      await post('/user/batching', body);
     } catch {}
   }
 

@@ -14,8 +14,18 @@
 
 import {
   validateIBAN,
-  validatePhone,
   validateHolder,
+  validateBIC,
+  validateEmail,
+  validateUKSortCode,
+  validateUKBankAccount,
+  validateAccountNumber,
+  validateUsername,
+  validateAdvcashWallet,
+  validatePaymentReference,
+  validateEthereumAddress,
+  validateTronAddress,
+  validateSolanaAddress,
 } from "../peach-validators.js";
 
 // ─── DISPLAY NAMES ──────────────────────────────────────────────────────────
@@ -351,9 +361,21 @@ export const PM_FIELD_META = {
   },
   name: { label: "Name", placeholder: "Full name" },
   // Digital identity
-  email: { label: "Email", placeholder: "you@example.com" },
-  userName: { label: "Username", placeholder: "@username" },
-  username: { label: "Username", placeholder: "@username" },
+  email: {
+    label: "Email",
+    placeholder: "you@example.com",
+    validator: validateEmail,
+  },
+  userName: {
+    label: "Username",
+    placeholder: "@username",
+    validator: validateUsername,
+  },
+  username: {
+    label: "Username",
+    placeholder: "@username",
+    validator: validateUsername,
+  },
   phone: {
     label: "Phone number",
     placeholder: "+34 612 345 678",
@@ -364,28 +386,86 @@ export const PM_FIELD_META = {
     placeholder: "+34 612 345 678",
     validatorWithPrefix: true,
   },
+  mpesa_phone: {
+    label: "M-Pesa number",
+    placeholder: "+254 7…",
+    validatorWithPrefix: true,
+  },
+  mpesa_name: {
+    label: "Account holder name",
+    placeholder: "Full name",
+    validator: validateHolder,
+  },
   // Bank
   iban: {
     label: "IBAN",
     placeholder: "DE89 3704 0044 0532 0130 00",
     validator: validateIBAN,
   },
-  bic: { label: "BIC", placeholder: "COBADEFFXXX" },
-  swiftCode: { label: "SWIFT code", placeholder: "COBADEFFXXX" },
+  bic: {
+    label: "BIC",
+    placeholder: "COBADEFFXXX",
+    validator: validateBIC,
+  },
+  swiftCode: {
+    label: "SWIFT code",
+    placeholder: "COBADEFFXXX",
+    validator: validateBIC,
+  },
   bankAccountNumber: { label: "Account number", placeholder: "12345678" },
-  accountNumber: { label: "Account number", placeholder: "12345678" },
+  accountNumber: {
+    label: "Account number",
+    placeholder: "12345678",
+    validator: validateAccountNumber,
+  },
   bankCode: { label: "Bank code", placeholder: "123456" },
-  sortCode: { label: "Sort code", placeholder: "12-34-56" },
-  ukSortCode: { label: "Sort code", placeholder: "12-34-56" },
-  ukBankAccount: { label: "Account number", placeholder: "12345678" },
-  reference: { label: "Reference", placeholder: "Reference" },
+  sortCode: {
+    label: "Sort code",
+    placeholder: "12-34-56",
+    validator: validateUKSortCode,
+  },
+  ukSortCode: {
+    label: "Sort code",
+    placeholder: "12-34-56",
+    validator: validateUKSortCode,
+  },
+  ukBankAccount: {
+    label: "Account number",
+    placeholder: "12345678",
+    validator: validateUKBankAccount,
+  },
+  reference: {
+    label: "Reference",
+    placeholder: "Reference",
+    validator: validatePaymentReference,
+  },
   // Crypto
   address: { label: "Wallet address", placeholder: "Address" },
-  wallet: { label: "Wallet address", placeholder: "Address" },
+  wallet: {
+    label: "Wallet ID",
+    placeholder: "U/E/G + 12 chars",
+    validator: validateAdvcashWallet,
+  },
   network: { label: "Network", placeholder: "Ethereum, Tron, …" },
   lnurlAddress: {
     label: "LNURL or Lightning address",
     placeholder: "LNURL1... or user@domain.com",
+    validator: validateEmail,
+  },
+  receiveAddressEthereum: {
+    label: "Ethereum address",
+    placeholder: "0x…",
+    validator: validateEthereumAddress,
+  },
+  receiveAddressTron: {
+    label: "Tron address",
+    placeholder: "T…",
+    validator: validateTronAddress,
+  },
+  receiveAddressSolana: {
+    label: "Solana address",
+    placeholder: "Solana wallet address",
+    validator: validateSolanaAddress,
   },
   // Latin America
   pixAlias: {

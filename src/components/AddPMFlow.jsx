@@ -8,7 +8,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState } from "react";
-import { validateIBAN, validatePhone, validateHolder, makeBlurHandler } from "../peach-validators.js";
+import { validatePhone, validatePaymentReference, makeBlurHandler } from "../peach-validators.js";
 import {
   PHONE_PREFIX_MAP, getFieldMeta, getTabLabel, fieldsForTab, parseSections,
   normalizeApiPaymentMethods,
@@ -232,22 +232,37 @@ export function AddPMFlow({ methods, onSave, onClose, editData, error, onRetry }
   function handleSave() {
     const newErrors = {};
     const phonePrefix = PHONE_PREFIX_MAP[selMethodId];
+    // Mandatory fields: must be non-empty + pass per-field validator from meta.
     for (const fid of mandatoryFields) {
       const val = (details[fid] || "").trim();
       if (!val) {
         newErrors[fid] = "Required";
         continue;
       }
-      if (fid === "iban") {
-        const r = validateIBAN(val);
-        if (!r.valid) newErrors[fid] = r.error;
-      } else if (fid === "phone" || fid === "phoneNumber") {
-        const r = validatePhone(val, phonePrefix);
-        if (!r.valid) newErrors[fid] = r.error;
-      } else if (fid === "beneficiary" || fid === "accountHolder" || fid === "holder") {
-        const r = validateHolder(val);
-        if (!r.valid) newErrors[fid] = r.error;
-      }
+      const meta = getFieldMeta(fid);
+      const r = meta.validatorWithPrefix
+        ? validatePhone(val, phonePrefix)
+        : meta.validator
+          ? meta.validator(val)
+          : { valid: true };
+      if (!r.valid) newErrors[fid] = r.error;
+    }
+    // Optional fields: only validate if non-empty.
+    for (const fid of optionalFields) {
+      const val = (details[fid] || "").trim();
+      if (!val) continue;
+      const meta = getFieldMeta(fid);
+      const r = meta.validatorWithPrefix
+        ? validatePhone(val, phonePrefix)
+        : meta.validator
+          ? meta.validator(val)
+          : { valid: true };
+      if (!r.valid) newErrors[fid] = r.error;
+    }
+    // Custom payment reference: forbidden-words check (empty is allowed).
+    if (payRefType === "custom" && payRefCustom.trim()) {
+      const r = validatePaymentReference(payRefCustom);
+      if (!r.valid) newErrors._payRefCustom = r.error;
     }
     if (Object.keys(newErrors).length > 0) {
       setErrors((prev) => ({ ...prev, ...newErrors }));
@@ -460,17 +475,14 @@ export function AddPMFlow({ methods, onSave, onClose, editData, error, onRetry }
                 {(() => {
                   const renderField = (fid, isOptional) => {
                     const meta = getFieldMeta(fid);
-                    const isIBAN = fid === "iban";
-                    const isPhone = fid === "phone" || fid === "phoneNumber";
-                    const isHolder = fid === "beneficiary" || fid === "accountHolder" || fid === "holder";
-                    const phonePrefix = isPhone ? PHONE_PREFIX_MAP[selMethodId] : null;
+                    const phonePrefix = meta.validatorWithPrefix ? PHONE_PREFIX_MAP[selMethodId] : null;
+                    const hasValidator = !!meta.validator || !!meta.validatorWithPrefix;
 
                     function handleFieldBlur() {
                       const val = (details[fid] || "").trim();
                       if (!val && isOptional) { setErrors((p) => ({ ...p, [fid]: null })); return; }
-                      if (isIBAN) handleBlur(fid, details[fid], validateIBAN);
-                      else if (isPhone) handleBlur(fid, details[fid], validatePhone, phonePrefix);
-                      else if (isHolder) handleBlur(fid, details[fid], validateHolder);
+                      if (meta.validatorWithPrefix) handleBlur(fid, details[fid], validatePhone, phonePrefix);
+                      else if (meta.validator) handleBlur(fid, details[fid], meta.validator);
                     }
 
                     return (
@@ -484,7 +496,7 @@ export function AddPMFlow({ methods, onSave, onClose, editData, error, onRetry }
                           placeholder={meta.placeholder}
                           value={details[fid] || ""}
                           onChange={(e) => { setDetails((prev) => ({ ...prev, [fid]: e.target.value })); if (errors[fid]) setErrors((p) => ({ ...p, [fid]: null })); }}
-                          onBlur={(isIBAN || isPhone || isHolder) ? handleFieldBlur : undefined}
+                          onBlur={hasValidator ? handleFieldBlur : undefined}
                           style={errors[fid] ? { borderColor:"var(--error)" } : {}}
                         />
                         <FieldError error={errors[fid]}/>
@@ -542,15 +554,23 @@ export function AddPMFlow({ methods, onSave, onClose, editData, error, onRetry }
                         "eg: PC-F4D-1245"
                       }
                       disabled={payRefType !== "custom"}
-                      onChange={e => setPayRefCustom(e.target.value)}
-                      style={payRefType !== "custom" ? { background:"var(--black-5)", color:"var(--black-25)", cursor:"not-allowed" } : {}}
+                      onChange={e => {
+                        setPayRefCustom(e.target.value);
+                        if (errors._payRefCustom) setErrors(p => ({ ...p, _payRefCustom: null }));
+                      }}
+                      onBlur={payRefType === "custom" ? () => handleBlur("_payRefCustom", payRefCustom, validatePaymentReference) : undefined}
+                      style={{
+                        ...(payRefType !== "custom" ? { background:"var(--black-5)", color:"var(--black-25)", cursor:"not-allowed" } : {}),
+                        ...(errors._payRefCustom ? { borderColor:"var(--error)" } : {}),
+                      }}
                     />
                     <button className="payref-type-btn" onClick={() => setShowPayRefPicker(true)}>
                       {payRefType === "custom" ? "custom" : payRefType === "peachID" ? "buyer peach ID" : "trade ID"}
                       <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><polyline points="1,1 5,5 9,1"/></svg>
                     </button>
                   </div>
-                  {payRefType === "custom" && (
+                  <FieldError error={errors._payRefCustom}/>
+                  {payRefType === "custom" && !errors._payRefCustom && (
                     <div style={{ fontSize:".66rem", color:"var(--black-25)", fontWeight:500, marginTop:4 }}>(optional)</div>
                   )}
                   {payRefType !== "custom" && (

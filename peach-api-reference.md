@@ -49,7 +49,7 @@ await fetch(`${v069Base}/selfUser`, {
 | GET | `/user/:userId` | trades-dashboard | Get public user profile by public key. Used to fetch counterparty profile data. |
 | GET | `/user/tradingLimit` | settings, trades-dashboard | Own trading limits. |
 | PATCH | `/user` | settings | Update own profile. Used for `payoutAddress`, `refundAddress`, `feeRate` (with signature). |
-| PATCH | `/user/batching` | settings | Join or leave GroupHug batching program. Body: `{ enable: bool }`. |
+| POST | `/user/batching` | settings | Join or leave GroupHug batching program. Body: `{ enableBatching: bool, riskAcknowledged?: bool }`. `riskAcknowledged` must be `true` when `enableBatching` is `false`. |
 | PUT | `/user/:userId/block` | settings | Block a user. |
 | POST | `/contact/report` | settings | Submit abuse report. Body: `{ email, topic, reason, message }`. |
 | GET | `/user/me` | useQRAuth | Fetch own user profile after QR authentication. Returns full profile with `pgpPublicKey`, `id`, etc. Used to verify PGP key match and populate `window.__PEACH_AUTH__`. |
