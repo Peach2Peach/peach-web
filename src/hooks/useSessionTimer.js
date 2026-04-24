@@ -14,6 +14,7 @@ export function useSessionTimer() {
       return;
     }
 
+    let id;
     function tick() {
       const left = Math.max(0, SESSION_TTL_MS - (Date.now() - auth.loginTime));
       setRemaining(left);
@@ -24,7 +25,7 @@ export function useSessionTimer() {
     }
 
     tick();
-    const id = setInterval(tick, 1000);
+    id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [window.__PEACH_AUTH__?.loginTime]);
 
