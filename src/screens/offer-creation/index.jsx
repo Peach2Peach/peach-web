@@ -191,14 +191,46 @@ export default function OfferCreation({ initialType="buy" }) {
   }, []);
 
   // ── POLL ESCROW FUNDING STATUS ──
+  // `/offer/:id/escrow` reports FUNDED even when the amount is wrong, so we
+  // also poll `/offer/:id/details` — its `tradeStatus` flips to
+  // "fundingAmountDifferent" and `funding.status` to "WRONG_FUNDING_AMOUNT"
+  // once the backend validates the amount. We must not leave the user on the
+  // "Offer is live!" screen when the amount is wrong.
   useEffect(() => {
-    if (step !== 2 || !sellOfferId || !auth || escrowFunded) return;
+    if (step !== 2 || !sellOfferId || !auth) return;
     let cancelled = false;
+    let redirected = false;
+    const triggerRedirect = (amounts) => {
+      if (redirected) return;
+      redirected = true;
+      setFundingStatus("WRONG_FUNDING_AMOUNT");
+      setFundingAmounts(amounts ?? []);
+      setTimeout(() => {
+        if (!cancelled) {
+          navigate("/trades", { state: { openOfferId: sellOfferId } });
+        }
+      }, 2500);
+    };
     async function check() {
       try {
-        const res = await get('/offer/' + sellOfferId + '/escrow');
-        if (!res.ok || cancelled) return;
-        const data = await res.json();
+        const [escrowRes, detailsRes] = await Promise.all([
+          get('/offer/' + sellOfferId + '/escrow'),
+          get('/offer/' + sellOfferId + '/details'),
+        ]);
+        if (cancelled) return;
+        // Check details first — it's the authoritative source for wrong-amount.
+        if (detailsRes.ok) {
+          const details = await detailsRes.json();
+          if (
+            details?.tradeStatus === "fundingAmountDifferent" ||
+            details?.funding?.status === "WRONG_FUNDING_AMOUNT"
+          ) {
+            triggerRedirect(details?.funding?.amounts);
+            return;
+          }
+        }
+        if (!escrowRes.ok) return;
+        const data = await escrowRes.json();
         const s = data?.funding?.status;
         if (s === "MEMPOOL") {
           setFundingStatus("MEMPOOL");
@@ -206,8 +238,7 @@ export default function OfferCreation({ initialType="buy" }) {
           setFundingStatus("FUNDED");
           setTimeout(() => { if (!cancelled) setEscrowFunded(true); }, 1500);
         } else if (s === "WRONG_FUNDING_AMOUNT") {
-          setFundingStatus("WRONG_FUNDING_AMOUNT");
-          setFundingAmounts(data.funding.amounts ?? []);
+          triggerRedirect(data?.funding?.amounts);
         }
       } catch (err) {
         console.warn("[OfferCreation] Escrow poll error:", err.message);
@@ -216,7 +247,7 @@ export default function OfferCreation({ initialType="buy" }) {
     check(); // immediate first check
     const iv = setInterval(check, 10000);
     return () => { cancelled = true; clearInterval(iv); };
-  }, [step, sellOfferId, auth, escrowFunded]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [step, sellOfferId, auth, navigate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── MULTI-ESCROW POLLING ──
   useEffect(() => {
@@ -1285,7 +1316,37 @@ export default function OfferCreation({ initialType="buy" }) {
           )}
           {step===2 && !(multiResults && multiResults.filter(r=>r.status!=="failed"&&r.escrowAddress).length > 1) && (
             <div className="step-anim">
-              {!escrowFunded?(
+              {fundingStatus === "WRONG_FUNDING_AMOUNT" ? (
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",
+                  gap:18,paddingTop:32,textAlign:"center",animation:"stepFwd .4s ease both"}}>
+                  <div style={{width:76,height:76,borderRadius:"50%",
+                    background:"var(--warning)",display:"flex",alignItems:"center",
+                    justifyContent:"center",color:"white",fontSize:"2.4rem",fontWeight:800,
+                    boxShadow:"0 8px 32px rgba(245,158,11,.3)"}}>⚠</div>
+                  <div style={{fontSize:"1.2rem",fontWeight:800,color:"var(--warning)"}}>
+                    Wrong amount funded
+                  </div>
+                  <p style={{fontSize:".88rem",color:"var(--black-65)",lineHeight:1.65,maxWidth:360}}>
+                    You funded the escrow with{" "}
+                    <strong style={{color:"var(--black)"}}>
+                      {(fundingAmounts ? fundingAmounts.reduce((a,b)=>a+b,0) : 0).toLocaleString("en-US")}
+                    </strong>{" "}
+                    sats, but the offer was created for{" "}
+                    <strong style={{color:"var(--black)"}}>
+                      {form.amtFixed.toLocaleString("en-US")}
+                    </strong>{" "}
+                    sats. Redirecting you to Trades so you can choose to continue with the funded amount or refund the escrow…
+                  </p>
+                  <button
+                    onClick={() => navigate("/trades", { state: { openOfferId: sellOfferId } })}
+                    style={{padding:"10px 28px",borderRadius:999,background:"var(--grad)",
+                      color:"white",border:"none",cursor:"pointer",fontFamily:"var(--font)",
+                      fontSize:".88rem",fontWeight:800}}
+                  >
+                    Go to Trades now
+                  </button>
+                </div>
+              ) : !escrowFunded?(
                 <>
                   <div style={{fontSize:".84rem",color:"var(--black-65)",fontWeight:500,
                     lineHeight:1.6,marginBottom:20}}>
@@ -1427,35 +1488,10 @@ export default function OfferCreation({ initialType="buy" }) {
                       ≈ €{fmtEur(satsToFiat(form.amtFixed,effP))}
                     </span>
                   </div>
-                  {/* ── Funding status indicator ── */}
-                  {fundingStatus === "WRONG_FUNDING_AMOUNT" ? (
-                    <div style={{background:"var(--error-bg)",borderRadius:12,
-                      border:"1px solid var(--error)",padding:"14px 16px",marginBottom:18}}>
-                      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
-                        <span style={{fontSize:"1.1rem"}}>⚠</span>
-                        <span style={{fontSize:".8rem",fontWeight:700,color:"var(--error)"}}>
-                          Wrong amount funded
-                        </span>
-                      </div>
-                      <div style={{fontSize:".75rem",color:"var(--black-65)",fontWeight:500,marginBottom:12,lineHeight:1.5}}>
-                        Expected <strong>{fmt(form.amtFixed)}</strong> sats — received{" "}
-                        <strong>{fmt(fundingAmounts ? fundingAmounts.reduce((a,b)=>a+b,0) : 0)}</strong> sats
-                      </div>
-                      <div style={{display:"flex",gap:8}}>
-                        <button onClick={async()=>{
-                          try {
-                            const res = await post('/offer/'+sellOfferId+'/escrow/confirm');
-                            if(res.ok){ setFundingStatus("FUNDED"); setTimeout(()=>setEscrowFunded(true),1500); }
-                            else { const d=await res.json().catch(()=>null); setPublishError(d?.error||"Failed to confirm escrow"); }
-                          } catch(e){ setPublishError(e.message); }
-                        }} style={{flex:1,padding:"8px 14px",borderRadius:999,background:"var(--grad)",
-                          color:"white",border:"none",cursor:"pointer",fontFamily:"var(--font)",
-                          fontSize:".78rem",fontWeight:700}}>
-                          Accept anyway
-                        </button>
-                      </div>
-                    </div>
-                  ) : fundingStatus === "FUNDED" ? (
+                  {/* ── Funding status indicator ──
+                    WRONG_FUNDING_AMOUNT is handled by the top-level branch which
+                    redirects to /trades — no case needed here. */}
+                  {fundingStatus === "FUNDED" ? (
                     <div style={{background:"var(--success-bg)",borderRadius:12,
                       border:"1px solid var(--success)",padding:"14px 16px",
                       display:"flex",alignItems:"center",gap:14,marginBottom:18,

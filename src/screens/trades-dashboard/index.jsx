@@ -1669,6 +1669,7 @@ export default function TradesDashboard() {
       setToast("Escrow accepted — offer going live");
       setTimeout(() => setToast(null), 3000);
       closeOfferDetail();
+      setRefreshKey((k) => k + 1);
     } catch (err) {
       setOdAcceptWrongError(err.message || "Failed to confirm escrow");
     } finally {
@@ -1789,9 +1790,19 @@ export default function TradesDashboard() {
         return;
       }
     }
-    // 2. Offer already accepted → find its contract and go to trade execution
-    //    Contract IDs are "buyOfferId-sellOfferId", so check if either part matches
+    // 2. Offer with non-pending status (e.g. fundingAmountDifferent) lives in
+    //    liveItems as kind="offer" → open the offer detail popup directly
     if (liveItems) {
+      const offerItem = liveItems.find(
+        (t) => t.kind === "offer" && String(t.id) === String(offerId),
+      );
+      if (offerItem) {
+        clearState();
+        openOfferDetail(offerItem);
+        return;
+      }
+      // 3. Offer already accepted → find its contract and go to trade execution
+      //    Contract IDs are "buyOfferId-sellOfferId", so check if either part matches
       const contract = liveItems.find(
         (t) =>
           t.kind === "contract" &&
@@ -3106,12 +3117,107 @@ export default function TradesDashboard() {
                       </button>
                     )}
 
+                  {/* Wrong amount funded — seller chooses: continue with funded
+                    amount (confirm escrow) or refund (cancel offer + mobile refund
+                    pending action). Replaces the default edit/cancel buttons. */}
+                  {!odEditingPremium &&
+                    !odWithdrawConfirm &&
+                    o.direction === "sell" &&
+                    o.tradeStatus === "fundingAmountDifferent" &&
+                    (() => {
+                      const actualFunded = offerDetails?.funding?.amounts
+                        ? offerDetails.funding.amounts.reduce(
+                            (a, b) => a + b,
+                            0,
+                          )
+                        : null;
+                      if (odRefundRequested) {
+                        return (
+                          <div
+                            style={{
+                              padding: "10px 14px",
+                              borderRadius: 8,
+                              background: "var(--black-5)",
+                              color: "var(--black-65)",
+                              fontSize: ".78rem",
+                              fontWeight: 700,
+                              textAlign: "center",
+                            }}
+                          >
+                            ✓ Refund request sent — check your phone
+                          </div>
+                        );
+                      }
+                      return (
+                        <>
+                          <div
+                            style={{
+                              fontSize: ".82rem",
+                              color: "var(--black)",
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            You funded the trade with{" "}
+                            <strong>
+                              {actualFunded != null
+                                ? actualFunded.toLocaleString("en-US")
+                                : "…"}
+                            </strong>{" "}
+                            sats, but the sell offer was created for{" "}
+                            <strong>
+                              {o.amount.toLocaleString("en-US")}
+                            </strong>{" "}
+                            sats. Do you want to continue with the sell offer
+                            with{" "}
+                            <strong>
+                              {actualFunded != null
+                                ? actualFunded.toLocaleString("en-US")
+                                : "…"}
+                            </strong>{" "}
+                            sats, or do you want to be refunded?
+                          </div>
+                          {(odAcceptWrongError || odWithdrawError) && (
+                            <div
+                              style={{
+                                color: "var(--error)",
+                                fontSize: ".78rem",
+                                fontWeight: 600,
+                              }}
+                            >
+                              {odAcceptWrongError || odWithdrawError}
+                            </div>
+                          )}
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <button
+                              className="offer-detail-btn offer-detail-btn-edit"
+                              disabled={odAcceptingWrong || odWithdrawing}
+                              onClick={() => handleAcceptWrongAmount(o)}
+                            >
+                              {odAcceptingWrong
+                                ? "Confirming…"
+                                : "Continue trade"}
+                            </button>
+                            <button
+                              className="offer-detail-btn offer-detail-btn-withdraw"
+                              disabled={odAcceptingWrong || odWithdrawing}
+                              onClick={() => handleWithdrawOffer(o)}
+                            >
+                              {odWithdrawing ? "Refunding…" : "Refund escrow"}
+                            </button>
+                          </div>
+                        </>
+                      );
+                    })()}
+
                   {/* Default: Edit + Cancel offer buttons (or refund-in-flight message).
-                    Hidden for unfunded sell offers — handled by the unconfirmed button above. */}
+                    Hidden for unfunded sell offers (handled above) and for sell offers
+                    with wrong-amount funded (handled by the choice panel above). */}
                   {!odEditingPremium &&
                     !odWithdrawConfirm &&
                     !(
-                      o.direction === "sell" && o.tradeStatus === "fundEscrow"
+                      o.direction === "sell" &&
+                      (o.tradeStatus === "fundEscrow" ||
+                        o.tradeStatus === "fundingAmountDifferent")
                     ) &&
                     (odRefundRequested ? (
                       <div
