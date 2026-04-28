@@ -318,6 +318,7 @@ export default function OfferCreation({ initialType="buy" }) {
   function reset(){
     setStep(0);setDone(false);setEscrowFunded(false);setFundingStatus(null);setFundingAmounts(null);setPublishError(null);setEscrowAddress(null);setSellOfferId(null);setForm(initForm());
     setMultiEnabled(false);setMultiCount(2);setMultiResults(null);setSelectedEscrowIdx(0);setMultiPublishProgress(null);
+    setFundMobileLoading(false);setFundMobileRequested(false);setFundMobileError(null);
     setRefundErrors({});
   }
   function switchType(t){ setType(t); reset(); }
