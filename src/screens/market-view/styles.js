@@ -525,4 +525,26 @@ export const CSS = `
     50%{background:rgba(101,165,25,.08)}
     100%{background:var(--surface)}
   }
+
+  /* Newly published offers — temporary highlight after returning from offer creation */
+  .offer-table tbody tr.new-offer-row td{
+    animation:newOfferRowFlash 1.4s ease-in-out 0s 3;
+  }
+  .offer-table tbody tr.new-offer-row td:first-child{
+    box-shadow:inset 3px 0 0 var(--success);
+  }
+  @keyframes newOfferRowFlash{
+    0%,100%{background:rgba(111,207,142,.06)}
+    50%    {background:rgba(111,207,142,.22)}
+  }
+  .offer-card.new-offer-card{
+    outline:2px solid var(--success);
+    outline-offset:2px;
+    border-radius:12px;
+    animation:newOfferCardPulse 1.4s ease-in-out 0s 3;
+  }
+  @keyframes newOfferCardPulse{
+    0%,100%{box-shadow:0 0 0 0 rgba(111,207,142,0)}
+    50%    {box-shadow:0 0 18px 4px rgba(111,207,142,.55)}
+  }
 `;

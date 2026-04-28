@@ -360,7 +360,14 @@ export function MultiEscrowFunding({
           </strong> each are now visible in the market.
         </p>
         <div style={{display:"flex",gap:12}}>
-          <button onClick={() => navigate("/market")} style={{padding:"10px 28px",borderRadius:999,
+          <button onClick={() => {
+            const ids = validResults
+              .filter(r => r.offerId)
+              .map(r => String(r.offerId));
+            navigate("/market", {
+              state: { highlightOfferIds: ids, highlightDirection: "sell" },
+            });
+          }} style={{padding:"10px 28px",borderRadius:999,
             border:"1.5px solid var(--black-10)",background:"transparent",color:"var(--black-65)",
             cursor:"pointer",fontFamily:"var(--font)",fontSize:".88rem",fontWeight:700}}>
             View in market

@@ -677,6 +677,7 @@ export default function OfferCreation({ initialType="buy" }) {
           if(!res.ok){
             throw new Error(data?.error || data?.message || `Server error ${res.status}`);
           }
+          setMultiResults([{ status: "created", offerId: String(data?.id ?? data?.offerId ?? ""), error: null }]);
           setDone(true);
         }
       }catch(err){
@@ -877,7 +878,14 @@ export default function OfferCreation({ initialType="buy" }) {
           }
         </p>
         <div style={{display:"flex",gap:12}}>
-          <button onClick={() => navigate("/market")} style={{padding:"10px 28px",borderRadius:999,
+          <button onClick={() => {
+            const ids = (multiResults ?? [])
+              .filter(r => r.status !== "failed" && r.offerId)
+              .map(r => String(r.offerId));
+            navigate("/market", {
+              state: { highlightOfferIds: ids, highlightDirection: "buy" },
+            });
+          }} style={{padding:"10px 28px",borderRadius:999,
             border:"1.5px solid var(--black-10)",background:"transparent",color:"var(--black-65)",
             cursor:"pointer",fontFamily:"var(--font)",fontSize:".88rem",fontWeight:700}}>
             View in market
@@ -1733,7 +1741,12 @@ export default function OfferCreation({ initialType="buy" }) {
                     </strong> is now visible in the market. We'll notify you when a buyer matches.
                   </p>
                   <div style={{display:"flex",gap:12}}>
-                    <button onClick={() => navigate("/market")} style={{padding:"10px 28px",borderRadius:999,
+                    <button onClick={() => {
+                      const ids = sellOfferId ? [String(sellOfferId)] : [];
+                      navigate("/market", {
+                        state: { highlightOfferIds: ids, highlightDirection: "sell" },
+                      });
+                    }} style={{padding:"10px 28px",borderRadius:999,
                       border:"1.5px solid var(--black-10)",background:"transparent",color:"var(--black-65)",
                       cursor:"pointer",fontFamily:"var(--font)",fontSize:".88rem",fontWeight:700}}>
                       View in market

@@ -86,6 +86,7 @@ export default function PeachMarket() {
   const [localRequested, setLocalRequested] = useState(() => new Set()); // track requested state locally
   const [detailsLoading, setDetailsLoading] = useState(false);  // fetching /offer/:id/details
   const [offerDetails,   setOfferDetails]   = useState(null);   // fetched details for popupOffer
+  const [highlightedIds, setHighlightedIds] = useState(() => new Set()); // newly published offers, briefly highlighted
 
   // ── Own-offer edit / withdraw state ──
   const [editingPremium,   setEditingPremium]   = useState(false);   // toggle edit mode
@@ -757,6 +758,52 @@ export default function PeachMarket() {
       navigate(location.pathname, { replace: true, state: null });
     }
   }, [location.state, marketOffers]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Highlight newly published offers when arriving from Offer Creation ──
+  // location.state shape: { highlightOfferIds: string[], highlightDirection: "buy"|"sell" }
+  // A published "buy" offer (bid) lives on tab="sell"; a "sell" offer (ask) lives on tab="buy".
+  // Two-phase: (1) extract IDs from state immediately and switch the view; (2) once the
+  // matching offers are actually in marketOffers, scroll and start the fade-out timer.
+  const highlightHandledRef = useRef(false);
+  const highlightCommittedRef = useRef(false);
+  useEffect(() => {
+    if (highlightHandledRef.current) return;
+    const navState = location.state;
+    const ids = navState?.highlightOfferIds;
+    if (!Array.isArray(ids) || ids.length === 0) return;
+    highlightHandledRef.current = true;
+    const direction = navState.highlightDirection;
+    if (direction === "buy")  setTab("sell");
+    if (direction === "sell") setTab("buy");
+    setShowMyOffers(true);
+    setHighlightedIds(new Set(ids.map(String)));
+    console.log("[MarketView] highlight requested for offer IDs:", ids, "direction:", direction);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.state]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Commit phase — runs whenever marketOffers updates after a highlight was set.
+  // Waits for the new offers to appear in the list, then scrolls + starts fade timer.
+  useEffect(() => {
+    if (highlightCommittedRef.current) return;
+    if (highlightedIds.size === 0) return;
+    if (!marketOffers || marketOffers.length === 0) return;
+    const found = marketOffers.some(o => highlightedIds.has(String(o.id)));
+    if (!found) {
+      console.log("[MarketView] waiting for offers to appear; have", marketOffers.length, "offers, none match yet");
+      return;
+    }
+    highlightCommittedRef.current = true;
+    console.log("[MarketView] highlight committed — scrolling and starting 4s fade timer");
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const el = document.querySelector(".new-offer-card, .new-offer-row");
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+        else console.warn("[MarketView] no .new-offer-card / .new-offer-row found in DOM");
+      });
+    });
+    const t = setTimeout(() => setHighlightedIds(new Set()), 4000);
+    return () => clearTimeout(t);
+  }, [marketOffers, highlightedIds]);
 
   const offerType = isSellTab ? "bid" : "ask";
 
@@ -1517,7 +1564,8 @@ export default function PeachMarket() {
                     <tr key={offer.id} className={[
                         offer.isOwn?"own-row":"",
                         effectiveRequested.has(offer.id)&&!offer.auto&&!offer.isOwn?"requested-row":"",
-                        undoAnim===offer.id?"undo-row":""
+                        undoAnim===offer.id?"undo-row":"",
+                        highlightedIds.has(offer.id)?"new-offer-row":""
                       ].filter(Boolean).join(" ")}
                       style={{cursor: isLoggedIn ? "pointer" : "default"}} onClick={() => isLoggedIn && openPopup(offer)}>
                       <td><RepCell offer={offer}/></td>
@@ -1576,7 +1624,7 @@ export default function PeachMarket() {
                 <div className="empty-sub">Adjust your filters</div>
               </div>
             ) : displayOffers.map(offer => (
-            <div key={offer.id} className={`offer-card${offer.isOwn?" own-card":""}${effectiveRequested.has(offer.id)&&!offer.auto&&!offer.isOwn?" requested-card":""}${undoAnim===offer.id?" undo-card":""}`}
+            <div key={offer.id} className={`offer-card${offer.isOwn?" own-card":""}${effectiveRequested.has(offer.id)&&!offer.auto&&!offer.isOwn?" requested-card":""}${undoAnim===offer.id?" undo-card":""}${highlightedIds.has(offer.id)?" new-offer-card":""}`}
               style={{cursor: isLoggedIn ? "pointer" : "default"}} onClick={() => isLoggedIn && openPopup(offer)}>
                 {/* Row 1: tradeID + avatar · rep/badges (left) | action buttons (right) */}
                 <span className="offer-id-label">{offer.tradeId}</span>
