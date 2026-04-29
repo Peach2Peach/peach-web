@@ -52,7 +52,7 @@ const TYPE_COLOR = {
   warning:      "var(--warning)",
 };
 
-export default function NotificationPanel({ notifications, readIds, onMarkAllRead, onNavigate }) {
+export default function NotificationPanel({ notifications, readIds, onMarkAllRead, onMarkRead, onNavigate }) {
   const hasUnread = notifications.some(n => !readIds.has(n.id));
 
   return (
@@ -90,6 +90,19 @@ export default function NotificationPanel({ notifications, readIds, onMarkAllRea
                   {n.body && <div className="notif-item-desc">{n.body}</div>}
                   <div className="notif-item-time">{relTime(n.createdAt)}</div>
                 </div>
+                {isUnread && (
+                  <button
+                    className="notif-mark-one"
+                    aria-label="Mark as read"
+                    title="Mark as read"
+                    onClick={e => { e.stopPropagation(); onMarkRead(n.id); }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3,9 6.5,12.5 13,4"/>
+                    </svg>
+                    <span>mark as read</span>
+                  </button>
+                )}
               </div>
             );
           })

@@ -258,6 +258,7 @@ export function Topbar({
                 notifications={notifications}
                 readIds={readIds}
                 onMarkAllRead={markAllRead}
+                onMarkRead={markRead}
                 onNavigate={handleNotifNavigate}
               />
             )}
