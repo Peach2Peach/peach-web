@@ -6,7 +6,7 @@ const css = `
   padding:20px;
 }
 .msm-card{
-  background:white;border-radius:16px;padding:32px 28px;
+  background:var(--surface);border-radius:16px;padding:32px 28px;
   max-width:380px;width:100%;text-align:center;
   box-shadow:0 20px 60px rgba(0,0,0,.25);
   animation:modalIn .18s ease;
@@ -29,7 +29,7 @@ const css = `
   margin:0 auto 20px;
 }
 .msm-cancel{
-  border:1.5px solid var(--black-10);background:white;
+  border:1.5px solid var(--black-10);background:var(--surface);
   border-radius:999px;font-family:"Baloo 2",cursive;
   font-weight:700;font-size:.87rem;color:var(--black);
   padding:10px 28px;cursor:pointer;transition:border-color .15s;

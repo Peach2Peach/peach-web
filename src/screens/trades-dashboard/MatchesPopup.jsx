@@ -19,6 +19,20 @@ import {
 } from "../../utils/pgp.js";
 import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 
+// ─── PRE-CONTRACT CHAT READ TRACKING (localStorage) ──────────────────────────
+// Keyed per-chat (offerType:offerId:userId) → highest-seen tradeRequester msg id.
+// Pure client-side: pre-contract chat has no mark-as-read API endpoint.
+const CHAT_READ_LS_KEY = "peach_match_chat_read";
+function loadChatReadMap() {
+  try { return JSON.parse(localStorage.getItem(CHAT_READ_LS_KEY)) || {}; } catch { return {}; }
+}
+function saveChatReadMap(map) {
+  try { localStorage.setItem(CHAT_READ_LS_KEY, JSON.stringify(map)); } catch { /* quota or serialization */ }
+}
+function getChatKey(offerType, offerId, userId) {
+  return `${offerType}:${offerId}:${userId}`;
+}
+
 // ─── ICONS (chat) ────────────────────────────────────────────────────────────
 const IconChat = () => (
   <svg
@@ -225,12 +239,13 @@ export default function MatchesPopup({
   const messagesRef = useRef(null);
 
   // ── Unread dot state ──
-  const [unreadMatchIds, setUnreadMatchIds] = useState(new Set());
+  // Map: offerId → { count, latestMessageId }
+  const [unreadMatchCounts, setUnreadMatchCounts] = useState(new Map());
 
-  // Check for unread messages on each match when popup opens
+  // Check for unread messages on each match — runs on matches change AND on a 16s interval.
+  // Uses local lastReadMessageId (localStorage) instead of server `seen` field.
   useEffect(() => {
     if (!auth || !matches.length) return;
-    let cancelled = false;
     const chatMatches = matches.filter(
       (m) => m._raw.symmetricKeyEncrypted && m._raw.tradeRequestUserId,
     );
@@ -238,35 +253,50 @@ export default function MatchesPopup({
 
     const v069Base = auth.baseUrl.replace(/\/v1$/, "/v069");
     const offerType = trade.direction === "buy" ? "buyOffer" : "sellOffer";
+    let cancelled = false;
 
-    Promise.all(
-      chatMatches.map(async (m) => {
-        try {
-          const url = `${v069Base}/${offerType}/${trade.id}/tradeRequestReceived/${m._raw.tradeRequestUserId}/chat`;
-          const res = await fetchWithSessionCheck(url, {
-            headers: { Authorization: `Bearer ${auth.token}` },
-          });
-          if (!res.ok) return null;
-          const data = await res.json();
-          const msgs = Array.isArray(data)
-            ? data
-            : (data.messages ?? data.data ?? []);
-          const hasUnread = msgs.some(
-            (msg) => msg.sender === "tradeRequester" && msg.seen === false,
-          );
-          return hasUnread ? m.offerId : null;
-        } catch {
-          return null;
-        }
-      }),
-    ).then((results) => {
+    async function checkUnread() {
+      const readMap = loadChatReadMap();
+      const results = await Promise.all(
+        chatMatches.map(async (m) => {
+          try {
+            const userId = m._raw.tradeRequestUserId;
+            const url = `${v069Base}/${offerType}/${trade.id}/tradeRequestReceived/${userId}/chat`;
+            const res = await fetchWithSessionCheck(url, {
+              headers: { Authorization: `Bearer ${auth.token}` },
+            });
+            if (!res.ok) return null;
+            const data = await res.json();
+            const msgs = Array.isArray(data) ? data : (data.messages ?? data.data ?? []);
+            const theirMsgs = msgs.filter((msg) => msg.sender === "tradeRequester");
+            if (theirMsgs.length === 0) return null;
+
+            const chatKey = getChatKey(offerType, String(trade.id), userId);
+            const lastReadId = readMap[chatKey];
+            const latestMessageId = theirMsgs.reduce(
+              (max, msg) => (Number(msg.id) > Number(max) ? msg.id : max),
+              theirMsgs[0].id,
+            );
+            const unreadCount = lastReadId === undefined
+              ? theirMsgs.length
+              : theirMsgs.filter((msg) => Number(msg.id) > Number(lastReadId)).length;
+            return unreadCount > 0
+              ? [m.offerId, { count: unreadCount, latestMessageId }]
+              : null;
+          } catch {
+            return null;
+          }
+        }),
+      );
       if (cancelled) return;
-      const ids = new Set(results.filter(Boolean));
-      setUnreadMatchIds(ids);
-    });
+      setUnreadMatchCounts(new Map(results.filter(Boolean)));
+    }
 
+    checkUnread();
+    const iv = setInterval(checkUnread, 16000);
     return () => {
       cancelled = true;
+      clearInterval(iv);
     };
   }, [matches]);
 
@@ -332,6 +362,22 @@ export default function MatchesPopup({
             : (data.messages ?? data.data ?? []);
           const decrypted = await decryptMessages(msgs, symKey);
           if (!cancelled) setChatMessages(decrypted);
+
+          // Persist read-state: highest-id tradeRequester message in this chat.
+          // Belt-and-suspenders alongside the click-handler save (catches messages
+          // that arrived between detection-poll and chat-load).
+          const theirMsgs = msgs.filter((msg) => msg.sender === "tradeRequester");
+          if (theirMsgs.length > 0) {
+            const offerType = trade.direction === "buy" ? "buyOffer" : "sellOffer";
+            const chatKey = getChatKey(offerType, String(trade.id), chatMatch._raw.tradeRequestUserId);
+            const maxId = theirMsgs.reduce(
+              (max, msg) => (Number(msg.id) > Number(max) ? msg.id : max),
+              theirMsgs[0].id,
+            );
+            const readMap = loadChatReadMap();
+            readMap[chatKey] = maxId;
+            saveChatReadMap(readMap);
+          }
         }
       } catch (err) {
         console.error("Pre-contract chat load error:", err);
@@ -370,6 +416,22 @@ export default function MatchesPopup({
           merged.sort((a, b) => a.ts - b.ts);
           return merged;
         });
+
+        // Keep read-state current as new messages arrive while chat is open.
+        const theirMsgs = msgs.filter((msg) => msg.sender === "tradeRequester");
+        if (theirMsgs.length > 0) {
+          const offerType = trade.direction === "buy" ? "buyOffer" : "sellOffer";
+          const chatKey = getChatKey(offerType, String(trade.id), chatMatch._raw.tradeRequestUserId);
+          const maxId = theirMsgs.reduce(
+            (max, msg) => (Number(msg.id) > Number(max) ? msg.id : max),
+            theirMsgs[0].id,
+          );
+          const readMap = loadChatReadMap();
+          if (readMap[chatKey] === undefined || Number(maxId) > Number(readMap[chatKey])) {
+            readMap[chatKey] = maxId;
+            saveChatReadMap(readMap);
+          }
+        }
       } catch {
         /* silent */
       }
@@ -1038,9 +1100,19 @@ export default function MatchesPopup({
                       title="Chat"
                       onClick={(e) => {
                         e.stopPropagation();
+                        // Persist read-state immediately so the badge stays cleared
+                        // across reloads even if the chat-load fetch is slow.
+                        const entry = unreadMatchCounts.get(m.offerId);
+                        if (entry?.latestMessageId !== undefined) {
+                          const offerType = trade.direction === "buy" ? "buyOffer" : "sellOffer";
+                          const chatKey = getChatKey(offerType, String(trade.id), m._raw.tradeRequestUserId);
+                          const readMap = loadChatReadMap();
+                          readMap[chatKey] = entry.latestMessageId;
+                          saveChatReadMap(readMap);
+                        }
                         setChatMatch(m);
-                        setUnreadMatchIds((prev) => {
-                          const next = new Set(prev);
+                        setUnreadMatchCounts((prev) => {
+                          const next = new Map(prev);
                           next.delete(m.offerId);
                           return next;
                         });
@@ -1048,8 +1120,10 @@ export default function MatchesPopup({
                     >
                       <IconChat />
                       Chat
-                      {unreadMatchIds.has(m.offerId) && (
-                        <span className="chat-unread-dot" />
+                      {unreadMatchCounts.get(m.offerId)?.count > 0 && (
+                        <span className="chat-unread-dot">
+                          {unreadMatchCounts.get(m.offerId).count > 9 ? "9+" : unreadMatchCounts.get(m.offerId).count}
+                        </span>
                       )}
                     </button>
                   )}

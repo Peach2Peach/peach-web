@@ -85,6 +85,9 @@ let _state         = { notifications: _initNotifs, unreadCount: 0, readIds: load
 let _prevContracts = new Map();   // id → { tradeStatus, unreadMessages }
 let _prevOffers    = new Map();   // id → tradeStatus
 let _prevSellRequests = new Map(); // sellOfferId → Set<tradeRequestId> (sell-offer trade-requests workaround for missing tradeStatus)
+let _prevMatchCounts = new Map();  // buyOfferId → totalMatches (track additional matches arriving on hasMatchesAvailable offers)
+let _prevPreContractChats = new Map(); // chatKey "offerType:offerId:userId" → Set<String(messageId)> (pre-contract chat diff)
+let _pollTick      = 0;            // incremented every poll; chat layer runs only on even ticks (~16s cadence)
 let _isFirstPoll   = true;
 
 // Compute unread on load
@@ -127,6 +130,7 @@ async function _poll(auth, base) {
     return;
   }
 
+  _pollTick++;
   const hdrs = { Authorization: `Bearer ${auth.token}` };
   const v069Base = base.replace(/\/v1$/, "/v069");
 
@@ -144,6 +148,33 @@ async function _poll(auth, base) {
       : [];
     // Share contracts with useUnread to avoid duplicate API calls
     window.__PEACH_CONTRACTS__ = { data: contracts, ts: Date.now() };
+
+    // Auto-dismiss stale tradeRequest notifications: once a contract has been
+    // created from an offer, the original "Trade request received" notification
+    // is no longer actionable — clicking it would reopen an empty popup.
+    // Contract IDs are composite "buyOfferId-sellOfferId", so both halves count.
+    {
+      const offerIdsWithContract = new Set();
+      for (const c of contracts) {
+        for (const part of String(c.id).split("-")) offerIdsWithContract.add(part);
+      }
+      let dismissedAny = false;
+      for (const n of _state.notifications) {
+        if (n.type === "tradeRequest" && n.offerId
+            && offerIdsWithContract.has(String(n.offerId))
+            && !_state.readIds.has(n.id)) {
+          _state.readIds.add(n.id);
+          dismissedAny = true;
+        }
+      }
+      if (dismissedAny) {
+        _state.unreadCount = _state.notifications.filter(n => !_state.readIds.has(n.id)).length;
+        saveReadIds(_state.readIds, _state.notifications);
+        _updateTitle();
+        _notify();
+      }
+    }
+
     const buyOffers  = buyRes  ? (Array.isArray(buyRes)  ? buyRes  : (buyRes.offers ?? []))  : [];
     // Own sell offers from /v069/user/{id}/offers (sellOffer endpoint doesn't support ownOffers param)
     const sellOffers = ownOffersRes?.sellOffers ?? [];
@@ -268,6 +299,118 @@ async function _poll(auth, base) {
     const currentSellIds = new Set(sellOffers.map(o => String(o.id)));
     for (const id of [..._prevSellRequests.keys()]) {
       if (!currentSellIds.has(id)) _prevSellRequests.delete(id);
+    }
+
+    // ── Diff buy-offer match counts (notify on additional matches arriving) ──
+    const matchAvailableBuyOffers = buyOffers.filter(
+      o => o.tradeStatus === "hasMatchesAvailable" || o.tradeStatus === "offerHiddenWithMatchesAvailable"
+    );
+    const matchResults = await Promise.all(
+      matchAvailableBuyOffers.map(o =>
+        fetchWithSessionCheck(`${base}/offer/${o.id}/matches?page=0&size=1&sortBy=bestReputation`, { headers: hdrs })
+          .then(r => r.ok ? r.json() : null)
+          .catch(() => null)
+          .then(data => ({ offerId: String(o.id), data }))
+      )
+    );
+
+    for (const { offerId, data } of matchResults) {
+      if (!data || typeof data.totalMatches !== "number") continue;
+      const current = data.totalMatches;
+      const prev = _prevMatchCounts.get(offerId);
+      if (prev === undefined) {
+        // First time seeing this offer in match-available state — baseline only
+        _prevMatchCounts.set(offerId, current);
+        continue;
+      }
+      const delta = current - prev;
+      if (delta > 0) {
+        const fmtId = formatTradeId(offerId, "offer");
+        const title = delta === 1
+          ? `1 new match: offer ${fmtId}`
+          : `${delta} new matches: offer ${fmtId}`;
+        events.push(_makeNotif(
+          `o-${offerId}-moreMatches-${now}`, "match",
+          title, "Review and select a match.", null, offerId
+        ));
+      }
+      _prevMatchCounts.set(offerId, current);
+    }
+
+    // Prune _prevMatchCounts for offers no longer in match-available state
+    const currentMatchAvailIds = new Set(matchAvailableBuyOffers.map(o => String(o.id)));
+    for (const id of [..._prevMatchCounts.keys()]) {
+      if (!currentMatchAvailIds.has(id)) _prevMatchCounts.delete(id);
+    }
+
+    // ── Diff pre-contract chats (every 2nd tick ≈ 16s) ──
+    if (_pollTick % 2 === 0) {
+      // Build chat references from sell-offer trade requests (reuse Fix #3 data)
+      const chatRefs = [];
+      for (const { offerId, data } of trReqResults) {
+        if (!Array.isArray(data)) continue;
+        for (const tr of data) {
+          if (tr.userId) chatRefs.push({ offerType: "sellOffer", offerId, userId: tr.userId });
+        }
+      }
+      // Buy-offer trade-request lists (only offers in acceptTradeRequest state)
+      const buyOffersWithRequests = buyOffers.filter(o => o.tradeStatus === "acceptTradeRequest");
+      const buyTrResults = await Promise.all(
+        buyOffersWithRequests.map(o =>
+          fetchWithSessionCheck(`${v069Base}/buyOffer/${o.id}/tradeRequestReceived/`, { headers: hdrs })
+            .then(r => r.ok ? r.json() : null)
+            .catch(() => null)
+            .then(data => ({ offerId: String(o.id), data }))
+        )
+      );
+      for (const { offerId, data } of buyTrResults) {
+        const arr = Array.isArray(data) ? data : (data?.tradeRequests ?? []);
+        for (const tr of arr) {
+          if (tr.userId) chatRefs.push({ offerType: "buyOffer", offerId, userId: tr.userId });
+        }
+      }
+
+      // Fetch each pre-contract chat in parallel
+      const chatResults = await Promise.all(
+        chatRefs.map(ref =>
+          fetchWithSessionCheck(`${v069Base}/${ref.offerType}/${ref.offerId}/tradeRequestReceived/${ref.userId}/chat`, { headers: hdrs })
+            .then(r => r.ok ? r.json() : null)
+            .catch(() => null)
+            .then(data => ({ ref, data }))
+        )
+      );
+
+      for (const { ref, data } of chatResults) {
+        const msgs = Array.isArray(data) ? data : (data?.messages ?? data?.data ?? []);
+        if (!Array.isArray(msgs)) continue;
+        const theirMsgs = msgs.filter(m => m.sender === "tradeRequester");
+        const currentIds = new Set(theirMsgs.map(m => String(m.id)));
+        const chatKey = `${ref.offerType}:${ref.offerId}:${ref.userId}`;
+        const prevIds = _prevPreContractChats.get(chatKey);
+        if (prevIds === undefined) {
+          // First time seeing this chat — baseline only, no notification
+          _prevPreContractChats.set(chatKey, currentIds);
+          continue;
+        }
+        const newIds = [...currentIds].filter(id => !prevIds.has(id));
+        if (newIds.length > 0) {
+          const fmtId = formatTradeId(ref.offerId, "offer");
+          const title = newIds.length === 1
+            ? `New message: offer ${fmtId}`
+            : `${newIds.length} new messages: offer ${fmtId}`;
+          events.push(_makeNotif(
+            `chat-${ref.offerType}-${ref.offerId}-${ref.userId}-${now}`, "message",
+            title, "", null, ref.offerId
+          ));
+        }
+        _prevPreContractChats.set(chatKey, currentIds);
+      }
+
+      // Prune _prevPreContractChats for chats no longer present
+      const currentChatKeys = new Set(chatRefs.map(r => `${r.offerType}:${r.offerId}:${r.userId}`));
+      for (const key of [..._prevPreContractChats.keys()]) {
+        if (!currentChatKeys.has(key)) _prevPreContractChats.delete(key);
+      }
     }
 
     _addEvents(events);

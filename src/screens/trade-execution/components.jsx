@@ -1646,7 +1646,12 @@ export function EscrowFundingCard({
 }
 
 // ─── CONFIRM MODAL ───────────────────────────────────────────────────────────
-function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel }) {
+function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel, tone = "danger" }) {
+  const isSuccess = tone === "success";
+  const confirmBg = isSuccess ? "var(--success)" : "var(--error)";
+  const confirmShadow = isSuccess
+    ? "0 2px 10px rgba(101,165,25,.3)"
+    : "0 2px 10px rgba(223,50,31,.3)";
   return (
     <div
       style={{
@@ -1662,7 +1667,7 @@ function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel }) {
     >
       <div
         style={{
-          background: "white",
+          background: "var(--surface)",
           borderRadius: 16,
           padding: "28px 24px",
           maxWidth: 380,
@@ -1671,21 +1676,23 @@ function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel }) {
           animation: "modalIn .18s ease",
         }}
       >
-        <div
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: "50%",
-            background: "var(--error-bg)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            marginBottom: 14,
-          }}
-        >
-          <IconAlert />
-        </div>
-        <div style={{ fontWeight: 800, fontSize: "1.05rem", marginBottom: 8 }}>
+        {!isSuccess && (
+          <div
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: "50%",
+              background: "var(--error-bg)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginBottom: 14,
+            }}
+          >
+            <IconAlert />
+          </div>
+        )}
+        <div style={{ fontWeight: 800, fontSize: "1.05rem", marginBottom: 8, color: "var(--text)" }}>
           {title}
         </div>
         <div
@@ -1703,7 +1710,7 @@ function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel }) {
             style={{
               flex: 1,
               border: "1.5px solid var(--black-10)",
-              background: "white",
+              background: "var(--surface)",
               borderRadius: 999,
               fontFamily: "Baloo 2, cursive",
               fontWeight: 700,
@@ -1726,15 +1733,15 @@ function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel }) {
             style={{
               flex: 1,
               border: "none",
-              background: "var(--error)",
+              background: confirmBg,
               borderRadius: 999,
               fontFamily: "Baloo 2, cursive",
               fontWeight: 800,
               fontSize: ".87rem",
-              color: "white",
+              color: "var(--text-on-accent)",
               padding: "10px",
               cursor: "pointer",
-              boxShadow: "0 2px 10px rgba(223,50,31,.3)",
+              boxShadow: confirmShadow,
               transition: "filter .15s",
             }}
             onMouseEnter={(e) =>
@@ -2642,91 +2649,20 @@ export function ActionPanel({
   return (
     <>
       {showConfirm && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 500,
-            background: "rgba(43,25,17,.55)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 20,
+        <ConfirmModal
+          tone="success"
+          title="Confirm you received the payment"
+          body="Only confirm if you have actually received the fiat payment in your account. You'll be able to rate the buyer once the bitcoin has been released."
+          confirmLabel="Release Bitcoin"
+          onCancel={() => {
+            setShowConfirm(false);
+            setConfirmSliderKey((k) => k + 1);
           }}
-        >
-          <div
-            style={{
-              background: "white",
-              borderRadius: 16,
-              padding: "28px 24px",
-              maxWidth: 380,
-              width: "100%",
-              boxShadow: "0 20px 60px rgba(0,0,0,.25)",
-              animation: "modalIn .18s ease",
-            }}
-          >
-            <div
-              style={{ fontWeight: 800, fontSize: "1.05rem", marginBottom: 8 }}
-            >
-              Confirm you received the payment
-            </div>
-            <div
-              style={{
-                fontSize: ".88rem",
-                color: "var(--black-65)",
-                lineHeight: 1.6,
-                marginBottom: 24,
-              }}
-            >
-              Only confirm if you have actually received the fiat payment in
-              your account. You'll be able to rate the buyer once the bitcoin
-              has been released.
-            </div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <button
-                style={{
-                  flex: 1,
-                  border: "1.5px solid var(--black-10)",
-                  background: "white",
-                  borderRadius: 999,
-                  fontFamily: "Baloo 2, cursive",
-                  fontWeight: 700,
-                  fontSize: ".87rem",
-                  color: "var(--black)",
-                  padding: "10px",
-                  cursor: "pointer",
-                }}
-                onClick={() => {
-                  setShowConfirm(false);
-                  setConfirmSliderKey((k) => k + 1);
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                style={{
-                  flex: 1,
-                  border: "none",
-                  background: "var(--success)",
-                  borderRadius: 999,
-                  fontFamily: "Baloo 2, cursive",
-                  fontWeight: 800,
-                  fontSize: ".87rem",
-                  color: "white",
-                  padding: "10px",
-                  cursor: "pointer",
-                  transition: "background .15s ease",
-                }}
-                onClick={() => {
-                  setShowConfirm(false);
-                  onAction("release_bitcoin");
-                }}
-              >
-                Release Bitcoin
-              </button>
-            </div>
-          </div>
-        </div>
+          onConfirm={() => {
+            setShowConfirm(false);
+            onAction("release_bitcoin");
+          }}
+        />
       )}
 
       {showCancelConfirm && (

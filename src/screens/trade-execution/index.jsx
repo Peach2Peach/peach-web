@@ -1962,6 +1962,47 @@ export default function TradeExecution() {
                         }}
                       />
                     )}
+
+                  {/* Rating panel — both roles rate after bitcoin is released */}
+                  {status === "rateUser" && (
+                    <RatingPanel
+                      counterparty={counterparty}
+                      onRate={async (r) => {
+                        const rating = r === 5 ? 1 : -1;
+                        const ratedUserId = counterparty.id;
+                        if (!ratedUserId || ratedUserId === "unknown") {
+                          throw new Error("Counterparty id is missing");
+                        }
+                        if (!auth?.pgpPrivKey) {
+                          throw new Error("PGP private key unavailable");
+                        }
+                        // Key order is load-bearing: backend reconstructs the
+                        // signed payload as contractId → rating → ratedUserId.
+                        const payload = {
+                          contractId: contract.id,
+                          rating,
+                          ratedUserId,
+                        };
+                        const pgpSignature = await signPGPMessage(
+                          JSON.stringify(payload),
+                          auth.pgpPrivKey,
+                        );
+                        if (!pgpSignature) {
+                          throw new Error("Failed to sign rating");
+                        }
+                        const res = await post(
+                          `/contract/${contract.id}/user/rate`,
+                          { rating, pgpSignature },
+                        );
+                        if (!res.ok) {
+                          const text = await res.text().catch(() => "");
+                          throw new Error(
+                            `Rating failed (${res.status})${text ? ": " + text : ""}`,
+                          );
+                        }
+                      }}
+                    />
+                  )}
                 </div>
 
                 {/* Payment details (buyer sees seller's payment info, or vice versa) — hidden after cancellation, and hidden from buyer until escrow is funded */}
@@ -2086,48 +2127,6 @@ export default function TradeExecution() {
                     </div>
                   )}
 
-                {/* Rating panel — both roles rate after bitcoin is released */}
-                {status === "rateUser" && (
-                  <div className="panel-section">
-                    <RatingPanel
-                      counterparty={counterparty}
-                      onRate={async (r) => {
-                        const rating = r === 5 ? 1 : -1;
-                        const ratedUserId = counterparty.id;
-                        if (!ratedUserId || ratedUserId === "unknown") {
-                          throw new Error("Counterparty id is missing");
-                        }
-                        if (!auth?.pgpPrivKey) {
-                          throw new Error("PGP private key unavailable");
-                        }
-                        // Key order is load-bearing: backend reconstructs the
-                        // signed payload as contractId → rating → ratedUserId.
-                        const payload = {
-                          contractId: contract.id,
-                          rating,
-                          ratedUserId,
-                        };
-                        const pgpSignature = await signPGPMessage(
-                          JSON.stringify(payload),
-                          auth.pgpPrivKey,
-                        );
-                        if (!pgpSignature) {
-                          throw new Error("Failed to sign rating");
-                        }
-                        const res = await post(
-                          `/contract/${contract.id}/user/rate`,
-                          { rating, pgpSignature },
-                        );
-                        if (!res.ok) {
-                          const text = await res.text().catch(() => "");
-                          throw new Error(
-                            `Rating failed (${res.status})${text ? ": " + text : ""}`,
-                          );
-                        }
-                      }}
-                    />
-                  </div>
-                )}
               </div>
 
               {/* ── RIGHT: Chat ── */}

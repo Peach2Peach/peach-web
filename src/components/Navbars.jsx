@@ -216,8 +216,20 @@ export function Topbar({
     if (n.contractId) {
       navigate(`/trade/${n.contractId}`);
     } else if (n.offerId) {
+      // Stale tradeRequest / pre-contract chat: if a contract has already been
+      // created from this offer, jump to it instead of reopening the now-empty
+      // matches popup.
+      if (n.type === "tradeRequest" || n.type === "message") {
+        const offerIdStr = String(n.offerId);
+        const contracts = window.__PEACH_CONTRACTS__?.data ?? [];
+        const contract = contracts.find(c => String(c.id).split("-").includes(offerIdStr));
+        if (contract) {
+          navigate(`/trade/${contract.id}`);
+          return;
+        }
+      }
       const tab = (n.type === "expiry") ? "history" : "pending";
-      const intent = n.type === "tradeRequest" ? "tradeRequest" : undefined;
+      const intent = (n.type === "tradeRequest" || n.type === "message") ? "tradeRequest" : undefined;
       navigate("/trades", { state: { openOfferId: n.offerId, tab, intent } });
     } else {
       navigate("/trades");

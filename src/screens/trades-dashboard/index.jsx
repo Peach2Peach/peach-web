@@ -525,8 +525,11 @@ const CSS = `
   .match-chat-btn:hover{color:var(--primary)}
   .chat-unread-dot{
     position:absolute;top:0;right:0;
-    width:8px;height:8px;border-radius:50%;
-    background:var(--primary);
+    min-width:16px;height:16px;border-radius:999px;
+    background:var(--primary);color:#fff;
+    font-family:var(--font);font-size:.6rem;font-weight:800;line-height:1;
+    display:flex;align-items:center;justify-content:center;padding:0 4px;
+    border:2px solid var(--surface);
   }
 
   /* Chat bubbles (shared pattern with trade-execution) */

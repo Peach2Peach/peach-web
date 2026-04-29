@@ -12,6 +12,7 @@
   --btc:#F7931A;--stepper-h:52px;
   --warning:#9A7000;--warning-soft:#FEFCE5;
   --session-ring-warn:#F5B400;
+  --text-on-accent:#FFFFFF;
 }
 
 /* ── semantic aliases (light — mirrored from base tokens) ── */
@@ -76,6 +77,7 @@
   --warning:#E8B84A;
   --warning-soft:#2E2418;
   --session-ring-warn:#F5C84A;
+  --text-on-accent:#1A1512;
 }
 
 [data-theme="dark"] body{background:var(--bg);color:var(--black)}
