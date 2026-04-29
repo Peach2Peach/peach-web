@@ -1702,7 +1702,8 @@ export default function TradesDashboard() {
     }
   }
 
-  async function handleTradeSelect(trade) {
+  async function handleTradeSelect(trade, opts = {}) {
+    const { forceMatches = false } = opts;
     // Sent trade requests → show detail/chat popup (MARKET-style nice modal)
     if (trade.kind === "sentRequest") {
       setSentRequestPopup(trade);
@@ -1710,7 +1711,8 @@ export default function TradesDashboard() {
     }
     // Offers with available matches or trade requests → show match acceptance popup
     if (
-      (trade.tradeStatus === "hasMatchesAvailable" ||
+      (forceMatches ||
+        trade.tradeStatus === "hasMatchesAvailable" ||
         trade.tradeStatus === "acceptTradeRequest") &&
       !acceptedTrades.has(trade.id)
     ) {
@@ -1727,6 +1729,7 @@ export default function TradesDashboard() {
           // doesn't cover v069 trade requests, and the v1 summary sometimes reports
           // hasMatchesAvailable for sell offers whose requests are actually on v069).
           const useV069 =
+            forceMatches ||
             trade.tradeStatus === "acceptTradeRequest" ||
             trade.direction === "sell";
           if (useV069) {
@@ -1802,6 +1805,7 @@ export default function TradesDashboard() {
   useEffect(() => {
     const offerId = location.state?.openOfferId;
     if (!offerId) return;
+    const intent = location.state?.intent;
     // Clear location state so it doesn't re-trigger on refresh
     const clearState = () =>
       navigate(location.pathname, { replace: true, state: {} });
@@ -1810,7 +1814,7 @@ export default function TradesDashboard() {
     if (livePending) {
       const trade = livePending.find((t) => String(t.id) === String(offerId));
       if (trade && !matchesPopup) {
-        handleTradeSelect(trade);
+        handleTradeSelect(trade, { forceMatches: intent === "tradeRequest" });
         clearState();
         return;
       }

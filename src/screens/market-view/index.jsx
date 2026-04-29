@@ -85,6 +85,7 @@ export default function PeachMarket() {
   const [requestAnim,    setRequestAnim]    = useState(false);  // "Trade requested" animation
   const [undoAnim,       setUndoAnim]       = useState(null);   // offer id being undone
   const [localRequested, setLocalRequested] = useState(() => new Set()); // track requested state locally
+  const [acceptedContracts, setAcceptedContracts] = useState(() => new Map()); // offerId → contractId once seller accepts a sent request
   const [detailsLoading, setDetailsLoading] = useState(false);  // fetching /offer/:id/details
   const [offerDetails,   setOfferDetails]   = useState(null);   // fetched details for popupOffer
   const [highlightedIds, setHighlightedIds] = useState(() => new Set()); // newly published offers, briefly highlighted
@@ -153,7 +154,7 @@ export default function PeachMarket() {
       try {
         const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
         const hdrs = { Authorization: `Bearer ${auth.token}` };
-        const [detailsRes, tradeReqRes] = await Promise.all([
+        const [detailsRes, tradeReqRes, contractsRes] = await Promise.all([
           // Sell-offer details endpoint is sell-exclusive; skip for buy offers.
           isSell
             ? fetchWithSessionCheck(`${v069Base}/sellOffer/${offerId}`, { headers: hdrs })
@@ -161,6 +162,11 @@ export default function PeachMarket() {
           isOwn
             ? Promise.resolve(null)
             : fetchWithSessionCheck(`${v069Base}/${offerTypePath}/${offerId}/tradeRequestPerformed`, { headers: hdrs }),
+          // Detect "seller accepted my request" → a contract appears whose composite
+          // ID ({buyOfferId}-{sellOfferId}) contains this offer's id.
+          isOwn
+            ? Promise.resolve(null)
+            : get('/contracts/summary'),
         ]);
         if (cancelled) return;
         const details = detailsRes && detailsRes.ok ? await detailsRes.json().catch(() => null) : null;
@@ -179,8 +185,24 @@ export default function PeachMarket() {
             }
           }
         }
+        // Match a contract back to this offer via the composite contract id.
+        let acceptedContractId = null;
+        if (contractsRes && contractsRes.ok) {
+          const list = await contractsRes.json().catch(() => null);
+          if (Array.isArray(list)) {
+            const offerIdStr = String(offerId);
+            const match = list.find(c => String(c.id).split("-").includes(offerIdStr));
+            if (match) acceptedContractId = String(match.id);
+          }
+        }
         if (cancelled) return;
         setOfferDetails({ details, tradeRequest: tradeReq });
+        if (acceptedContractId) {
+          setAcceptedContracts(prev => {
+            if (prev.get(offerId) === acceptedContractId) return prev;
+            const m = new Map(prev); m.set(offerId, acceptedContractId); return m;
+          });
+        }
         // Reconcile local optimistic state with server truth.
         if (tradeReqExists) {
           setLocalRequested(prev => prev.has(offerId) ? prev : new Set([...prev, offerId]));
@@ -925,6 +947,9 @@ export default function PeachMarket() {
     for (const o of (liveOffers ?? [])) {
       if (o.hasPerformedTradeRequest) s.add(o.id);
     }
+    // Once we've seen a contract for an offer's request, keep the popup pinned
+    // to the requested branch so the "accepted" state can render.
+    for (const id of acceptedContracts.keys()) s.add(id);
     return s;
   })();
 
@@ -1005,6 +1030,7 @@ export default function PeachMarket() {
     // ── Already-requested offer → use the shared RequestedOfferPopup component
     // (same modal as TRADES screen for sent trade requests).
     if (isReq && !isOwn) {
+      const acceptedContractId = acceptedContracts.get(offer.id) || null;
       return (
         <RequestedOfferPopup
           offer={offer}
@@ -1012,6 +1038,13 @@ export default function PeachMarket() {
           selectedCurrency={selectedCurrency}
           btcPrice={btcPrice}
           onClose={closePopup}
+          acceptedContractId={acceptedContractId}
+          onOpenTrade={() => {
+            const id = acceptedContracts.get(offer.id);
+            if (!id) return;
+            closePopup();
+            navigate(`/trade/${id}`);
+          }}
           onUndoSuccess={(offerId) => {
             setLocalRequested(prev => { const s = new Set(prev); s.delete(offerId); return s; });
             setUndoAnim(offerId);

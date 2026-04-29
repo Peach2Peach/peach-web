@@ -64,6 +64,11 @@ const POPUP_CSS = `
   .rop-btn-undo:hover:not(:disabled){background:var(--black-10);color:var(--black)}
   .rop-btn-chat{background:var(--primary-mild);color:var(--primary-dark)}
   .rop-btn-chat:hover:not(:disabled){background:var(--primary);color:white}
+  .rop-btn-primary{background:var(--grad);color:white}
+  .rop-btn-primary:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 6px 16px rgba(43,25,17,.18)}
+  .rop-title-success{color:var(--success)}
+  .rop-accepted{margin-top:16px;padding:16px;border-radius:10px;background:var(--success-bg);text-align:center}
+  .rop-accepted-badge{font-size:.88rem;font-weight:800;color:var(--success)}
   /* Chat */
   .rop-chat-enc{margin:10px 22px 0;padding:6px 12px;border-radius:8px;
     background:var(--primary-mild);color:var(--primary-dark);
@@ -107,11 +112,14 @@ export default function RequestedOfferPopup({
   onUndoSuccess,
   selectedCurrency,
   btcPrice,
+  acceptedContractId,
+  onOpenTrade,
 }) {
   if (!offer) return null;
 
   const isSell = offer.type === "ask"; // sell offer (someone selling BTC)
   const offerTypePath = isSell ? "sellOffer" : "buyOffer";
+  const isAccepted = !!acceptedContractId;
 
   // ── View: "detail" | "chat" ──
   const [view, setView] = useState("detail");
@@ -124,6 +132,7 @@ export default function RequestedOfferPopup({
   // Poll both endpoints every 10s while popup is open.
   useEffect(() => {
     if (!auth) return;
+    if (isAccepted) { setInitialLoading(false); return; }
     let cancelled = false;
     const v069Base = auth.baseUrl.replace(/\/v1$/, "/v069");
     const hdrs = { Authorization: `Bearer ${auth.token}` };
@@ -157,7 +166,7 @@ export default function RequestedOfferPopup({
     refresh(true);
     const iv = setInterval(() => refresh(false), 10000);
     return () => { cancelled = true; clearInterval(iv); };
-  }, [auth, offer.id, offerTypePath, isSell]);
+  }, [auth, offer.id, offerTypePath, isSell, isAccepted]);
 
   // ── Undo state ──
   const [undoLoading, setUndoLoading] = useState(false);
@@ -422,8 +431,8 @@ export default function RequestedOfferPopup({
       <div className="rop-overlay" onClick={onClose}>
         <div className="rop-card" onClick={e => e.stopPropagation()}>
           <div className="rop-header">
-            <span className="rop-title">
-              Trade requested
+            <span className={`rop-title${isAccepted ? " rop-title-success" : ""}`}>
+              {isAccepted ? "Trade accepted" : "Trade requested"}
               <span className="rop-id">{offer.tradeId}</span>
             </span>
             <button className="rop-close" onClick={onClose}>✕</button>
@@ -498,14 +507,23 @@ export default function RequestedOfferPopup({
               )}
             </div>
 
-            <div className="rop-requested">
-              <div className="rop-requested-badge">✓ Trade requested</div>
-              <div style={{fontSize:".78rem",color:"var(--black-65)",marginTop:4}}>
-                Waiting for the {isSell ? "seller" : "buyer"} to respond.
+            {isAccepted ? (
+              <div className="rop-accepted">
+                <div className="rop-accepted-badge">✓ Trade accepted</div>
+                <div style={{fontSize:".78rem",color:"var(--black-65)",marginTop:4}}>
+                  The {isSell ? "seller" : "buyer"} accepted your request.
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="rop-requested">
+                <div className="rop-requested-badge">✓ Trade requested</div>
+                <div style={{fontSize:".78rem",color:"var(--black-65)",marginTop:4}}>
+                  Waiting for the {isSell ? "seller" : "buyer"} to respond.
+                </div>
+              </div>
+            )}
 
-            {undoError && (
+            {!isAccepted && undoError && (
               <div style={{color:"var(--error)",fontSize:".78rem",fontWeight:600,marginTop:10,textAlign:"center"}}>
                 {undoError}
               </div>
@@ -513,21 +531,32 @@ export default function RequestedOfferPopup({
           </div>
 
           <div className="rop-footer">
-            <button
-              className="rop-btn rop-btn-undo"
-              disabled={undoLoading}
-              onClick={handleUndo}
-            >
-              {undoLoading ? "Undoing…" : "Undo request"}
-            </button>
-            <button
-              className="rop-btn rop-btn-chat"
-              disabled={!chatEnabled || undoLoading}
-              title={chatEnabled ? "Open chat" : "Chat not available"}
-              onClick={() => setView("chat")}
-            >
-              💬 Chat
-            </button>
+            {isAccepted ? (
+              <button
+                className="rop-btn rop-btn-primary"
+                onClick={() => onOpenTrade && onOpenTrade()}
+              >
+                Open trade
+              </button>
+            ) : (
+              <>
+                <button
+                  className="rop-btn rop-btn-undo"
+                  disabled={undoLoading}
+                  onClick={handleUndo}
+                >
+                  {undoLoading ? "Undoing…" : "Undo request"}
+                </button>
+                <button
+                  className="rop-btn rop-btn-chat"
+                  disabled={!chatEnabled || undoLoading}
+                  title={chatEnabled ? "Open chat" : "Chat not available"}
+                  onClick={() => setView("chat")}
+                >
+                  💬 Chat
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

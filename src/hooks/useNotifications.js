@@ -5,7 +5,9 @@ import { fetchWithSessionCheck } from "../utils/sessionGuard.js";
 
 // ── Seller-specific overrides (keyed by status) ─────────────────────────────
 const SELLER_OVERRIDE = {
-  paymentRequired:        { title: "Waiting for buyer",        body: "Wait for buyer to mark the payment as done." },
+  fundEscrow:             { title: "Fund escrow",              body: "Trade accepted — fund the escrow now." },
+  waitingForFunding:      { title: "Fund escrow",              body: "Waiting for you to fund the escrow." },
+  paymentRequired:        { title: "Trade initiated ! Awaiting payment",         body: "Waiting for the buyer to send payment." },
   confirmPaymentRequired: { title: "Payment marked as sent",   body: "Check your account and confirm receipt." },
   releaseEscrow:          { title: "Confirm payment receipt",  body: "Check your account and release escrow." },
 };
@@ -18,23 +20,24 @@ const STATUS_NOTIF = {
   fundEscrow:                   { title: "Trade accepted",          body: "Waiting for seller to fund escrow.",     type: "statusChange" },
   waitingForFunding:            { title: "Trade accepted",          body: "Waiting for seller to fund escrow.",     type: "statusChange" },
   escrowWaitingForConfirmation: { title: "Escrow funded",           body: "Waiting for blockchain confirmation.",   type: "statusChange" },
-  paymentRequired:              { title: "Payment required",        body: "Send payment to the seller.",            type: "statusChange" },
-  confirmPaymentRequired:       { title: "Payment sent",            body: "Buyer marked payment as sent.",          type: "statusChange" },
+  paymentRequired:              { title: "Trade Initiated ! Payment required",        body: "Send payment to the seller.",            type: "statusChange" },
+  confirmPaymentRequired:       { title: "Payment sent",            body: "you have marked the payment as sent",    type: "statusChange" },
   releaseEscrow:                { title: "Payment confirmed",       body: "Seller is releasing escrow.",            type: "statusChange" },
-  tradeCompleted:               { title: "Trade completed",         body: "Bitcoin released successfully.",          type: "statusChange" },
+  tradeCompleted:               { title: "Trade completed",         body: "Bitcoin released successfully.",         type: "statusChange" },
   tradeCanceled:                { title: "Trade cancelled",         body: "",                                       type: "statusChange" },
   offerCanceled:                { title: "Offer cancelled",         body: "",                                       type: "statusChange" },
   dispute:                      { title: "Dispute opened",          body: "A mediator will review the trade.",      type: "dispute" },
   disputeWithoutEscrowFunded:   { title: "Dispute opened",          body: "A mediator will review the trade.",      type: "dispute" },
-  fundingExpired:               { title: "Funding expired",         body: "Escrow was not funded in time.",          type: "expiry" },
-  paymentTooLate:               { title: "Payment overdue",         body: "Payment deadline has passed.",            type: "statusChange" },
-  confirmCancelation:           { title: "Cancellation requested",  body: "Review the cancellation request.",        type: "statusChange" },
-  rateUser:                     { title: "Rate your trade partner",  body: "",                                      type: "statusChange" },
-  createEscrow:                 { title: "Create escrow",            body: "Generate escrow address for your sell offer.", type: "statusChange" },
+  fundingExpired:               { title: "Funding expired",         body: "Escrow was not funded in time.",         type: "expiry" },
+  paymentTooLate:               { title: "Payment overdue",         body: "Payment deadline has passed.",           type: "statusChange" },
+  confirmCancelation:           { title: "Cancellation requested",  body: "Review the cancellation request.",       type: "statusChange" },
+  rateUser:                     { title: "Trade completed! Rate your trade partner",  body: "",                                      type: "statusChange" },
+  createEscrow:                 { title: "Create escrow",            body: "Fun the escrow for this contract.",     type: "statusChange" },
   fundingAmountDifferent:       { title: "Wrong funding amount",     body: "Escrow funded with unexpected amount.",   type: "warning" },
   payoutPending:                { title: "Payout pending",           body: "Bitcoin is being sent to your wallet.",   type: "statusChange" },
   refundAddressRequired:        { title: "Refund address needed",    body: "Provide a refund address to continue.",   type: "warning" },
   refundOrReviveRequired:       { title: "Action needed",            body: "Decide whether to refund or republish.",  type: "warning" },
+  refundTxSignatureRequired:    { title: "Refund signature needed",  body: "Sign the refund transaction to continue.", type: "warning" },
   wrongAmountFundedOnContract:  { title: "Wrong amount funded",      body: "Contract funded with incorrect amount.",  type: "warning" },
   wrongAmountFundedOnContractRefundWaiting: { title: "Refund pending", body: "Waiting for refund of incorrect amount.", type: "warning" },
 };
@@ -81,6 +84,7 @@ const _initNotifs  = loadNotifs();
 let _state         = { notifications: _initNotifs, unreadCount: 0, readIds: loadReadIds(_initNotifs) };
 let _prevContracts = new Map();   // id → { tradeStatus, unreadMessages }
 let _prevOffers    = new Map();   // id → tradeStatus
+let _prevSellRequests = new Map(); // sellOfferId → Set<tradeRequestId> (sell-offer trade-requests workaround for missing tradeStatus)
 let _isFirstPoll   = true;
 
 // Compute unread on load
@@ -170,7 +174,7 @@ async function _poll(auth, base) {
       const status = c.tradeStatus;
       const unread = c.unreadMessages ?? 0;
       const fmtId = formatTradeId(c.id);
-      const isSeller = c.seller?.id === auth.peachId || (c.buyer?.id && c.buyer.id !== auth.peachId);
+      const isSeller = c.type === "ask";
       const sellerOv = isSeller ? SELLER_OVERRIDE[status] : null;
 
       if (prev) {
@@ -225,6 +229,45 @@ async function _poll(auth, base) {
       }
 
       _prevOffers.set(o.id, status);
+    }
+
+    // ── Diff sell-offer trade requests (workaround: sell offers lack tradeStatus) ──
+    const trReqResults = await Promise.all(
+      sellOffers.map(o =>
+        fetchWithSessionCheck(`${v069Base}/sellOffer/${o.id}/tradeRequestReceived/`, { headers: hdrs })
+          .then(r => r.ok ? r.json() : null)
+          .catch(() => null)
+          .then(data => ({ offerId: String(o.id), data }))
+      )
+    );
+
+    for (const { offerId, data } of trReqResults) {
+      if (!Array.isArray(data)) continue;
+      const currentIds = new Set(data.map(tr => String(tr.id)));
+      const prevIds = _prevSellRequests.get(offerId);
+      if (prevIds === undefined) {
+        // First time seeing this offer — baseline only, no notification
+        _prevSellRequests.set(offerId, currentIds);
+        continue;
+      }
+      const newIds = [...currentIds].filter(id => !prevIds.has(id));
+      if (newIds.length > 0) {
+        const fmtId = formatTradeId(offerId, "offer");
+        const title = newIds.length === 1
+          ? `Trade request received: offer ${fmtId}`
+          : `${newIds.length} trade requests received: offer ${fmtId}`;
+        events.push(_makeNotif(
+          `o-${offerId}-tradeReq-${now}`, "tradeRequest",
+          title, "Review and accept or decline.", null, offerId
+        ));
+      }
+      _prevSellRequests.set(offerId, currentIds);
+    }
+
+    // Prune _prevSellRequests for sell offers no longer present
+    const currentSellIds = new Set(sellOffers.map(o => String(o.id)));
+    for (const id of [..._prevSellRequests.keys()]) {
+      if (!currentSellIds.has(id)) _prevSellRequests.delete(id);
     }
 
     _addEvents(events);

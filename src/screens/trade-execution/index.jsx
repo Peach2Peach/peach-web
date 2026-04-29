@@ -1277,31 +1277,12 @@ export default function TradeExecution() {
                     />
                   )}
 
-                  {/* Payment deadline — inside actions */}
-                  {/* Payment deadline pill — hidden for seller when paymentRequired (has its own merged bar), and hidden in stalled states (cancellation, payment-too-late, escrow-funding-timeout) */}
+                  {/* Payment deadline pill — only meaningful while the buyer still needs to send fiat */}
                   {deadlineStr &&
+                    status === "paymentRequired" &&
+                    role === "buyer" &&
                     !scenario.paymentTimedOut &&
-                    !scenario.escrowFundingTimeLimitExpired &&
-                    !(status === "paymentRequired" && role === "seller") &&
-                    !(
-                      status === "confirmPaymentRequired" && role === "seller"
-                    ) &&
-                    !(status === "releaseEscrow" && role === "seller") &&
-                    !(status === "rateUser" && role === "seller") &&
-                    status !== "tradeCompleted" &&
-                    status !== "dispute" &&
-                    status !== "disputeWithoutEscrowFunded" &&
-                    status !== "tradeCanceled" &&
-                    status !== "refundOrReviveRequired" &&
-                    status !== "confirmCancelation" &&
-                    status !== "paymentTooLate" &&
-                    status !== "fundEscrow" &&
-                    status !== "createEscrow" &&
-                    status !== "waitingForFunding" &&
-                    status !== "escrowWaitingForConfirmation" &&
-                    status !== "fundingAmountDifferent" &&
-                    status !== "wrongAmountFundedOnContract" &&
-                    status !== "wrongAmountFundedOnContractRefundWaiting" && (
+                    !scenario.cancelationRequested && (
                       <div
                         style={{
                           display: "flex",

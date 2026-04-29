@@ -3178,6 +3178,11 @@ export function ActionPanel({
                     ? "This trade has been cancelled. Your reputation has been affected."
                     : "This trade has been cancelled. Your reputation has not been affected.";
                 }
+                if (scenario.escrowFundingTimeLimitExpired) {
+                  return role === "seller"
+                    ? "This trade has been cancelled because you have not funded the escrow on time. Your reputation has been affected."
+                    : "This trade has been cancelled because the seller did not fund the escrow on time. The seller's reputation has been affected.";
+                }
                 // Mediator auto-cancel due to escrow funding timeout — the seller is
                 // the responsible party (mediator itself has no reputation).
                 const responsibleParty =

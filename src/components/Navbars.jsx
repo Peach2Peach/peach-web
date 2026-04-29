@@ -217,7 +217,8 @@ export function Topbar({
       navigate(`/trade/${n.contractId}`);
     } else if (n.offerId) {
       const tab = (n.type === "expiry") ? "history" : "pending";
-      navigate("/trades", { state: { openOfferId: n.offerId, tab } });
+      const intent = n.type === "tradeRequest" ? "tradeRequest" : undefined;
+      navigate("/trades", { state: { openOfferId: n.offerId, tab, intent } });
     } else {
       navigate("/trades");
     }
