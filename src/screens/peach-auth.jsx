@@ -253,6 +253,11 @@ export default function PeachAuth() {
   const btcPrice = Math.round(allPrices?.[selectedCurrency] ?? 87432);
   const [isMobile, setIsMobile] = useState(false);
 
+  // Phone detection (UA-based — heuristic, but good enough for our gating)
+  const isPhone =
+    /iPhone|iPod/.test(navigator.userAgent) ||
+    /Android.*Mobile/i.test(navigator.userAgent);
+
   // ─── QR AUTH (real handshake) ──────────────────────────────────────────────
   const isLocal =
     location.hostname === "localhost" || location.hostname === "127.0.0.1";
@@ -267,7 +272,7 @@ export default function PeachAuth() {
     error: qrError,
     profile: qrProfile,
     restart: qrRestart,
-  } = useQRAuth({ baseUrl: regtestBase });
+  } = useQRAuth({ baseUrl: regtestBase, auto: !isPhone });
 
   // Map hook phases to UI display
   const phase =
@@ -319,6 +324,50 @@ export default function PeachAuth() {
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
   const [desktopShowCode, setDesktopShowCode] = useState(false);
   const [mobileShowQR, setMobileShowQR] = useState(false);
+  const [appNotInstalled, setAppNotInstalled] = useState(false);
+  const [openingApp, setOpeningApp] = useState(false);
+
+  // Open the app via custom-scheme deep link, with visibility-based detection
+  // for the "app not installed" fallback. iOS doesn't expose canOpenURL to the
+  // web — the closest signal is whether the page becomes hidden after the OS
+  // hands focus to the app. If we're still visible after ~2.5s, assume no app.
+  async function handleOpenApp() {
+    if (openingApp) return;
+    setAppNotInstalled(false);
+    setOpeningApp(true);
+
+    const result = await qrRestart();
+    if (!result?.payload) {
+      setOpeningApp(false);
+      setAppNotInstalled(true);
+      return;
+    }
+
+    const bytes = new TextEncoder().encode(result.payload);
+    let binary = "";
+    for (const b of bytes) binary += String.fromCharCode(b);
+    const b64 = btoa(binary);
+    const deepLink = `peachbitcoin://desktopConnection?data=${encodeURIComponent(b64)}`;
+
+    let didHide = false;
+    const onHidden = () => {
+      if (document.hidden) didHide = true;
+    };
+    document.addEventListener("visibilitychange", onHidden);
+    window.addEventListener("pagehide", onHidden);
+    window.addEventListener("blur", onHidden);
+
+    window.location.href = deepLink;
+
+    setTimeout(() => {
+      document.removeEventListener("visibilitychange", onHidden);
+      window.removeEventListener("pagehide", onHidden);
+      window.removeEventListener("blur", onHidden);
+      setOpeningApp(false);
+      if (didHide || document.hidden) return;
+      setAppNotInstalled(true);
+    }, 2500);
+  }
 
   // Detect mobile
   useEffect(() => {
@@ -516,6 +565,61 @@ export default function PeachAuth() {
                     </div>
                   </div>
                 </div>
+
+                {/* Open app via deep link (one-tap shortcut) */}
+                <button
+                  onClick={handleOpenApp}
+                  disabled={openingApp}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    width: "100%",
+                    padding: "14px 22px",
+                    borderRadius: 999,
+                    background: "var(--grad)",
+                    color: "white",
+                    border: "none",
+                    cursor: openingApp ? "wait" : "pointer",
+                    opacity: openingApp ? 0.7 : 1,
+                    fontFamily: "'Baloo 2',cursive",
+                    fontSize: "1rem",
+                    fontWeight: 800,
+                    boxShadow: "0 2px 14px rgba(245,101,34,.3)",
+                    letterSpacing: ".02em",
+                  }}
+                >
+                  {openingApp ? "Opening Peach App…" : "Sign in with Peach App"}
+                </button>
+
+                {appNotInstalled && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: 10,
+                      padding: "12px 14px",
+                      borderRadius: 12,
+                      background: "var(--warning-soft)",
+                      border: "1.5px solid var(--warning)",
+                      animation: "fadeUp .25s ease both",
+                    }}
+                  >
+                    <span style={{ fontSize: "1rem", flexShrink: 0 }}>📱</span>
+                    <span
+                      style={{
+                        fontSize: ".78rem",
+                        color: "var(--black-75)",
+                        fontWeight: 500,
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      Looks like the Peach app isn't installed on this device.
+                      Download it below ↓
+                    </span>
+                  </div>
+                )}
 
                 {/* Steps */}
                 <div
