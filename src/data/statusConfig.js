@@ -71,6 +71,26 @@ export const PENDING_STATUSES = new Set([
   "escrowWaitingForConfirmation",
 ]);
 
+// /contracts/summary reports tradeCanceled for sell-side post-cancel
+// contracts while /contract/:id alternates between tradeCanceled and
+// refundOrReviveRequired. This helper normalizes both to
+// refundOrReviveRequired so polling responses don't flicker, and the
+// trade-execution screen branches on the `revived` / `refunded` flags
+// within that block to render the right sub-banner.
+//
+// Skips when escrowFundingTimeLimitExpired (seller never funded) — there's
+// no escrow to refund and no offer to revive in that case.
+export function deriveDisplayStatus(c) {
+  const ts = c.tradeStatus ?? c.status;
+  const isSell = c.direction === "sell" || c.type === "ask";
+  if (!isSell) return ts;
+  if (c.escrowFundingTimeLimitExpired) return ts;
+  if (ts === "tradeCanceled" || ts === "refundOrReviveRequired") {
+    return "refundOrReviveRequired";
+  }
+  return ts;
+}
+
 // Trade lifecycle steps in order (used by HorizontalStepper in trade execution)
 export const LIFECYCLE = [
   { id: "fundEscrow",              label: "Accepted",       desc: "Offers paired, awaiting escrow" },

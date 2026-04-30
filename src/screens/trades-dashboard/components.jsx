@@ -394,13 +394,15 @@ export function HistoryTable({ rows, onTradeSelect, selectedCurrency, tab, onRef
     .sort((a, b) => {
       // Pin action-required items on top unless user clicked a sort header
       if (!userSorted) {
-        const aAction = STATUS_CONFIG[a.tradeStatus]?.action ? 1 : 0;
-        const bAction = STATUS_CONFIG[b.tradeStatus]?.action ? 1 : 0;
+        const aAction = STATUS_CONFIG[a.displayStatus ?? a.tradeStatus]?.action ? 1 : 0;
+        const bAction = STATUS_CONFIG[b.displayStatus ?? b.tradeStatus]?.action ? 1 : 0;
         if (aAction !== bAction) return bAction - aAction; // action items first
       }
       if (sortKey === "status") {
-        const aLabel = (STATUS_CONFIG[a.tradeStatus]?.label ?? a.tradeStatus ?? "").toLowerCase();
-        const bLabel = (STATUS_CONFIG[b.tradeStatus]?.label ?? b.tradeStatus ?? "").toLowerCase();
+        const aKey = a.displayStatus ?? a.tradeStatus;
+        const bKey = b.displayStatus ?? b.tradeStatus;
+        const aLabel = (STATUS_CONFIG[aKey]?.label ?? aKey ?? "").toLowerCase();
+        const bLabel = (STATUS_CONFIG[bKey]?.label ?? bKey ?? "").toLowerCase();
         return aLabel.localeCompare(bLabel) * sortDir;
       }
       if (sortKey === "createdAt")   return (a.createdAt - b.createdAt) * sortDir;
@@ -514,7 +516,7 @@ export function HistoryTable({ rows, onTradeSelect, selectedCurrency, tab, onRef
                 {!hideStatus && (
                   <td>
                     <span style={{ display:"inline-flex", alignItems:"center", gap:6 }}>
-                      <StatusChip status={r.tradeStatus} showAction role={r.direction === "sell" ? "seller" : "buyer"}/>
+                      <StatusChip status={r.displayStatus ?? r.tradeStatus} showAction role={r.direction === "sell" ? "seller" : "buyer"}/>
                       {r.experienceLevel&&<span title={r.experienceLevel==="experiencedUsersOnly"?"Experienced users only":"New users only"} style={{fontSize:".72rem"}}>{r.experienceLevel==="experiencedUsersOnly"?"👤":"🆕"}</span>}
                       {r.instantTrade&&<span title="Instant trade" style={{fontSize:".72rem"}}>⚡</span>}
                       {r.unread > 0 && <span className="unread-badge"><span style={{ lineHeight:1 }}>{r.unread}</span><IconMsg/></span>}
@@ -562,7 +564,7 @@ export function HistoryTable({ rows, onTradeSelect, selectedCurrency, tab, onRef
                 </span>
                 {!hideStatus && r.tradeStatus && (
                   <StatusChip
-                    status={r.tradeStatus}
+                    status={r.displayStatus ?? r.tradeStatus}
                     showAction
                     inline
                     role={r.direction === "sell" ? "seller" : "buyer"}

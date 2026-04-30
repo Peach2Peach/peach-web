@@ -102,6 +102,11 @@ export default function PeachMarket() {
   const [signingModal,     setSigningModal]     = useState(null);    // { offerId } for sell offer cancel
   const [toast,            setToast]            = useState(null);
   const [tradeLoading,     setTradeLoading]     = useState(false);
+  // Optimistic pending state during the 5s cancel window before the API fires.
+  // Mirrors the mobile UndoButton pattern (peach-app UndoButton.tsx, TIMER_DURATION = 5000).
+  const [pendingRequest,   setPendingRequest]   = useState(null); // { offer, kind: 'request' | 'instant' }
+  const pendingTimerRef = useRef(null);
+  useEffect(() => () => { if (pendingTimerRef.current) clearTimeout(pendingTimerRef.current); }, []);
 
   const isSellTab = tab === "sell";
 
@@ -118,6 +123,11 @@ export default function PeachMarket() {
     setPopupOffer(offer);
   }
   function closePopup() {
+    if (pendingTimerRef.current) {
+      clearTimeout(pendingTimerRef.current);
+      pendingTimerRef.current = null;
+    }
+    setPendingRequest(null);
     setPopupOffer(null);
     setSelectedPM(null);
     setPopupCurrency(null);
@@ -188,12 +198,14 @@ export default function PeachMarket() {
         }
         // Match a contract back to this offer via the composite contract id.
         let acceptedContractId = null;
+        let contractsConfirmedNoMatch = false;
         if (contractsRes && contractsRes.ok) {
           const list = await contractsRes.json().catch(() => null);
           if (Array.isArray(list)) {
             const offerIdStr = String(offerId);
             const match = list.find(c => String(c.id).split("-").includes(offerIdStr));
             if (match) acceptedContractId = String(match.id);
+            else contractsConfirmedNoMatch = true;
           }
         }
         if (cancelled) return;
@@ -204,10 +216,14 @@ export default function PeachMarket() {
             const m = new Map(prev); m.set(offerId, acceptedContractId); return m;
           });
         }
-        // Reconcile local optimistic state with server truth.
+        // Reconcile local optimistic state with server truth. Only remove from
+        // localRequested when contracts/summary has confirmed no matching
+        // contract — otherwise we race the popup-component swap when the
+        // counterparty accepts (request endpoint goes empty before the new
+        // contract is visible in the summary).
         if (tradeReqExists) {
           setLocalRequested(prev => prev.has(offerId) ? prev : new Set([...prev, offerId]));
-        } else if (!isOwn) {
+        } else if (!isOwn && contractsConfirmedNoMatch) {
           setLocalRequested(prev => {
             if (!prev.has(offerId)) return prev;
             const s = new Set(prev); s.delete(offerId); return s;
@@ -310,7 +326,30 @@ export default function PeachMarket() {
     }
   }
 
-  async function handleRequestTrade(offer) {
+  // Begin the 5s cancel window. The popup swaps the action buttons for an Undo
+  // button whose fill drains over 5s; on expiry executeRequestTrade/executeInstantTrade
+  // fires the actual API call. Tapping Undo (or closing the popup) cancels.
+  function stageRequest(offer, kind) {
+    if (!auth?.pgpPrivKey || !selectedPM || !popupCurrency || tradeLoading) return;
+    if (pendingTimerRef.current) clearTimeout(pendingTimerRef.current);
+    setPendingRequest({ offer, kind });
+    pendingTimerRef.current = setTimeout(() => {
+      pendingTimerRef.current = null;
+      setPendingRequest(null);
+      if (kind === "instant") executeInstantTrade(offer);
+      else executeRequestTrade(offer);
+    }, 5000);
+  }
+
+  function cancelPendingRequest() {
+    if (pendingTimerRef.current) {
+      clearTimeout(pendingTimerRef.current);
+      pendingTimerRef.current = null;
+    }
+    setPendingRequest(null);
+  }
+
+  async function executeRequestTrade(offer) {
     if (!auth?.pgpPrivKey || !selectedPM || !popupCurrency || tradeLoading) return;
     setTradeLoading(true);
 
@@ -400,7 +439,7 @@ export default function PeachMarket() {
     }
   }
 
-  async function handleInstantTrade(offer) {
+  async function executeInstantTrade(offer) {
     console.log("[InstantTrade] called", { pgpPrivKey: !!auth?.pgpPrivKey, selectedPM, popupCurrency, tradeLoading, offerType: offer?.type, offerId: offer?.id });
     if (!auth?.pgpPrivKey || !selectedPM || !popupCurrency || tradeLoading) return;
     setTradeLoading(true);
@@ -1041,6 +1080,12 @@ export default function PeachMarket() {
           btcPrice={btcPrice}
           onClose={closePopup}
           acceptedContractId={acceptedContractId}
+          onAccepted={(contractId) => {
+            setAcceptedContracts(prev => {
+              if (prev.get(offer.id) === contractId) return prev;
+              const m = new Map(prev); m.set(offer.id, contractId); return m;
+            });
+          }}
           onOpenTrade={() => {
             const id = acceptedContracts.get(offer.id);
             if (!id) return;
@@ -1058,21 +1103,6 @@ export default function PeachMarket() {
       );
     }
 
-    if (detailsLoading) {
-      return (
-        <div className="popup-overlay" onClick={closePopup}>
-          <div className="popup-card popup-anim-card" onClick={e => e.stopPropagation()}>
-            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:12}}>
-              <div style={{fontSize:"2rem",animation:"spin 1s linear infinite",color:"var(--primary)"}}>↻</div>
-              <div style={{fontSize:".82rem",fontWeight:600,color:"var(--black-65)"}}>
-                Loading offer details…
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
     return (
       <div className="popup-overlay" onClick={closePopup}>
         <div className="popup-card" onClick={e => e.stopPropagation()}>
@@ -1081,6 +1111,20 @@ export default function PeachMarket() {
             <span className="popup-title">
               {isOwn ? "Your offer" : isReq ? "Trade requested" : "Offer details"}
               <span className="offer-id-label" style={{marginLeft:8}}>{offer.tradeId}</span>
+              {detailsLoading && (
+                <span
+                  aria-label="Loading details"
+                  title="Loading details"
+                  style={{
+                    display:"inline-block",
+                    marginLeft:8,
+                    fontSize:".78rem",
+                    animation:"spin 1s linear infinite",
+                    color:"var(--black-50)",
+                    verticalAlign:"middle",
+                  }}
+                >↻</span>
+              )}
             </span>
             <button className="popup-close" onClick={closePopup}>✕</button>
           </div>
@@ -1300,16 +1344,28 @@ export default function PeachMarket() {
           <div className="popup-footer">
             {/* ── Trade request (not own, not already requested) ── */}
             {!isOwn && !isReq && (
-              isInstant ? (
+              pendingRequest && pendingRequest.offer.id === offer.id ? (
+                <div className="popup-pending-row">
+                  <div className="popup-pending-copy">
+                    Sending in 5s — tap Undo to cancel
+                  </div>
+                  <button
+                    className={`popup-pending-btn${pendingRequest.kind === "instant" ? " popup-pending-btn-instant" : ""}`}
+                    onClick={cancelPendingRequest}>
+                    <span className="fill" />
+                    <span className="label">Undo</span>
+                  </button>
+                </div>
+              ) : isInstant ? (
                 <button className="popup-btn popup-btn-instant"
                   disabled={!selectedPM || !popupCurrency || tradeLoading}
-                  onClick={() => handleInstantTrade(offer)}>
+                  onClick={() => stageRequest(offer, "instant")}>
                   {tradeLoading ? "Requesting…" : "⚡ Instant trade"}
                 </button>
               ) : (
                 <button className="popup-btn popup-btn-request"
                   disabled={!selectedPM || !popupCurrency || tradeLoading}
-                  onClick={() => handleRequestTrade(offer)}>
+                  onClick={() => stageRequest(offer, "request")}>
                   {tradeLoading ? "Sending…" : "Request trade"}
                 </button>
               )

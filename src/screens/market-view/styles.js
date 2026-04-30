@@ -463,6 +463,32 @@ export const CSS = `
     box-shadow:0 2px 12px rgba(245,101,34,.3);
   }
   .popup-btn-instant:not(:disabled):hover{transform:translateY(-1px);box-shadow:0 4px 18px rgba(245,101,34,.42)}
+
+  /* 5s cancel-window confirmation row (mirrors mobile UndoButton) */
+  .popup-pending-row{display:flex;flex-direction:column;gap:10px;align-items:stretch;width:100%}
+  .popup-pending-copy{
+    font-size:.82rem;color:var(--black-65);text-align:center;font-weight:500;
+  }
+  .popup-pending-btn{
+    position:relative;overflow:hidden;border:none;cursor:pointer;
+    border-radius:999px;padding:12px;font-family:var(--font);
+    font-weight:800;font-size:.88rem;
+    background:var(--success-bg);color:var(--success);
+    transition:transform .15s ease;
+  }
+  .popup-pending-btn:hover{transform:translateY(-1px)}
+  .popup-pending-btn .fill{
+    position:absolute;left:0;top:0;bottom:0;right:0;
+    background:var(--success);
+    transform-origin:left center;
+    animation:pendingDrain 5000ms linear forwards;
+    z-index:0;
+  }
+  .popup-pending-btn .label{position:relative;z-index:1;color:white;mix-blend-mode:difference}
+  .popup-pending-btn-instant{background:var(--primary-mild);color:var(--primary)}
+  .popup-pending-btn-instant .fill{background:var(--primary)}
+  @keyframes pendingDrain{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+
   .popup-btn-undo{
     background:var(--black-5);color:var(--black-65);
   }

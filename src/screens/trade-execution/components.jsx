@@ -16,6 +16,7 @@ import {
   methodDisplayName,
   humanizeId,
 } from "../../data/paymentMethodMeta.js";
+import ConfirmModal from "../../components/ConfirmModal.jsx";
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 export const IconBack = () => (
@@ -533,120 +534,6 @@ export function PaymentDetailsCard({ details, tradeId, compact = false }) {
           </button>
         </div>
       ))}
-    </div>
-  );
-}
-
-// ─── ESCROW ADDRESS CARD ─────────────────────────────────────────────────────
-export function EscrowAddressCard({ address }) {
-  const [copied, setCopied] = useState(false);
-
-  function copy() {
-    navigator.clipboard?.writeText(address).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  }
-
-  return (
-    <div
-      style={{
-        background: "var(--black-5)",
-        border: "1px solid var(--black-10)",
-        borderRadius: 12,
-        padding: "12px 14px",
-        marginBottom: 16,
-      }}
-    >
-      <div
-        style={{
-          fontSize: ".68rem",
-          fontWeight: 700,
-          color: "var(--black-65)",
-          textTransform: "uppercase",
-          letterSpacing: ".05em",
-          marginBottom: 8,
-        }}
-      >
-        <IconQR /> Escrow Address
-      </div>
-      <div
-        style={{
-          fontFamily: "monospace",
-          fontSize: ".72rem",
-          color: "var(--black)",
-          wordBreak: "break-all",
-          lineHeight: 1.5,
-          marginBottom: 6,
-        }}
-      >
-        {address}
-      </div>
-      <button
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 5,
-          border: "1px solid var(--black-10)",
-          background: "var(--surface)",
-          borderRadius: 999,
-          fontFamily: "Baloo 2, cursive",
-          fontSize: ".72rem",
-          fontWeight: 700,
-          color: copied ? "var(--success)" : "var(--black-65)",
-          padding: "3px 10px",
-          cursor: "pointer",
-          transition: "color .2s",
-        }}
-        onClick={copy}
-      >
-        {copied ? (
-          <>
-            <IconCheck /> Copied!
-          </>
-        ) : (
-          <>
-            <IconCopy /> Copy address
-          </>
-        )}
-      </button>
-      {address && (
-        <div style={{ textAlign: "right", marginTop: 10 }}>
-          <a
-            href={`https://mempool.space/address/${address}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              fontSize: ".72rem",
-              fontWeight: 600,
-              color: "var(--black-65)",
-              textDecoration: "none",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-            }}
-            onMouseEnter={(e) =>
-              (e.currentTarget.style.color = "var(--primary)")
-            }
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.color = "var(--black-65)")
-            }
-          >
-            View escrow on mempool.space
-            <svg
-              width="11"
-              height="11"
-              viewBox="0 0 11 11"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.7"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M2 9L9 2M9 2H5M9 2v4" />
-            </svg>
-          </a>
-        </div>
-      )}
     </div>
   );
 }
@@ -1840,119 +1727,6 @@ export function EscrowFundingCard({
   );
 }
 
-// ─── CONFIRM MODAL ───────────────────────────────────────────────────────────
-function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel, tone = "danger" }) {
-  const isSuccess = tone === "success";
-  const confirmBg = isSuccess ? "var(--success)" : "var(--error)";
-  const confirmShadow = isSuccess
-    ? "0 2px 10px rgba(101,165,25,.3)"
-    : "0 2px 10px rgba(223,50,31,.3)";
-  return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 500,
-        background: "rgba(43,25,17,.55)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 20,
-      }}
-    >
-      <div
-        style={{
-          background: "var(--surface)",
-          borderRadius: 16,
-          padding: "28px 24px",
-          maxWidth: 380,
-          width: "100%",
-          boxShadow: "0 20px 60px rgba(0,0,0,.25)",
-          animation: "modalIn .18s ease",
-        }}
-      >
-        {!isSuccess && (
-          <div
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: "50%",
-              background: "var(--error-bg)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              marginBottom: 14,
-            }}
-          >
-            <IconAlert />
-          </div>
-        )}
-        <div style={{ fontWeight: 800, fontSize: "1.05rem", marginBottom: 8, color: "var(--text)" }}>
-          {title}
-        </div>
-        <div
-          style={{
-            fontSize: ".88rem",
-            color: "var(--black-65)",
-            lineHeight: 1.6,
-            marginBottom: 24,
-          }}
-        >
-          {body}
-        </div>
-        <div style={{ display: "flex", gap: 10 }}>
-          <button
-            style={{
-              flex: 1,
-              border: "1.5px solid var(--black-10)",
-              background: "var(--surface)",
-              borderRadius: 999,
-              fontFamily: "Baloo 2, cursive",
-              fontWeight: 700,
-              fontSize: ".87rem",
-              color: "var(--black)",
-              padding: "10px",
-              cursor: "pointer",
-            }}
-            onMouseEnter={(e) =>
-              (e.currentTarget.style.borderColor = "var(--primary)")
-            }
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.borderColor = "var(--black-10)")
-            }
-            onClick={onCancel}
-          >
-            Cancel
-          </button>
-          <button
-            style={{
-              flex: 1,
-              border: "none",
-              background: confirmBg,
-              borderRadius: 999,
-              fontFamily: "Baloo 2, cursive",
-              fontWeight: 800,
-              fontSize: ".87rem",
-              color: "var(--text-on-accent)",
-              padding: "10px",
-              cursor: "pointer",
-              boxShadow: confirmShadow,
-              transition: "filter .15s",
-            }}
-            onMouseEnter={(e) =>
-              (e.currentTarget.style.filter = "brightness(0.9)")
-            }
-            onMouseLeave={(e) => (e.currentTarget.style.filter = "")}
-            onClick={onConfirm}
-          >
-            {confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── WRONG AMOUNT FUNDED CARD ────────────────────────────────────────────────
 // Two branches:
 //   A) fundingAmountDifferent — seller's own offer, choice: continue or refund
@@ -2784,7 +2558,6 @@ function ActionBanner({ title, subtitle }) {
 export function ActionPanel({
   scenario,
   onAction,
-  showPostCancel = false,
   pendingTask = null,
   onPendingClick = null,
 }) {
@@ -3065,80 +2838,43 @@ export function ActionPanel({
           />
         )}
 
-        {/* Payment too late — seller POV */}
-        {status === "paymentTooLate" &&
-          role === "seller" &&
-          !showPostCancel && (
-            <>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  background: "var(--warning-soft)",
-                  border: "1px solid rgba(154,112,0,.15)",
-                  borderRadius: 8,
-                  padding: "10px 12px",
-                  fontSize: ".83rem",
-                  color: "var(--warning)",
-                  fontWeight: 600,
-                  lineHeight: 1.5,
-                }}
-              >
-                <IconClock />
-                <span>
-                  The buyer did not pay in time. You can either cancel the trade
-                  without a reputation penalty, or give the buyer some more
-                  time.
-                </span>
-              </div>
-              <SlideToConfirm
-                label="Cancel Trade"
-                onConfirm={() => onAction("cancel_trade")}
-                confirmedColor="var(--error)"
-              />
-              <SlideToConfirm
-                label="Give More Time"
-                onConfirm={() => onAction("extend_time")}
-              />
-            </>
-          )}
-
-        {/* Payment too late — seller POV after cancel: republish or refund */}
-        {status === "paymentTooLate" && role === "seller" && showPostCancel && (
+        {/* Payment too late — seller POV. After "Cancel Trade", the contract
+            transitions to refundOrReviveRequired (deriveDisplayStatus normalizes
+            tradeCanceled too), so the post-cancel UI is rendered by the
+            refundOrReviveRequired branch below. */}
+        {status === "paymentTooLate" && role === "seller" && (
           <>
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
                 gap: 8,
-                background: "var(--success-bg)",
-                border: "1px solid rgba(5,168,90,.15)",
+                background: "var(--warning-soft)",
+                border: "1px solid rgba(154,112,0,.15)",
                 borderRadius: 8,
                 padding: "10px 12px",
                 fontSize: ".83rem",
-                color: "var(--success)",
+                color: "var(--warning)",
                 fontWeight: 600,
                 lineHeight: 1.5,
               }}
             >
+              <IconClock />
               <span>
-                Trade cancelled. What would you like to do with the escrow?
+                The buyer did not pay in time. You can either cancel the trade
+                without a reputation penalty, or give the buyer some more
+                time.
               </span>
             </div>
             <SlideToConfirm
-              label="Re-publish Offer"
-              onConfirm={() => onAction("republish_offer")}
-              disabled={pendingTask === "refund"}
+              label="Cancel Trade"
+              onConfirm={() => onAction("cancel_trade")}
+              confirmedColor="var(--error)"
             />
-            {pendingTask === "refund" ? (
-              <PendingBtn label="Refund pending in mobile app" />
-            ) : (
-              <SlideToConfirm
-                label="Refund Escrow"
-                onConfirm={() => onAction("refund_escrow")}
-              />
-            )}
+            <SlideToConfirm
+              label="Give More Time"
+              onConfirm={() => onAction("extend_time")}
+            />
           </>
         )}
 
@@ -3312,10 +3048,21 @@ export function ActionPanel({
             <IconAlert />
             <span>
               {(() => {
-                if (scenario.paymentTimedOut) {
+                // Buyer-payment-timeout detection: prefer the live-polling
+                // signal, fall back to derived check for the case where the
+                // user navigates straight to a contract that already
+                // transitioned past `paymentTooLate`.
+                const wasBuyerPaymentTimeout =
+                  scenario.paymentTimedOut ||
+                  (!!scenario.canceled &&
+                    !scenario.paymentMade &&
+                    scenario.contract?.paymentExpectedBy != null &&
+                    scenario.contract.paymentExpectedBy < Date.now() &&
+                    !scenario.escrowFundingTimeLimitExpired);
+                if (wasBuyerPaymentTimeout) {
                   return role === "buyer"
                     ? "This trade has been cancelled. Your reputation has been affected."
-                    : "This trade has been cancelled. Your reputation has not been affected.";
+                    : "You have decided to refund this trade to your refund wallet";
                 }
                 if (scenario.escrowFundingTimeLimitExpired) {
                   return role === "seller"

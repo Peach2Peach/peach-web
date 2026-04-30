@@ -34,6 +34,7 @@ import {
   STATUS_CONFIG,
   FINISHED_STATUSES,
   PENDING_STATUSES,
+  deriveDisplayStatus,
 } from "../../data/statusConfig.js";
 import { isReturnAddressFromXpub } from "../../utils/escrow.js";
 import { QRCodeSVG } from "qrcode.react";
@@ -780,16 +781,27 @@ export default function TradesDashboard() {
       rawType === "bid" ||
       rawType === "buy" ||
       (c.buyer?.id ?? c.buyerId) === peachId;
+    const direction = isBuyer ? "buy" : "sell";
+    const tradeStatus = c.tradeStatus ?? c.status ?? "unknown";
+    // For sell contracts already refunded or revived, keep the raw status for
+    // the chip (grey "Trade Cancelled") — the action is done. Only contracts
+    // still awaiting refund/republish get the yellow "Refund or Re-publish"
+    // chip via the helper override.
+    const isDone = !!c.refunded || !!c.newTradeId;
+    const displayStatus = isDone
+      ? tradeStatus
+      : deriveDisplayStatus({ tradeStatus, direction });
     return {
       id: c.id,
       tradeId: formatTradeId(c.id),
       kind: "contract",
-      direction: isBuyer ? "buy" : "sell",
+      direction,
       amount: c.amount ?? 0,
       premium: c.premium ?? 0,
       fiatAmount: c.price != null ? String(c.price) : "—",
       currency: c.currency ?? "",
-      tradeStatus: c.tradeStatus ?? c.status ?? "unknown",
+      tradeStatus,
+      displayStatus,
       tradeStatusWithoutDispute: c.tradeStatusWithoutDispute ?? null,
       disputeActive: !!c.disputeActive,
       createdAt: new Date(c.creationDate ?? Date.now()),
@@ -1372,7 +1384,7 @@ export default function TradesDashboard() {
   const [acceptedTrades, setAcceptedTrades] = useState(new Set()); // trade ids accepted
 
   function resolveStatusKey(t) {
-    return t.tradeStatus ?? "unknown";
+    return t.displayStatus ?? t.tradeStatus ?? "unknown";
   }
 
   // Sort: action-required first, then by time
@@ -1413,6 +1425,7 @@ export default function TradesDashboard() {
   const [signingModal, setSigningModal] = useState(null); // mobile signing modal
   const [matchesLoading, setMatchesLoading] = useState(false); // loading matches on demand
   const [sentRequestPopup, setSentRequestPopup] = useState(null); // sent trade request detail/chat popup
+  const [sentRequestAcceptedContract, setSentRequestAcceptedContract] = useState(null); // contractId once counterparty accepts the sent request
 
   // ── Offer detail popup state ──
   const [offerDetailPopup, setOfferDetailPopup] = useState(null); // pending offer object or null
@@ -2342,7 +2355,7 @@ export default function TradesDashboard() {
                   <span
                     className="tab-badge"
                     data-has-action={activeItems.some(
-                      (i) => STATUS_CONFIG[i.tradeStatus]?.action,
+                      (i) => STATUS_CONFIG[i.displayStatus ?? i.tradeStatus]?.action,
                     )}
                   >
                     {activeItems.length}
@@ -2358,7 +2371,11 @@ export default function TradesDashboard() {
                 {historyItems.length > 0 && (
                   <span
                     className="tab-badge"
-                    data-has-action={historyItems.some((i) => i.unread > 0)}
+                    data-has-action={historyItems.some(
+                      (i) =>
+                        i.unread > 0 ||
+                        STATUS_CONFIG[i.displayStatus ?? i.tradeStatus]?.action,
+                    )}
                   >
                     {historyItems.length}
                   </span>
@@ -2496,7 +2513,15 @@ export default function TradesDashboard() {
           auth={auth}
           selectedCurrency={selectedCurrency}
           btcPrice={btcPrice}
-          onClose={() => setSentRequestPopup(null)}
+          onClose={() => { setSentRequestPopup(null); setSentRequestAcceptedContract(null); }}
+          acceptedContractId={sentRequestAcceptedContract}
+          onAccepted={(contractId) => setSentRequestAcceptedContract(contractId)}
+          onOpenTrade={() => {
+            const id = sentRequestAcceptedContract;
+            setSentRequestPopup(null);
+            setSentRequestAcceptedContract(null);
+            if (id) navigate(`/trade/${id}`);
+          }}
           onUndoSuccess={(offerId) => {
             setLivePending((prev) =>
               prev?.filter((p) => !(p.kind === "sentRequest" && String(p._offerId) === String(offerId))),

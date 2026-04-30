@@ -24,6 +24,7 @@ import {
   toPeaches,
 } from "../../utils/format.js";
 import { deriveEscrowPubKey, deriveReturnAddress } from "../../utils/escrow.js";
+import { deriveDisplayStatus } from "../../data/statusConfig.js";
 import Avatar from "../../components/Avatar.jsx";
 import StatusChip from "../../components/StatusChip.jsx";
 import PeachRating from "../../components/PeachRating.jsx";
@@ -32,7 +33,6 @@ import {
   IconAlert,
   HorizontalStepper,
   PaymentDetailsCard,
-  EscrowAddressCard,
   CollapsibleAddressSection,
   EscrowFundingCard,
   FundingDeadlinePill,
@@ -256,7 +256,6 @@ const CSS = `
   /* scrollbar */
   ::-webkit-scrollbar{width:5px}
   ::-webkit-scrollbar-thumb{background:var(--black-10);border-radius:3px}
-  @keyframes modalIn{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
 `;
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
@@ -303,7 +302,6 @@ export default function TradeExecution() {
   const [liveContract, setLiveContract] = useState(null);
   const [liveMessages, setLiveMessages] = useState(null);
   const [contractLoading, setContractLoading] = useState(!!auth && !!routeId);
-  const [showPostCancel, setShowPostCancel] = useState(false);
   const [chatSymKey, setChatSymKey] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [signingModal, setSigningModal] = useState(null); // { title, description, taskType } or null
@@ -321,7 +319,6 @@ export default function TradeExecution() {
   const [refundLoading, setRefundLoading] = useState(false);
   const [refundError, setRefundError] = useState(null);
   const signingStatusRef = useRef(null); // track the tradeStatus when signing modal opened
-  const sawRefundOrReviveRef = useRef(false); // once true, block regression to tradeCanceled
 
   // ── Restore pending task state from localStorage on mount ──
   useEffect(() => {
@@ -443,18 +440,23 @@ export default function TradeExecution() {
         const fresh = await get(`/contract/${routeId}`);
         if (fresh.ok) {
           const c = await fresh.json();
-          setLiveContract((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  tradeStatus: c.tradeStatus ?? prev.tradeStatus,
-                  contract: {
-                    ...prev.contract,
-                    escrow: c.escrow ?? data?.escrow ?? prev.contract.escrow,
-                  },
-                }
-              : prev,
-          );
+          setLiveContract((prev) => {
+            if (!prev) return prev;
+            const nextStatus =
+              deriveDisplayStatus({
+                tradeStatus: c.tradeStatus,
+                direction: prev.contract?.direction,
+                escrowFundingTimeLimitExpired: c.escrowFundingTimeLimitExpired,
+              }) ?? prev.tradeStatus;
+            return {
+              ...prev,
+              tradeStatus: nextStatus,
+              contract: {
+                ...prev.contract,
+                escrow: c.escrow ?? data?.escrow ?? prev.contract.escrow,
+              },
+            };
+          });
         }
       } catch (e) {
         console.warn("[Trade] Escrow creation error:", e.message);
@@ -476,18 +478,15 @@ export default function TradeExecution() {
         const res = await get("/contract/" + routeId);
         if (!res.ok) return;
         const c = await res.json();
-        // Block regression once refundOrReviveRequired has been seen
-        if (
-          sawRefundOrReviveRef.current &&
-          (c.tradeStatus === "tradeCanceled" ||
-            c.tradeStatus === "confirmCancelation")
-        )
-          return;
-        if (c.tradeStatus === "refundOrReviveRequired")
-          sawRefundOrReviveRef.current = true;
-        if (c.tradeStatus && c.tradeStatus !== signingStatusRef.current) {
+        const isBuyer = (c.buyer?.id ?? c.buyerId) === peachId;
+        const nextStatus = deriveDisplayStatus({
+          tradeStatus: c.tradeStatus,
+          direction: isBuyer ? "buy" : "sell",
+          escrowFundingTimeLimitExpired: c.escrowFundingTimeLimitExpired,
+        });
+        if (nextStatus && nextStatus !== signingStatusRef.current) {
           setLiveContract((prev) =>
-            prev ? { ...prev, tradeStatus: c.tradeStatus } : prev,
+            prev ? { ...prev, tradeStatus: nextStatus } : prev,
           );
           setSigningModal(null);
           if (pendingTaskType) {
@@ -508,17 +507,13 @@ export default function TradeExecution() {
         const res = await get("/contract/" + routeId);
         if (!res.ok) return;
         const c = await res.json();
-        const newStatus = c.tradeStatus ?? c.status;
-        if (!newStatus || newStatus === liveContract.tradeStatus) return;
-        // Block regression once refundOrReviveRequired has been seen
-        if (
-          sawRefundOrReviveRef.current &&
-          (newStatus === "tradeCanceled" || newStatus === "confirmCancelation")
-        )
-          return;
-        if (newStatus === "refundOrReviveRequired")
-          sawRefundOrReviveRef.current = true;
         const isBuyer = (c.buyer?.id ?? c.buyerId) === peachId;
+        const newStatus = deriveDisplayStatus({
+          tradeStatus: c.tradeStatus ?? c.status,
+          direction: isBuyer ? "buy" : "sell",
+          escrowFundingTimeLimitExpired: c.escrowFundingTimeLimitExpired,
+        });
+        if (!newStatus || newStatus === liveContract.tradeStatus) return;
         setLiveContract((prev) =>
           prev
             ? {
@@ -540,6 +535,7 @@ export default function TradeExecution() {
                   c.cancelationRequested ?? prev.cancelationRequested,
                 canceled: c.canceled ?? prev.canceled,
                 canceledBy: c.canceledBy ?? prev.canceledBy,
+                paymentMade: c.paymentMade ?? prev.paymentMade,
                 paymentTimedOut:
                   prev.paymentTimedOut || newStatus === "paymentTooLate",
                 disputeActive: c.disputeActive ?? prev.disputeActive,
@@ -556,7 +552,6 @@ export default function TradeExecution() {
               }
             : prev,
         );
-        if (newStatus === "refundOrReviveRequired") setShowPostCancel(true);
       } catch {}
     }, 5000);
     return () => clearInterval(iv);
@@ -638,10 +633,16 @@ export default function TradeExecution() {
         if (!res.ok) return null;
         const c = await res.json();
         const isBuyer = (c.buyer?.id ?? c.buyerId) === peachId;
+        const initialDisplayStatus =
+          deriveDisplayStatus({
+            tradeStatus: c.tradeStatus ?? c.status,
+            direction: isBuyer ? "buy" : "sell",
+            escrowFundingTimeLimitExpired: c.escrowFundingTimeLimitExpired,
+          }) ?? "fundEscrow";
         setLiveContract({
           id: c.id,
           role: isBuyer ? "buyer" : "seller",
-          tradeStatus: c.tradeStatus ?? c.status ?? "fundEscrow",
+          tradeStatus: initialDisplayStatus,
           instantTrade: c.instantTrade ?? false,
           contract: {
             id: c.id,
@@ -699,6 +700,7 @@ export default function TradeExecution() {
           cancelationRequested: c.cancelationRequested ?? false,
           canceled: c.canceled ?? false,
           canceledBy: c.canceledBy ?? null,
+          paymentMade: c.paymentMade ?? null,
           escrowFundingTimeLimitExpired:
             c.escrowFundingTimeLimitExpired ?? false,
           paymentTimedOut: (c.tradeStatus ?? c.status) === "paymentTooLate",
@@ -719,19 +721,6 @@ export default function TradeExecution() {
           refunded: !!c.refunded || !!meta?.refunded,
           newOfferId: c.newOfferId ?? meta?.newTradeId ?? null,
         });
-
-        const isRevived = !!c.newOfferId || !!meta?.newTradeId;
-        const isRefunded = !!c.refunded || !!meta?.refunded;
-
-        // Pin refundOrReviveRequired once seen — prevents flickering from server alternation
-        const initialStatus = c.tradeStatus ?? c.status;
-        if (initialStatus === "refundOrReviveRequired") {
-          sawRefundOrReviveRef.current = true;
-          if (!isRefunded && !isRevived) setShowPostCancel(true);
-        }
-        // Trust backend tradeStatus — mobile app does the same. If the backend
-        // says refundOrReviveRequired, the pin logic above already handles it;
-        // if it says tradeCanceled, that's terminal.
 
         // Decrypt payment data if available
         // paymentDataEncrypted = seller's PM; buyerPaymentDataEncrypted = buyer's PM
@@ -1478,11 +1467,16 @@ export default function TradeExecution() {
                               const fresh = await get("/contract/" + routeId);
                               if (fresh.ok) {
                                 const c = await fresh.json();
-                                setLiveContract((prev) =>
-                                  prev
-                                    ? { ...prev, tradeStatus: c.tradeStatus }
-                                    : prev,
-                                );
+                                setLiveContract((prev) => {
+                                  if (!prev) return prev;
+                                  const nextStatus =
+                                    deriveDisplayStatus({
+                                      tradeStatus: c.tradeStatus,
+                                      direction: prev.contract?.direction,
+                                      escrowFundingTimeLimitExpired: c.escrowFundingTimeLimitExpired,
+                                    }) ?? prev.tradeStatus;
+                                  return { ...prev, tradeStatus: nextStatus };
+                                });
                               }
                               setToast("Trade continued with funded amount");
                               setTimeout(() => setToast(null), 4000);
@@ -1667,7 +1661,6 @@ export default function TradeExecution() {
                     status !== "wrongAmountFundedOnContractRefundWaiting" && (
                       <ActionPanel
                         scenario={scenario}
-                        showPostCancel={showPostCancel}
                         pendingTask={pendingTaskType}
                         onPendingClick={() => {
                           // refund / fund-escrow / confirm-payment / release — inline pending state only, no modal.
@@ -1737,26 +1730,35 @@ export default function TradeExecution() {
                                 );
                                 if (fresh.ok) {
                                   const c = await fresh.json();
-                                  setLiveContract((prev) =>
-                                    prev
-                                      ? {
-                                          ...prev,
-                                          canceled: true,
-                                          tradeStatus:
-                                            c.tradeStatus ?? "tradeCanceled",
-                                        }
-                                      : prev,
-                                  );
+                                  setLiveContract((prev) => {
+                                    if (!prev) return prev;
+                                    const nextStatus =
+                                      deriveDisplayStatus({
+                                        tradeStatus: c.tradeStatus,
+                                        direction: prev.contract?.direction,
+                                        escrowFundingTimeLimitExpired: c.escrowFundingTimeLimitExpired,
+                                      }) ?? "tradeCanceled";
+                                    return {
+                                      ...prev,
+                                      canceled: true,
+                                      tradeStatus: nextStatus,
+                                    };
+                                  });
                                 } else {
-                                  setLiveContract((prev) =>
-                                    prev
-                                      ? {
-                                          ...prev,
-                                          canceled: true,
-                                          tradeStatus: "tradeCanceled",
-                                        }
-                                      : prev,
-                                  );
+                                  setLiveContract((prev) => {
+                                    if (!prev) return prev;
+                                    const nextStatus =
+                                      deriveDisplayStatus({
+                                        tradeStatus: "tradeCanceled",
+                                        direction: prev.contract?.direction,
+                                        escrowFundingTimeLimitExpired: prev.escrowFundingTimeLimitExpired,
+                                      }) ?? "tradeCanceled";
+                                    return {
+                                      ...prev,
+                                      canceled: true,
+                                      tradeStatus: nextStatus,
+                                    };
+                                  });
                                 }
                               } else {
                                 const err = await res.json().catch(() => ({}));
@@ -1789,7 +1791,6 @@ export default function TradeExecution() {
                                       }
                                     : prev,
                                 );
-                                setShowPostCancel(false);
                                 setToast(
                                   "Offer republished" +
                                     (data.newOfferId

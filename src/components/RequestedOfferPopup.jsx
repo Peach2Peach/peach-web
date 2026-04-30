@@ -18,6 +18,7 @@ import {
 import { relTime as relativeTime, fmtFiat } from "../utils/format.js";
 import { methodDisplayName } from "../data/paymentMethodMeta.js";
 import { markSentRequestSelfCancelled } from "../hooks/useNotifications.js";
+import ConfirmModal from "./ConfirmModal.jsx";
 
 // Currency symbol helper (mirrors the one in market-view/components.jsx)
 const CURRENCY_SYMS = { EUR: "€", USD: "$", GBP: "£", CHF: "CHF " };
@@ -115,6 +116,7 @@ export default function RequestedOfferPopup({
   btcPrice,
   acceptedContractId,
   onOpenTrade,
+  onAccepted,
 }) {
   if (!offer) return null;
 
@@ -129,6 +131,14 @@ export default function RequestedOfferPopup({
   const [details, setDetails] = useState(null);          // GET /v069/sellOffer/:id
   const [tradeRequest, setTradeRequest] = useState(null); // GET .../tradeRequestPerformed
   const [initialLoading, setInitialLoading] = useState(true);
+
+  // Tracks whether we've ever observed a non-empty tradeRequest body for this
+  // popup session. When the request later disappears (counterparty accepted or
+  // rejected), this gates the immediate /contracts/summary lookup so we can
+  // distinguish acceptance from rejection without waiting for the parent's
+  // poll cadence.
+  const tradeRequestSeenRef = useRef(false);
+  const acceptanceCheckRef = useRef(false);
 
   // Poll both endpoints every 10s while popup is open.
   useEffect(() => {
@@ -154,9 +164,45 @@ export default function RequestedOfferPopup({
           const body = await detailsRes.json().catch(() => null);
           if (!cancelled && body) setDetails(body);
         }
-        if (tradeReqRes && tradeReqRes.ok) {
-          const body = await tradeReqRes.json().catch(() => null);
-          if (!cancelled && body && body.success !== true) setTradeRequest(body);
+        let tradeReqEmpty = false;
+        if (tradeReqRes) {
+          if (tradeReqRes.status === 404) {
+            tradeReqEmpty = true;
+          } else if (tradeReqRes.ok) {
+            const body = await tradeReqRes.json().catch(() => null);
+            if (!cancelled && body && body.success !== true) {
+              setTradeRequest(body);
+              tradeRequestSeenRef.current = true;
+            } else if (body && body.success === true) {
+              tradeReqEmpty = true;
+            }
+          }
+        }
+        // The trade request disappeared after we'd seen it — likely the
+        // counterparty just accepted (offer became a contract) or rejected.
+        // Check /contracts/summary directly so we surface acceptance fast,
+        // independent of the parent's polling offset.
+        if (
+          tradeReqEmpty &&
+          tradeRequestSeenRef.current &&
+          !acceptedContractId &&
+          !acceptanceCheckRef.current
+        ) {
+          acceptanceCheckRef.current = true;
+          try {
+            const cRes = await fetchWithSessionCheck(
+              `${auth.baseUrl}/contracts/summary`,
+              { headers: hdrs },
+            );
+            if (!cancelled && cRes && cRes.ok) {
+              const list = await cRes.json().catch(() => null);
+              if (Array.isArray(list)) {
+                const offerIdStr = String(offer.id);
+                const match = list.find(c => String(c.id).split("-").includes(offerIdStr));
+                if (match && onAccepted) onAccepted(String(match.id));
+              }
+            }
+          } catch { /* silent */ }
         }
       } catch { /* silent */ }
       finally {
@@ -167,11 +213,14 @@ export default function RequestedOfferPopup({
     refresh(true);
     const iv = setInterval(() => refresh(false), 10000);
     return () => { cancelled = true; clearInterval(iv); };
-  }, [auth, offer.id, offerTypePath, isSell, isAccepted]);
+  }, [auth, offer.id, offerTypePath, isSell, isAccepted, acceptedContractId, onAccepted]);
 
   // ── Undo state ──
   const [undoLoading, setUndoLoading] = useState(false);
   const [undoError, setUndoError] = useState(null);
+  // Confirmation modal — gates the DELETE so users can't drop a sent request
+  // without acknowledging the reputation impact.
+  const [confirmUndoOpen, setConfirmUndoOpen] = useState(false);
 
   async function handleUndo() {
     if (undoLoading || !auth) return;
@@ -545,7 +594,7 @@ export default function RequestedOfferPopup({
                 <button
                   className="rop-btn rop-btn-undo"
                   disabled={undoLoading}
-                  onClick={handleUndo}
+                  onClick={() => setConfirmUndoOpen(true)}
                 >
                   {undoLoading ? "Undoing…" : "Undo request"}
                 </button>
@@ -562,6 +611,16 @@ export default function RequestedOfferPopup({
           </div>
         </div>
       </div>
+      {confirmUndoOpen && (
+        <ConfirmModal
+          title="Are you sure?"
+          body="Your reputation will be impacted."
+          confirmLabel="Undo request"
+          tone="danger"
+          onCancel={() => setConfirmUndoOpen(false)}
+          onConfirm={() => { setConfirmUndoOpen(false); handleUndo(); }}
+        />
+      )}
     </>
   );
 }
