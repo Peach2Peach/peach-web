@@ -133,8 +133,8 @@ const css = `
   /* ── BUTTONS ── */
   .btn-grad{padding:8px 22px;border-radius:999px;background:var(--grad);color:white;
     font-family:var(--font);font-size:.85rem;font-weight:800;border:none;cursor:pointer;
-    box-shadow:0 2px 12px rgba(245,101,34,.3);transition:transform .1s,box-shadow .1s;white-space:nowrap}
-  .btn-grad:hover{transform:translateY(-1px);box-shadow:0 4px 18px rgba(245,101,34,.42)}
+    transition:transform .1s;white-space:nowrap}
+  .btn-grad:hover{transform:translateY(-1px)}
   .btn-ghost{padding:8px 18px;border-radius:999px;background:var(--surface);color:var(--black);
     font-family:var(--font);font-size:.85rem;font-weight:700;
     border:1.5px solid var(--black-10);cursor:pointer;transition:border-color .14s,color .14s;white-space:nowrap}
@@ -180,9 +180,9 @@ const css = `
   .auth-overlay-btn{
     padding:8px 22px;border-radius:999px;background:var(--grad);color:white;
     font-family:var(--font);font-size:.82rem;font-weight:800;border:none;cursor:pointer;
-    box-shadow:0 2px 12px rgba(245,101,34,.3);transition:transform .1s,box-shadow .1s;
+    transition:transform .1s;
   }
-  .auth-overlay-btn:hover{transform:translateY(-1px);box-shadow:0 4px 18px rgba(245,101,34,.42)}
+  .auth-overlay-btn:hover{transform:translateY(-1px)}
 
   /* ── ATH WIDGET ── */
   .ath-header{display:flex;align-items:center;gap:8px}

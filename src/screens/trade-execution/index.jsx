@@ -170,8 +170,8 @@ const CSS = `
     background:var(--grad);color:white;border:none;border-radius:999px;
     font-family:var(--font);font-size:.9rem;font-weight:800;
     padding:12px 24px;cursor:pointer;text-align:center;
-    box-shadow:0 2px 12px rgba(245,101,34,.3);transition:transform .15s,box-shadow .15s}
-  .action-btn-grad:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(245,101,34,.4)}
+    transition:transform .15s}
+  .action-btn-grad:hover{transform:translateY(-1px)}
   .action-btn-grad:disabled{opacity:.5;cursor:not-allowed;transform:none}
 
   /* ── Rating ── */

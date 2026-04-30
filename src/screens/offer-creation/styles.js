@@ -69,9 +69,9 @@ export const CSS = `
   .auth-popup-btn{
     padding:10px 28px;border-radius:999px;background:var(--grad);color:white;
     font-family:var(--font);font-size:.88rem;font-weight:800;border:none;cursor:pointer;
-    box-shadow:0 2px 12px rgba(245,101,34,.3);transition:transform .1s,box-shadow .1s;margin-top:4px;
+    transition:transform .1s;margin-top:4px;
   }
-  .auth-popup-btn:hover{transform:translateY(-1px);box-shadow:0 4px 18px rgba(245,101,34,.42)}
+  .auth-popup-btn:hover{transform:translateY(-1px)}
 
   /* Layout */
   .layout{display:grid;grid-template-columns:1fr 340px;
@@ -291,15 +291,13 @@ export const CSS = `
   .btn-save-fund-later:hover{border-color:var(--black-25);color:var(--black)}
   .btn-next{padding:10px 28px;border-radius:999px;background:var(--grad);color:white;
     font-family:var(--font);font-size:.88rem;font-weight:800;border:none;
-    cursor:pointer;box-shadow:0 2px 12px rgba(245,101,34,.3);
+    cursor:pointer;
     transition:all .12s;letter-spacing:.01em}
-  .btn-next:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 4px 18px rgba(245,101,34,.42)}
+  .btn-next:hover:not(:disabled){transform:translateY(-1px)}
   .btn-next:disabled{background:var(--black-10);color:var(--black-25);
-    box-shadow:none;cursor:not-allowed;transform:none}
+    cursor:not-allowed;transform:none}
   .btn-publish-buy{background:linear-gradient(90deg,var(--success),var(--success));
     box-shadow:0 2px 12px rgba(101,165,25,.3)}
-  .btn-publish-sell{background:linear-gradient(90deg,var(--error),var(--error));
-    box-shadow:0 2px 12px rgba(223,50,31,.3)}
 
   /* Review */
   .review-card{background:var(--surface);border:1px solid var(--black-10);
@@ -440,11 +438,11 @@ export const CSS = `
   .btn-send-mobile{
     padding:12px 32px;border-radius:999px;background:var(--grad);
     color:white;font-family:var(--font);font-size:.88rem;font-weight:800;
-    border:none;cursor:pointer;box-shadow:0 2px 12px rgba(245,101,34,.3);
+    border:none;cursor:pointer;
     transition:all .12s;
   }
-  .btn-send-mobile:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 4px 18px rgba(245,101,34,.42)}
-  .btn-send-mobile:disabled{background:var(--black-10);color:var(--black-25);box-shadow:none;cursor:not-allowed}
+  .btn-send-mobile:hover:not(:disabled){transform:translateY(-1px)}
+  .btn-send-mobile:disabled{background:var(--black-10);color:var(--black-25);cursor:not-allowed}
   .btn-send-mobile.sent{background:var(--success)}
 
   /* Publishing progress bar */

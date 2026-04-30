@@ -91,9 +91,9 @@ export const CSS = `
   /* ── CTA ── */
   .cta-btn{margin-left:auto;padding:7px 20px;border-radius:999px;background:var(--grad);
     color:white;font-family:var(--font);font-size:.85rem;font-weight:800;border:none;
-    cursor:pointer;letter-spacing:.02em;box-shadow:0 2px 12px rgba(245,101,34,.3);
-    transition:transform .1s,box-shadow .1s;white-space:nowrap}
-  .cta-btn:hover{transform:translateY(-1px);box-shadow:0 4px 18px rgba(245,101,34,.42)}
+    cursor:pointer;letter-spacing:.02em;
+    transition:transform .1s;white-space:nowrap}
+  .cta-btn:hover{transform:translateY(-1px)}
 
   /* ── TABLE ── */
   .table-wrap{padding:12px 20px 110px;flex:1;overflow-x:auto}
@@ -460,9 +460,8 @@ export const CSS = `
   .popup-btn-request:not(:disabled):hover{background:var(--success);color:white;transform:translateY(-1px)}
   .popup-btn-instant{
     background:var(--grad);color:white;
-    box-shadow:0 2px 12px rgba(245,101,34,.3);
   }
-  .popup-btn-instant:not(:disabled):hover{transform:translateY(-1px);box-shadow:0 4px 18px rgba(245,101,34,.42)}
+  .popup-btn-instant:not(:disabled):hover{transform:translateY(-1px)}
 
   /* 5s cancel-window confirmation row (mirrors mobile UndoButton) */
   .popup-pending-row{display:flex;flex-direction:column;gap:10px;align-items:stretch;width:100%}

@@ -15,8 +15,8 @@ export const CSS = `
   .btn-cta{background:var(--grad);color:white;border:none;border-radius:999px;
     font-family:var(--font);font-size:.85rem;font-weight:800;
     padding:8px 20px;cursor:pointer;white-space:nowrap;
-    box-shadow:0 2px 12px rgba(245,101,34,.3);transition:transform .15s,box-shadow .15s}
-  .btn-cta:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(245,101,34,.4)}
+    transition:transform .15s}
+  .btn-cta:hover{transform:translateY(-1px)}
 
   /* ── Empty state ── */
   .pm-empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -170,9 +170,9 @@ export const CSS = `
 
   .btn-save-pm{width:100%;background:var(--grad);color:white;border:none;border-radius:12px;
     font-family:var(--font);font-size:.92rem;font-weight:800;padding:12px;cursor:pointer;
-    box-shadow:0 2px 12px rgba(245,101,34,.3);transition:transform .15s,box-shadow .15s,opacity .15s}
-  .btn-save-pm:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(245,101,34,.4)}
-  .btn-save-pm:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
+    transition:transform .15s,opacity .15s}
+  .btn-save-pm:hover{transform:translateY(-1px)}
+  .btn-save-pm:disabled{opacity:.4;cursor:not-allowed;transform:none}
 
   /* ── Delete modal ── */
   .btn-cancel{flex:1;background:var(--black-5);color:var(--black-75);border:none;border-radius:10px;

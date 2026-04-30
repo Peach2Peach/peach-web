@@ -766,9 +766,9 @@ const ADD_PM_CSS = `
 
   .btn-save-pm{width:100%;background:var(--grad);color:white;border:none;border-radius:12px;
     font-family:var(--font);font-size:.92rem;font-weight:800;padding:12px;cursor:pointer;
-    box-shadow:0 2px 12px rgba(245,101,34,.3);transition:transform .15s,box-shadow .15s,opacity .15s}
-  .btn-save-pm:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(245,101,34,.4)}
-  .btn-save-pm:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
+    transition:transform .15s,opacity .15s}
+  .btn-save-pm:hover{transform:translateY(-1px)}
+  .btn-save-pm:disabled{opacity:.4;cursor:not-allowed;transform:none}
 
   /* Payment reference */
   .payref-row{display:flex;gap:8px;align-items:center}

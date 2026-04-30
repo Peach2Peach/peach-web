@@ -89,8 +89,8 @@ const CSS = `
   .btn-cta{background:var(--grad);color:white;border:none;border-radius:999px;
     font-family:var(--font);font-size:.85rem;font-weight:800;
     padding:8px 20px;cursor:pointer;white-space:nowrap;
-    box-shadow:0 2px 12px rgba(245,101,34,.3);transition:transform .15s,box-shadow .15s}
-  .btn-cta:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(245,101,34,.4)}
+    transition:transform .15s}
+  .btn-cta:hover{transform:translateY(-1px)}
 
   /* Tabs + banner + CTA row */
   .tabs-action-row{display:flex;align-items:center;gap:10px;margin-bottom:24px;flex-wrap:wrap}
@@ -419,9 +419,9 @@ const CSS = `
     flex:1;background:var(--grad);color:white;border:none;border-radius:999px;
     font-family:var(--font);font-size:.88rem;font-weight:800;
     padding:12px 20px;cursor:pointer;
-    box-shadow:0 2px 12px rgba(245,101,34,.3);transition:transform .15s,box-shadow .15s;
+    transition:transform .15s;
   }
-  .match-btn-accept:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(245,101,34,.4)}
+  .match-btn-accept:hover{transform:translateY(-1px)}
   .match-btn-skip{
     flex:1;background:none;border:1.5px solid var(--black-10);border-radius:999px;
     font-family:var(--font);font-size:.88rem;font-weight:700;color:var(--black-65);
@@ -889,6 +889,20 @@ export default function TradesDashboard() {
           // buy-offer rows can display fiat without waiting for /market/prices.
           const existing = byId.get(o.id);
           if (existing?.prices && !o.prices) o.prices = existing.prices;
+          byId.set(o.id, o);
+        });
+        ownSellArr.forEach((o) => {
+          // Sell offers from /v1/offers/summary lack meansOfPayment; v069 carries it.
+          // Preserve fields v069 doesn't return: tradeStatus, prices, instantTradeEnabled.
+          const existing = byId.get(o.id);
+          if (existing?.prices && !o.prices) o.prices = existing.prices;
+          if (existing?.tradeStatus && !o.tradeStatus)
+            o.tradeStatus = existing.tradeStatus;
+          if (
+            existing?.instantTradeEnabled != null &&
+            o.instantTradeEnabled == null
+          )
+            o.instantTradeEnabled = existing.instantTradeEnabled;
           byId.set(o.id, o);
         });
 
@@ -1465,6 +1479,7 @@ export default function TradesDashboard() {
   // Fund-escrow enrichment (sell offers in fundEscrow status)
   const [odEscrowAddress, setOdEscrowAddress] = useState(null);
   const [odCopiedAddr, setOdCopiedAddr] = useState(false);
+  const [odCopiedRefund, setOdCopiedRefund] = useState(false);
   const [odQrWithAmount, setOdQrWithAmount] = useState(true);
   const [odAcceptingWrong, setOdAcceptingWrong] = useState(false);
   const [odAcceptWrongError, setOdAcceptWrongError] = useState(null);
@@ -1489,6 +1504,7 @@ export default function TradesDashboard() {
     setOdWithdrawError(null);
     setOdEscrowAddress(null);
     setOdCopiedAddr(false);
+    setOdCopiedRefund(false);
     setOdAcceptingWrong(false);
     setOdAcceptWrongError(null);
     setOdFundMobileLoading(false);
@@ -1552,14 +1568,15 @@ export default function TradesDashboard() {
 
   // Determine whether a sell offer's refund address was derived from the user's
   // own Peach Wallet xpub (first 100 indexes of the /1/ branch) or from an
-  // externally-provided "custom wallet" address.
-  const refundWalletLabel = useMemo(() => {
+  // externally-provided "custom wallet" address. Custom wallets carry the
+  // address through so the popup can render and copy it.
+  const refundWalletInfo = useMemo(() => {
     if (offerDetailPopup?.direction !== "sell") return null;
     const addr = offerDetails?.returnAddress;
     if (!addr || !auth?.xpub) return null;
-    return isReturnAddressFromXpub(auth.xpub, addr)
-      ? "Peach Wallet"
-      : "Custom Wallet";
+    if (isReturnAddressFromXpub(auth.xpub, addr))
+      return { label: "Peach Wallet", address: null };
+    return { label: "Custom Wallet", address: addr };
   }, [offerDetailPopup?.direction, offerDetails?.returnAddress, auth?.xpub]);
 
   // Secondary fetch: ensure the escrow address is available for fundEscrow sell offers
@@ -2665,7 +2682,9 @@ export default function TradesDashboard() {
                     </span>
                   </div>
                   <div className="offer-detail-row">
-                    <span className="offer-detail-label">Amount</span>
+                    <span className="offer-detail-label">
+                      {isBuy ? "You buy" : "You sell"}
+                    </span>
                     <span className="offer-detail-value">
                       <SatsAmount sats={o.amount} />
                     </span>
@@ -2713,11 +2732,47 @@ export default function TradesDashboard() {
                       </div>
                     </div>
                   )}
-                  {!isBuy && refundWalletLabel && (
+                  {!isBuy && refundWalletInfo && (
                     <div className="offer-detail-row">
                       <span className="offer-detail-label">Refund to</span>
-                      <span className="offer-detail-value">
-                        {refundWalletLabel}
+                      <span
+                        className="offer-detail-value"
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "flex-end",
+                          gap: 2,
+                        }}
+                      >
+                        <span>{refundWalletInfo.label}</span>
+                        {refundWalletInfo.address && (
+                          <span
+                            onClick={() => {
+                              navigator.clipboard
+                                ?.writeText(refundWalletInfo.address)
+                                .catch(() => {});
+                              setOdCopiedRefund(true);
+                              setTimeout(
+                                () => setOdCopiedRefund(false),
+                                1500,
+                              );
+                            }}
+                            title={refundWalletInfo.address}
+                            style={{
+                              fontFamily: "monospace",
+                              fontSize: ".72rem",
+                              color: odCopiedRefund
+                                ? "var(--success)"
+                                : "var(--black-65)",
+                              cursor: "pointer",
+                              userSelect: "all",
+                            }}
+                          >
+                            {odCopiedRefund
+                              ? "✓ Copied"
+                              : `${refundWalletInfo.address.slice(0, 6)}…${refundWalletInfo.address.slice(-4)}`}
+                          </span>
+                        )}
                       </span>
                     </div>
                   )}

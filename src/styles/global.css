@@ -342,9 +342,9 @@ body{font-family:var(--font);background:var(--primary-bg);color:var(--black)}
 .auth-popup-btn{
   padding:10px 28px;border-radius:999px;background:var(--grad);color:white;
   font-family:var(--font);font-size:.88rem;font-weight:800;border:none;cursor:pointer;
-  box-shadow:0 2px 12px rgba(245,101,34,.3);transition:transform .1s,box-shadow .1s;margin-top:4px;
+  transition:transform .1s;margin-top:4px;
 }
-.auth-popup-btn:hover{transform:translateY(-1px);box-shadow:0 4px 18px rgba(245,101,34,.42)}
+.auth-popup-btn:hover{transform:translateY(-1px)}
 
 /* ── SIDENAV ── */
 .sidenav{

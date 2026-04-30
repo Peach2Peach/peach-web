@@ -21,9 +21,9 @@ const css = `
 .se-btn{
   padding:11px 32px;border-radius:999px;background:var(--grad);color:white;
   font-family:var(--font);font-size:.88rem;font-weight:800;border:none;cursor:pointer;
-  box-shadow:0 2px 12px rgba(245,101,34,.3);transition:transform .1s,box-shadow .1s;
+  transition:transform .1s;
 }
-.se-btn:hover{transform:translateY(-1px);box-shadow:0 4px 18px rgba(245,101,34,.42)}
+.se-btn:hover{transform:translateY(-1px)}
 `;
 
 export default function SessionExpiredModal({ onReauth }) {
