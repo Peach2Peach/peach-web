@@ -969,7 +969,7 @@ export default function MatchesPopup({
           }}
         >
           {matchesLoading && matches.length === 0
-            ? "Loading matches\u2026"
+            ? "Loading trade requests\u2026"
             : matches.length === 0
               ? "No traders found"
               : `${matches.length} trader${matches.length !== 1 ? "s" : ""} want${matches.length === 1 ? "s" : ""} to trade with you`}

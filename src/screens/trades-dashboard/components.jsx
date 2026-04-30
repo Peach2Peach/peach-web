@@ -81,13 +81,13 @@ export function FilterDropdown({ label, options, selected, onChange }) {
 // Uses real API TradeStatus values
 export const PILL_CONFIG = {
   // Pending / no action
-  searchingForPeer:    { bg:"var(--primary-bg)", color:"var(--primary-dark)", label:"Waiting for a match",   passive:true  },
-  waitingForTradeRequest:{ bg:"var(--primary-bg)", color:"var(--primary-dark)", label:"Waiting for a match", passive:true  },
+  searchingForPeer:    { bg:"var(--primary-bg)", color:"var(--primary-dark)", label:"Waiting for request",   passive:true  },
+  waitingForTradeRequest:{ bg:"var(--primary-bg)", color:"var(--primary-dark)", label:"Waiting for request", passive:true  },
   offerHidden:         { bg:"var(--primary-bg)", color:"var(--primary-dark)", label:"Offer hidden",          passive:true  },
   // Action required
-  hasMatchesAvailable: { bg:"var(--primary)",    color:"white",              label:"View matches",          passive:false },
+  hasMatchesAvailable: { bg:"var(--primary)",    color:"white",              label:"View requests",         passive:false },
   acceptTradeRequest:  { bg:"var(--primary)",    color:"white",              label:"Accept trade request",  passive:false },
-  offerHiddenWithMatchesAvailable: { bg:"var(--primary)", color:"white",    label:"View matches",          passive:false },
+  offerHiddenWithMatchesAvailable: { bg:"var(--primary)", color:"white",    label:"View requests",         passive:false },
   // Sent trade request (synthetic — user performed a trade request on a counterparty's offer)
   tradeRequestSent:  { bg:"var(--primary-bg)", color:"var(--primary-dark)", label:"Request sent",         passive:true  },
   // Escrow stage

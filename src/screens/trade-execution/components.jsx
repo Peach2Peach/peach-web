@@ -2650,10 +2650,18 @@ export function ActionPanel({
     <>
       {showConfirm && (
         <ConfirmModal
-          tone="success"
-          title="Confirm you received the payment"
-          body="Only confirm if you have actually received the fiat payment in your account. You'll be able to rate the buyer once the bitcoin has been released."
-          confirmLabel="Release Bitcoin"
+          title="Did you really receive the Fiat?"
+          body={
+            <>
+              <p style={{ margin: "0 0 12px" }}>
+                Only confirm if you have actually received the fiat payment in your account. You'll be able to rate the buyer once the bitcoin has been released.
+              </p>
+              <p style={{ margin: 0 }}>
+                <strong style={{ color: "var(--error)" }}>Revolut users:</strong> make sure the buyer has paid through Revtag or IBAN, and NOT through debit/credit card or Apple pay. They payments are reversible.
+              </p>
+            </>
+          }
+          confirmLabel="Yes, proceed"
           onCancel={() => {
             setShowConfirm(false);
             setConfirmSliderKey((k) => k + 1);
@@ -2668,7 +2676,7 @@ export function ActionPanel({
       {showCancelConfirm && (
         <ConfirmModal
           title="cancel trade"
-          body="Are you sure? The seller has already matched you back, so canceling now will impact your reputation in a major way."
+          body="Are you sure? The seller has already accepted your trade request, so canceling now will impact your reputation in a major way."
           confirmLabel="cancel trade"
           onConfirm={() => {
             setShowCancelConfirm(false);

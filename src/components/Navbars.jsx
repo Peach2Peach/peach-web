@@ -75,6 +75,7 @@ export const NAV_ROUTES = {
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
 export function SideNav({ active, mobileOpen, onClose, onNavigate, mobilePriceSlot }) {
   const { total } = useUnread();
+  const { theme, toggleTheme } = useTheme();
   return (
     <>
       <div className={`sidenav-backdrop${mobileOpen ? " open" : ""}`} onClick={onClose}/>
@@ -89,6 +90,16 @@ export function SideNav({ active, mobileOpen, onClose, onNavigate, mobilePriceSl
             <span className="sidenav-label">{label}</span>
           </button>
         ))}
+        <button
+          type="button"
+          className="sidenav-theme-toggle"
+          onClick={toggleTheme}
+          title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+          aria-label="Toggle theme"
+        >
+          <span className="sidenav-icon">{theme === "light" ? <IconMoon/> : <IconSun/>}</span>
+          <span className="sidenav-theme-label">{theme === "light" ? "Dark mode" : "Light mode"}</span>
+        </button>
         {mobilePriceSlot && (
           <div className="sidenav-price-slot">{mobilePriceSlot}</div>
         )}

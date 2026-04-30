@@ -14,8 +14,8 @@ const SELLER_OVERRIDE = {
 
 // ── Status → notification mapping ────────────────────────────────────────────
 const STATUS_NOTIF = {
-  hasMatchesAvailable:          { title: "New matches available",   body: "Review and select a match.",             type: "match" },
-  offerHiddenWithMatchesAvailable: { title: "New matches available", body: "Review and select a match.",            type: "match" },
+  hasMatchesAvailable:          { title: "New trade requests available",   body: "Review and select a trade request.",             type: "match" },
+  offerHiddenWithMatchesAvailable: { title: "New trade requests available", body: "Review and select a trade request.",            type: "match" },
   acceptTradeRequest:           { title: "Trade request received",  body: "Review and accept or decline.",          type: "tradeRequest" },
   fundEscrow:                   { title: "Trade accepted",          body: "Waiting for seller to fund escrow.",     type: "statusChange" },
   waitingForFunding:            { title: "Trade accepted",          body: "Waiting for seller to fund escrow.",     type: "statusChange" },

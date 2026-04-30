@@ -99,7 +99,7 @@ export function MultiSelect({ label, options, value, onChange, searchable = fals
             </div>
           )}
           {visibleOptions.length === 0 ? (
-            <div className="ms-empty">No matches</div>
+            <div className="ms-empty">No results</div>
           ) : (
             visibleOptions.map(opt => {
               const checked = value.includes(opt);

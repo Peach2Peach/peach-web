@@ -1304,7 +1304,7 @@ export default function PeachMarket() {
                 <button className="popup-btn popup-btn-instant"
                   disabled={!selectedPM || !popupCurrency || tradeLoading}
                   onClick={() => handleInstantTrade(offer)}>
-                  {tradeLoading ? "Matching…" : "⚡ Instant trade"}
+                  {tradeLoading ? "Requesting…" : "⚡ Instant trade"}
                 </button>
               ) : (
                 <button className="popup-btn popup-btn-request"
@@ -1599,7 +1599,7 @@ export default function PeachMarket() {
                           {offer.isOwn && <span className="own-label">Your offer</span>}
                           {(offer.auto||offer.experienceLevel)&&(
                             <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
-                              {offer.auto&&<span className="auto-badge">⚡ Instant Match</span>}
+                              {offer.auto&&<span className="auto-badge">⚡ Instant Trade</span>}
                               {offer.experienceLevel==="experiencedUsersOnly"&&<span className="exp-badge">👤 Experienced only</span>}
                               {offer.experienceLevel==="newUsersOnly"&&<span className="exp-badge">🆕 New users</span>}
                             </div>
@@ -1653,7 +1653,7 @@ export default function PeachMarket() {
                   <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
                     {(offer.auto||offer.experienceLevel)&&(
                       <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
-                        {offer.auto&&<span className="auto-badge">⚡ Instant Match</span>}
+                        {offer.auto&&<span className="auto-badge">⚡ Instant Trade</span>}
                         {offer.experienceLevel==="experiencedUsersOnly"&&<span className="exp-badge">👤 Experienced only</span>}
                         {offer.experienceLevel==="newUsersOnly"&&<span className="exp-badge">🆕 New users</span>}
                       </div>

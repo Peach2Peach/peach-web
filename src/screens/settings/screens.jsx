@@ -772,7 +772,7 @@ export function BlockUsersSubScreen({ onBack }) {
   return (
     <SubScreenWrapper title="Block Users" onBack={onBack}>
       <p style={{ fontSize:".82rem", color:"var(--black-65)", marginBottom:20, lineHeight:1.6 }}>
-        Enter a user's public key to block them. Blocked users will not be able to match with your offers.
+        Enter a user's public key to block them. Blocked users will not be able to send trade requests on your offers.
       </p>
 
       <div style={{ marginBottom:20 }}>
@@ -875,7 +875,7 @@ export function ComingSoonPlaceholder({ title, icon, description, onBack }) {
 
 export function NotificationsSubScreen({ onBack }) {
   return <ComingSoonPlaceholder title="Notifications" icon="🔔"
-    description="Configure which notifications you receive: trade matches, escrow funded, payment sent, disputes, and price alerts."
+    description="Configure which notifications you receive: trade requests, escrow funded, payment sent, disputes, and price alerts."
     onBack={onBack}/>;
 }
 

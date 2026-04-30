@@ -13,11 +13,11 @@
 
 export const STATUS_CONFIG = {
   // ── Pending (offer stage) ──
-  searchingForPeer:    { label: "Waiting for Match",     bg: "var(--black-5)", color: "var(--black-65)", action: false },
-  waitingForTradeRequest:{ label: "Waiting for Match",   bg: "var(--black-5)", color: "var(--black-65)", action: false },
+  searchingForPeer:    { label: "Waiting for request",   bg: "var(--black-5)", color: "var(--black-65)", action: false },
+  waitingForTradeRequest:{ label: "Waiting for request", bg: "var(--black-5)", color: "var(--black-65)", action: false },
   offerHidden:         { label: "Offer Hidden",          bg: "var(--black-5)", color: "var(--black-65)", action: false },
-  offerHiddenWithMatchesAvailable: { label: "Hidden (Matches)", bg: "var(--primary-mild)", color: "var(--primary-dark)", action: true },
-  hasMatchesAvailable: { label: "Select Match",           bg: "var(--primary-mild)", color: "var(--primary-dark)", action: true  },
+  offerHiddenWithMatchesAvailable: { label: "Hidden (Requests)", bg: "var(--primary-mild)", color: "var(--primary-dark)", action: true },
+  hasMatchesAvailable: { label: "Select request",        bg: "var(--primary-mild)", color: "var(--primary-dark)", action: true  },
   acceptTradeRequest:  { label: "Accept Trade Request",  bg: "var(--primary-mild)", color: "var(--primary-dark)", action: true  },
 
   // ── Active (contract stage) ──
@@ -73,7 +73,7 @@ export const PENDING_STATUSES = new Set([
 
 // Trade lifecycle steps in order (used by HorizontalStepper in trade execution)
 export const LIFECYCLE = [
-  { id: "fundEscrow",              label: "Matched",        desc: "Offers paired, awaiting escrow" },
+  { id: "fundEscrow",              label: "Accepted",       desc: "Offers paired, awaiting escrow" },
   { id: "paymentRequired",         label: "Escrow Funded",  desc: "Bitcoin locked in escrow" },
   { id: "confirmPaymentRequired",  label: "Payment Sent",   desc: "Buyer marked fiat as sent — seller reviewing" },
   { id: "tradeCompleted",          label: "Completed",      desc: "Bitcoin released, trade closed" },

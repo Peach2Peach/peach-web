@@ -437,6 +437,11 @@ const CSS = `
     box-shadow:0 4px 20px rgba(0,0,0,.25);z-index:9999;
     animation:toastIn .3s ease both;pointer-events:none;
   }
+  .toast-bar--error{
+    background:var(--error);
+    color:var(--text-on-accent);
+    box-shadow:0 4px 20px rgba(223,50,31,.28);
+  }
   @keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(12px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
   @media(max-width:640px){
     .matches-popup{max-width:100%;border-radius:16px}
@@ -1403,6 +1408,7 @@ export default function TradesDashboard() {
   const [localMatches, setLocalMatches] = useState({}); // tradeId → remaining matches
   const [matchError, setMatchError] = useState(null); // error message shown in popup
   const [toast, setToast] = useState(null); // bottom toast message
+  const [toastTone, setToastTone] = useState("default"); // "default" | "error"
   const [signingModal, setSigningModal] = useState(null); // mobile signing modal
   const [matchesLoading, setMatchesLoading] = useState(false); // loading matches on demand
   const [sentRequestPopup, setSentRequestPopup] = useState(null); // sent trade request detail/chat popup
@@ -1915,7 +1921,8 @@ export default function TradesDashboard() {
           setMatchError("Could not reject this request. Please try again.");
         } else {
           setToast("Trade request rejected");
-          setTimeout(() => setToast(null), 3000);
+          setToastTone("error");
+          setTimeout(() => { setToast(null); setToastTone("default"); }, 3000);
         }
       } catch {
         setLocalMatches((prev) => ({ ...prev, [trade.id]: previousMatches }));
@@ -2546,7 +2553,7 @@ export default function TradesDashboard() {
             superTrader: "Super trader",
           };
           const attrChips = [];
-          if (instantTradeOn) attrChips.push("⚡ Instant match");
+          if (instantTradeOn) attrChips.push("⚡ Instant trade");
           if (criteria) {
             if ((criteria.minTrades ?? 0) > 0) attrChips.push("No new users");
             if ((criteria.minReputation ?? -1) > 0.5)
@@ -2665,11 +2672,11 @@ export default function TradesDashboard() {
                       {derivedStatus}
                     </span>
                   </div>
-                  {/* Match count — from /offer/:id/details (only after funding confirmed) */}
+                  {/* Trade request count — from /offer/:id/details (only after funding confirmed) */}
                   {fundingStage === "funded" &&
                     Array.isArray(offerDetails?.matches) && (
                       <div className="offer-detail-row">
-                        <span className="offer-detail-label">Matches</span>
+                        <span className="offer-detail-label">Requests</span>
                         <span className="offer-detail-value">
                           {offerDetails.matches.length}
                         </span>
@@ -3775,7 +3782,11 @@ export default function TradesDashboard() {
       />
 
       {/* ── TOAST ── */}
-      {toast && <div className="toast-bar">{toast}</div>}
+      {toast && (
+        <div className={`toast-bar${toastTone === "error" ? " toast-bar--error" : ""}`}>
+          {toast}
+        </div>
+      )}
     </>
   );
 }

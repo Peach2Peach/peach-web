@@ -231,7 +231,7 @@ export function LivePreview({
                   border: "none",
                 }}
               >
-                ⚡ Instant Match
+                ⚡ Instant Trade
               </span>
             )}
           </div>

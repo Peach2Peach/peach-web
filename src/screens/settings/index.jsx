@@ -94,7 +94,7 @@ export default function SettingsScreen() {
             warning={true}
             onClick={() => setCurrentView("backups")}/>
           <SettingsRow icon="🚫" label="Block Users"
-            description="Block a user from matching with your offers"
+            description="Block a user from sending trade requests on your offers"
             onClick={() => setCurrentView("block-users")}
             noBorder/>
         </SettingsSection>
@@ -120,7 +120,7 @@ export default function SettingsScreen() {
 
         <SettingsSection title="App & Notifications">
           <SettingsRow icon="🔔" label="Notifications"
-            description="Trade updates, matches, and alerts"
+            description="Trade updates, trade requests, and alerts"
             onClick={() => setCurrentView("notifications")}/>
           <SettingsRow icon="🌐" label="Language"
             description="English"

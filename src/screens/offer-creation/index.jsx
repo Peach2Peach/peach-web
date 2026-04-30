@@ -873,8 +873,8 @@ export default function OfferCreation({ initialType="buy" }) {
         </div>
         <p style={{fontSize:".88rem",color:"var(--black-65)",lineHeight:1.65,maxWidth:360}}>
           {multiResults && multiResults.length > 1
-            ? <>{multiResults.length} buy offers for <strong style={{color:"var(--black)"}}>{fmt(form.amtFixed)} sats</strong> each are live in the market. You'll be notified when sellers match.</>
-            : <>Your buy offer for <strong style={{color:"var(--black)"}}>{fmt(form.amtFixed)} sats</strong> is live in the market. You'll be notified when a seller matches.</>
+            ? <>{multiResults.length} buy offers for <strong style={{color:"var(--black)"}}>{fmt(form.amtFixed)} sats</strong> each are live in the market. You'll be notified when sellers send a trade request.</>
+            : <>Your buy offer for <strong style={{color:"var(--black)"}}>{fmt(form.amtFixed)} sats</strong> is live in the market. You'll be notified when a seller sends a trade request.</>
           }
         </p>
         <div style={{display:"flex",gap:12}}>
@@ -1195,7 +1195,7 @@ export default function OfferCreation({ initialType="buy" }) {
                     {form.instantMatch&&"✓"}
                   </div>
                   <div>
-                    <div style={{fontSize:".8rem",fontWeight:700}}>⚡ Enable Instant Match</div>
+                    <div style={{fontSize:".8rem",fontWeight:700}}>⚡ Enable Instant Trade</div>
                     <div style={{fontSize:".7rem",color:"var(--black-65)",fontWeight:500}}>
                       Auto-accept any qualifying {isSell?"buy":"sell"} offer
                     </div>
@@ -1218,7 +1218,7 @@ export default function OfferCreation({ initialType="buy" }) {
                       <div>
                         <div style={{fontSize:".78rem",fontWeight:600}}>No new users</div>
                         <div style={{fontSize:".68rem",color:"var(--black-65)",fontWeight:500}}>
-                          Only match with traders who have completed at least 1 trade
+                          Only accept trade requests from traders who have completed at least 1 trade
                         </div>
                       </div>
                     </div>
@@ -1427,7 +1427,7 @@ export default function OfferCreation({ initialType="buy" }) {
                   ["Current effective price", `€${Math.round(effP).toLocaleString()}/BTC`],
                   ["Methods", offerMethods.join(", ")||"—"],
                   ["Currencies", offerCurrencies.join(", ")||"—"],
-                  ...(form.instantMatch?[["Instant Match", "⚡ Enabled"]]:[]),
+                  ...(form.instantMatch?[["Instant Trade", "⚡ Enabled"]]:[]),
                   ...(form.noNewUsers?[["No new users", "On"]]:[]),
                   ...(form.minReputation?[["Min reputation", "4.5"]]:[]),
                   ...(form.instantMatchBadges.length>0?[["Badge filter", form.instantMatchBadges.map(b=>b==="fastTrader"?"Fast trader":"Super trader").join(", ")]]:[]),
@@ -1738,7 +1738,7 @@ export default function OfferCreation({ initialType="buy" }) {
                   <p style={{fontSize:".88rem",color:"var(--black-65)",lineHeight:1.65,maxWidth:340}}>
                     Your sell offer for <strong style={{color:"var(--black)"}}>
                       {fmt(form.amtFixed)} sats
-                    </strong> is now visible in the market. We'll notify you when a buyer matches.
+                    </strong> is now visible in the market. We'll notify you when a buyer sends a trade request.
                   </p>
                   <div style={{display:"flex",gap:12}}>
                     <button onClick={() => {
@@ -1821,7 +1821,7 @@ export default function OfferCreation({ initialType="buy" }) {
                 </div>
                 {form.instantMatch&&(
                   <div className="ir">
-                    <span className="ik">Instant Match</span>
+                    <span className="ik">Instant Trade</span>
                     <span className="iv">⚡ On</span>
                   </div>
                 )}
