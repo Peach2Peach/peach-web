@@ -4,6 +4,7 @@ import { SideNav, Topbar, CurrencyDropdown, formatPeachId } from "../../componen
 import { SatsAmount, IcoBtc } from "../../components/BitcoinAmount.jsx";
 import { useAuth } from "../../hooks/useAuth.js";
 import { useApi } from "../../hooks/useApi.js";
+import { markSentRequestCreated } from "../../hooks/useNotifications.js";
 import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 import { extractPMsFromProfile, isApiError, generateSymmetricKey, encryptForRecipients, encryptSymmetric, encryptForPublicKey, signPGPMessage, hashPaymentFields } from "../../utils/pgp.js";
 import { getCached, setCache, clearCache } from "../../hooks/useApi.js";
@@ -377,6 +378,7 @@ export default function PeachMarket() {
       if (res.ok) {
         // Show animation, mark as requested, refresh offers from API,
         // then return to the offer modal in its "already requested" state.
+        markSentRequestCreated(offer.id, offerType);
         setRequestAnim(true);
         setLocalRequested(prev => new Set([...prev, offer.id]));
         clearCache("market-offers");

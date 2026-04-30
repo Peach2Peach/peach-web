@@ -429,13 +429,13 @@ async function _poll(auth, base) {
       if (!currentMatchAvailIds.has(id)) _prevMatchCounts.delete(id);
     }
 
-    // ── Diff outbound trade requests for rejection (every 4th tick ≈ 32s) ──
+    // ── Diff outbound trade requests for rejection (every 2nd tick ≈ 16s) ──
     // Detects when an offer owner rejects our sent trade request:
     //   hasPerformedTradeRequest flips true → false on the offer in browse lists.
     // Acceptance (contract created) and self-cancel ("Undo request") also flip
     // the flag — we filter both out: contracts via the contracts list, self-cancel
     // via markSentRequestSelfCancelled() which pre-empties the baseline entry.
-    if (_pollTick % 4 === 0) {
+    if (_pollTick % 2 === 0) {
       const [browseBuyRes, browseSellRes] = await Promise.all([
         fetchWithSessionCheck(`${v069Base}/buyOffer?ownOffers=false`, { headers: hdrs })
           .then(r => r.ok ? r.json() : null).catch(() => null),
@@ -596,6 +596,15 @@ function _markRead(notifId) {
 export function markSentRequestSelfCancelled(offerId) {
   if (offerId == null) return;
   _prevSentRequests.delete(String(offerId));
+  saveBaseline();
+}
+
+// Eagerly seed the diff baseline when the user just sent a new trade request,
+// so a fast rejection is detected on the next poll without waiting for the
+// periodic browse-list bootstrap.
+export function markSentRequestCreated(offerId, offerType) {
+  if (offerId == null || !offerType) return;
+  _prevSentRequests.set(String(offerId), offerType);
   saveBaseline();
 }
 
