@@ -21,7 +21,7 @@ const STATUS_NOTIF = {
   waitingForFunding:            { title: "Trade accepted",          body: "Waiting for seller to fund escrow.",     type: "statusChange" },
   escrowWaitingForConfirmation: { title: "Escrow funded",           body: "Waiting for blockchain confirmation.",   type: "statusChange" },
   paymentRequired:              { title: "Trade Initiated ! Payment required",        body: "Send payment to the seller.",            type: "statusChange" },
-  confirmPaymentRequired:       { title: "Payment sent",            body: "you have marked the payment as sent",    type: "statusChange" },
+  confirmPaymentRequired:       { title: "Payment sent",            body: "you have marked the payment as sent. Waiting for seller to receive the money.",    type: "statusChange" },
   releaseEscrow:                { title: "Payment confirmed",       body: "Seller is releasing escrow.",            type: "statusChange" },
   tradeCompleted:               { title: "Trade completed",         body: "Bitcoin released successfully.",         type: "statusChange" },
   tradeCanceled:                { title: "Trade cancelled",         body: "",                                       type: "statusChange" },
@@ -42,21 +42,33 @@ const STATUS_NOTIF = {
   wrongAmountFundedOnContractRefundWaiting: { title: "Refund pending", body: "Waiting for refund of incorrect amount.", type: "warning" },
 };
 
-// ── localStorage helpers ─────────────────────────────────────────────────────
-const LS_NOTIFS    = "peach_notifications";
-const LS_READ_IDS  = "peach_notif_read_ids";
-const MAX_NOTIFS   = 50;
+// ── localStorage helpers (per-PeachID namespaced) ────────────────────────────
+const LS_NOTIFS_PREFIX   = "peach_notifications";
+const LS_READ_IDS_PREFIX = "peach_notif_read_ids";
+const LS_BASELINE_PREFIX = "peach_notif_baseline";
+const MAX_NOTIFS         = 50;
 
-function loadNotifs() {
-  try { return JSON.parse(localStorage.getItem(LS_NOTIFS)) || []; } catch { return []; }
+const _peachId    = () => window.__PEACH_AUTH__?.peachId ?? null;
+const keyNotifs   = (id) => id ? `${LS_NOTIFS_PREFIX}:${id}`   : null;
+const keyReadIds  = (id) => id ? `${LS_READ_IDS_PREFIX}:${id}` : null;
+const keyBaseline = (id) => id ? `${LS_BASELINE_PREFIX}:${id}` : null;
+
+function loadNotifs(peachId) {
+  const k = keyNotifs(peachId);
+  if (!k) return [];
+  try { return JSON.parse(localStorage.getItem(k)) || []; } catch { return []; }
 }
 function saveNotifs(list) {
-  localStorage.setItem(LS_NOTIFS, JSON.stringify(list.slice(0, MAX_NOTIFS)));
+  const k = keyNotifs(_peachId());
+  if (!k) return;
+  localStorage.setItem(k, JSON.stringify(list.slice(0, MAX_NOTIFS)));
 }
-function loadReadIds(notifs) {
+function loadReadIds(notifs, peachId) {
+  const k = keyReadIds(peachId);
+  if (!k) return new Set();
   // Try new format first
   try {
-    const arr = JSON.parse(localStorage.getItem(LS_READ_IDS));
+    const arr = JSON.parse(localStorage.getItem(k));
     if (Array.isArray(arr)) return new Set(arr);
   } catch { /* fall through */ }
   // Migrate from old timestamp-based format
@@ -71,17 +83,48 @@ function loadReadIds(notifs) {
   return new Set();
 }
 function saveReadIds(readIds, notifs) {
+  const k = keyReadIds(_peachId());
+  if (!k) return;
   // Prune: only keep IDs that exist in current notifications
   const validIds = new Set(notifs.map(n => n.id));
   const pruned = [...readIds].filter(id => validIds.has(id));
-  localStorage.setItem(LS_READ_IDS, JSON.stringify(pruned));
+  localStorage.setItem(k, JSON.stringify(pruned));
+}
+
+function loadBaseline(peachId) {
+  const k = keyBaseline(peachId);
+  if (!k) return null;
+  try {
+    const obj = JSON.parse(localStorage.getItem(k));
+    if (!obj) return null;
+    return {
+      contracts:        new Map(obj.contracts        ?? []),
+      offers:           new Map(obj.offers           ?? []),
+      sellRequests:     new Map((obj.sellRequests    ?? []).map(([id, ids]) => [id, new Set(ids)])),
+      matchCounts:      new Map(obj.matchCounts      ?? []),
+      preContractChats: new Map((obj.preContractChats ?? []).map(([key, ids]) => [key, new Set(ids)])),
+    };
+  } catch { return null; }
+}
+function saveBaseline() {
+  const k = keyBaseline(_peachId());
+  if (!k) return;
+  try {
+    const obj = {
+      contracts:        [..._prevContracts.entries()],
+      offers:           [..._prevOffers.entries()],
+      sellRequests:     [..._prevSellRequests.entries()].map(([id, set]) => [id, [...set]]),
+      matchCounts:      [..._prevMatchCounts.entries()],
+      preContractChats: [..._prevPreContractChats.entries()].map(([key, set]) => [key, [...set]]),
+    };
+    localStorage.setItem(k, JSON.stringify(obj));
+  } catch { /* quota or other — silently skip */ }
 }
 
 // ── Singleton polling state ──────────────────────────────────────────────────
 let _interval      = null;
 let _listeners     = new Set();
-const _initNotifs  = loadNotifs();
-let _state         = { notifications: _initNotifs, unreadCount: 0, readIds: loadReadIds(_initNotifs) };
+let _state         = { notifications: [], unreadCount: 0, readIds: new Set() };
 let _prevContracts = new Map();   // id → { tradeStatus, unreadMessages }
 let _prevOffers    = new Map();   // id → tradeStatus
 let _prevSellRequests = new Map(); // sellOfferId → Set<tradeRequestId> (sell-offer trade-requests workaround for missing tradeStatus)
@@ -89,9 +132,41 @@ let _prevMatchCounts = new Map();  // buyOfferId → totalMatches (track additio
 let _prevPreContractChats = new Map(); // chatKey "offerType:offerId:userId" → Set<String(messageId)> (pre-contract chat diff)
 let _pollTick      = 0;            // incremented every poll; chat layer runs only on even ticks (~16s cadence)
 let _isFirstPoll   = true;
+let _hydratedPeachId = null;
 
-// Compute unread on load
-_state.unreadCount = _state.notifications.filter(n => !_state.readIds.has(n.id)).length;
+// Hydrate notifications, read state, and diff baselines for a given user.
+// Idempotent — early-returns if already hydrated for this peachId.
+// Restoring a saved baseline lets the first poll diff against last-known state,
+// catching events that occurred while the user was logged out.
+function _hydrateForUser(peachId) {
+  if (!peachId || _hydratedPeachId === peachId) return;
+  _hydratedPeachId = peachId;
+  const notifs  = loadNotifs(peachId);
+  const readIds = loadReadIds(notifs, peachId);
+  _state = {
+    notifications: notifs,
+    unreadCount:   notifs.filter(n => !readIds.has(n.id)).length,
+    readIds,
+  };
+  const baseline = loadBaseline(peachId);
+  if (baseline) {
+    _prevContracts        = baseline.contracts;
+    _prevOffers           = baseline.offers;
+    _prevSellRequests     = baseline.sellRequests;
+    _prevMatchCounts      = baseline.matchCounts;
+    _prevPreContractChats = baseline.preContractChats;
+    _isFirstPoll          = false;
+  } else {
+    _prevContracts        = new Map();
+    _prevOffers           = new Map();
+    _prevSellRequests     = new Map();
+    _prevMatchCounts      = new Map();
+    _prevPreContractChats = new Map();
+    _isFirstPoll          = true;
+  }
+  _updateTitle();
+  if (_listeners.size > 0) _notify();
+}
 
 function _notify() {
   _listeners.forEach(fn => fn({ ..._state }));
@@ -129,6 +204,9 @@ async function _poll(auth, base) {
     _notify();
     return;
   }
+
+  // Defensive: hydrate (or re-hydrate if user changed mid-session)
+  _hydrateForUser(window.__PEACH_AUTH__.peachId);
 
   _pollTick++;
   const hdrs = { Authorization: `Bearer ${auth.token}` };
@@ -183,7 +261,7 @@ async function _poll(auth, base) {
       ...sellOffers.map(o => ({ ...o, _dir: "sell" })),
     ];
 
-    // ── First poll = baseline only ──
+    // ── First poll = baseline only (only when no persisted baseline existed) ──
     if (_isFirstPoll) {
       _isFirstPoll = false;
       for (const c of contracts) {
@@ -192,6 +270,7 @@ async function _poll(auth, base) {
       for (const o of allOffers) {
         _prevOffers.set(o.id, o.tradeStatus ?? o.tradeStatusNew ?? "");
       }
+      saveBaseline();
       _notify();
       return;
     }
@@ -205,7 +284,9 @@ async function _poll(auth, base) {
       const status = c.tradeStatus;
       const unread = c.unreadMessages ?? 0;
       const fmtId = formatTradeId(c.id);
-      const isSeller = c.type === "ask";
+      const rawType  = (c.type ?? "").toLowerCase();
+      const isBuyer  = rawType === "bid" || rawType === "buy" || (c.buyer?.id ?? c.buyerId) === peachId;
+      const isSeller = !isBuyer;
       const sellerOv = isSeller ? SELLER_OVERRIDE[status] : null;
 
       if (prev) {
@@ -414,6 +495,7 @@ async function _poll(auth, base) {
     }
 
     _addEvents(events);
+    saveBaseline();
   } catch {
     // Silently keep last known state on error
   }
@@ -423,6 +505,7 @@ function _startPolling() {
   if (_interval) return;
   const auth = window.__PEACH_AUTH__;
   if (!auth) return;
+  _hydrateForUser(auth.peachId);
   const base = auth.baseUrl ?? import.meta.env.VITE_API_BASE;
   _poll(auth, base);
   _interval = setInterval(() => _poll(auth, base), 8_000);
@@ -455,6 +538,9 @@ function _markRead(notifId) {
 
 // ── React hook ───────────────────────────────────────────────────────────────
 export function useNotifications() {
+  // Hydrate synchronously so the very first render has the user's notifications
+  // (idempotent — early-returns if already hydrated for this peachId).
+  if (window.__PEACH_AUTH__?.peachId) _hydrateForUser(window.__PEACH_AUTH__.peachId);
   const [state, setState] = useState(_state);
 
   useEffect(() => {

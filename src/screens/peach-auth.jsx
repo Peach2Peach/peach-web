@@ -1375,32 +1375,6 @@ export default function PeachAuth() {
                 — you'll be signed in instantly
               </Step>
             </div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "10px 14px",
-                borderRadius: 10,
-                background: "var(--black-5)",
-                border: "1px solid var(--black-10)",
-              }}
-            >
-              <span style={{ fontSize: "1rem" }}>🔒</span>
-              <span
-                style={{
-                  fontSize: ".73rem",
-                  color: "var(--black-65)",
-                  fontWeight: 500,
-                  lineHeight: 1.5,
-                }}
-              >
-                Session tokens expire after{" "}
-                <strong style={{ color: "var(--black)" }}>120 minutes</strong>.
-                Your keypair never leaves your device.
-              </span>
-            </div>
-
             {/* New to Peach */}
             <div
               style={{ borderTop: "1px solid var(--black-10)", paddingTop: 18 }}
@@ -1605,6 +1579,32 @@ export default function PeachAuth() {
           >
             {phase !== "success" && (
               <>
+                <div
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "10px 14px",
+                    borderRadius: 10,
+                    background: "var(--black-5)",
+                    border: "1px solid var(--black-10)",
+                  }}
+                >
+                  <span style={{ fontSize: "1rem" }}>🔒</span>
+                  <span
+                    style={{
+                      fontSize: ".73rem",
+                      color: "var(--black-65)",
+                      fontWeight: 500,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    Session tokens expire after{" "}
+                    <strong style={{ color: "var(--black)" }}>120 minutes</strong>.
+                    Your keypair never leaves your device.
+                  </span>
+                </div>
                 <div style={{ textAlign: "center" }}>
                   <div
                     style={{
