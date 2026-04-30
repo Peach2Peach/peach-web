@@ -338,6 +338,23 @@ export default function PeachAuth() {
     window.addEventListener("resize", updateQrSize);
     return () => window.removeEventListener("resize", updateQrSize);
   }, []);
+  // Detect which browser we're in — passed to the app so it can return us to
+  // this exact browser (and tab) instead of opening a new one. Safari is the
+  // "default" — we omit the param so the app falls through to its default flow.
+  async function detectReturnBrowser() {
+    const ua = navigator.userAgent;
+    try {
+      if (navigator.brave && typeof navigator.brave.isBrave === "function") {
+        const isBrave = await navigator.brave.isBrave();
+        if (isBrave) return "brave";
+      }
+    } catch {}
+    if (/CriOS/.test(ua)) return "chrome";
+    if (/FxiOS/.test(ua)) return "firefox";
+    if (/EdgiOS/.test(ua)) return "edge";
+    if (/OPiOS|OPT\//.test(ua)) return "opera";
+    return null; // Safari (or unknown) — don't send browser param
+  }
 
   // Open the app via custom-scheme deep link, with visibility-based detection
   // for the "app not installed" fallback. iOS doesn't expose canOpenURL to the
@@ -359,8 +376,13 @@ export default function PeachAuth() {
     let binary = "";
     for (const b of bytes) binary += String.fromCharCode(b);
     const b64 = btoa(binary);
-    const deepLink = `peachbitcoin://desktopConnection?data=${encodeURIComponent(b64)}`;
-
+    const browser = await detectReturnBrowser();
+    const params = new URLSearchParams({ data: b64 });
+    if (browser) params.set("browser", browser);
+    const deepLink = `peachbitcoinregtest://desktopConnection?${params.toString()}`;
+    console.log(
+      "TODO TODO TODO: change hardcoded peachbitcoinregtest deeplink",
+    );
     let didHide = false;
     const onHidden = () => {
       if (document.hidden) didHide = true;
@@ -1613,8 +1635,10 @@ export default function PeachAuth() {
                     }}
                   >
                     Session tokens expire after{" "}
-                    <strong style={{ color: "var(--black)" }}>120 minutes</strong>.
-                    Your keypair never leaves your device.
+                    <strong style={{ color: "var(--black)" }}>
+                      120 minutes
+                    </strong>
+                    . Your keypair never leaves your device.
                   </span>
                 </div>
                 <div style={{ textAlign: "center" }}>
