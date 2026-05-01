@@ -1775,73 +1775,80 @@ export default function TradesDashboard() {
       setSentRequestPopup(trade);
       return;
     }
-    // Offers with available matches or trade requests → show match acceptance popup
-    if (
+    // Offers whose cached status says they have trade requests → open the
+    // matches popup immediately (the believed-correct modal), then probe the
+    // API. If the probe comes back empty (e.g. request was canceled by the
+    // counterparty since the last refresh), swap to the normal offer detail.
+    const couldHaveRequests =
       (forceMatches ||
         trade.tradeStatus === "hasMatchesAvailable" ||
         trade.tradeStatus === "acceptTradeRequest") &&
-      !acceptedTrades.has(trade.id)
-    ) {
+      !acceptedTrades.has(trade.id);
+    if (trade.kind === "offer" && couldHaveRequests && auth) {
       setMatchesPopup(trade);
       setMatchDetail(null);
       setMatchConfirm(null);
       setMatchError(null);
-      // If no matches loaded yet, fetch on demand
-      if (!trade.matches?.length && !localMatches[trade.id] && auth) {
-        setMatchesLoading(true);
-        try {
-          let transformed = [];
-          // Sell offers always use v069 tradeRequestReceived (v1 /offer/:id/matches
-          // doesn't cover v069 trade requests, and the v1 summary sometimes reports
-          // hasMatchesAvailable for sell offers whose requests are actually on v069).
-          const useV069 =
-            forceMatches ||
-            trade.tradeStatus === "acceptTradeRequest" ||
-            trade.direction === "sell";
-          if (useV069) {
-            const v069Base = auth.baseUrl.replace(/\/v1$/, "/v069");
-            const offerType =
-              trade.direction === "buy" ? "buyOffer" : "sellOffer";
-            const res = await fetchWithSessionCheck(
-              `${v069Base}/${offerType}/${trade.id}/tradeRequestReceived/`,
-              {
-                headers: { Authorization: `Bearer ${auth.token}` },
-              },
+      // Skip the probe if we already have matches cached locally
+      if (trade.matches?.length || localMatches[trade.id]) return;
+      setMatchesLoading(true);
+      try {
+        let transformed = [];
+        // Sell offers always use v069 tradeRequestReceived (v1 /offer/:id/matches
+        // doesn't cover v069 trade requests, and the v1 summary sometimes reports
+        // hasMatchesAvailable for sell offers whose requests are actually on v069).
+        const useV069 =
+          forceMatches ||
+          trade.tradeStatus === "acceptTradeRequest" ||
+          trade.direction === "sell";
+        if (useV069) {
+          const v069Base = auth.baseUrl.replace(/\/v1$/, "/v069");
+          const offerType =
+            trade.direction === "buy" ? "buyOffer" : "sellOffer";
+          const res = await fetchWithSessionCheck(
+            `${v069Base}/${offerType}/${trade.id}/tradeRequestReceived/`,
+            {
+              headers: { Authorization: `Bearer ${auth.token}` },
+            },
+          );
+          if (res.ok) {
+            const data = await res.json();
+            const requests = Array.isArray(data)
+              ? data
+              : (data?.tradeRequests ?? []);
+            const userProfiles = await Promise.all(
+              requests.map((tr) =>
+                tr.userId
+                  ? get(`/user/${tr.userId}`)
+                      .then((r) => (r.ok ? r.json() : null))
+                      .catch(() => null)
+                  : Promise.resolve(null),
+              ),
             );
-            if (res.ok) {
-              const data = await res.json();
-              const requests = Array.isArray(data)
-                ? data
-                : (data?.tradeRequests ?? []);
-              const userProfiles = await Promise.all(
-                requests.map((tr) =>
-                  tr.userId
-                    ? get(`/user/${tr.userId}`)
-                        .then((r) => (r.ok ? r.json() : null))
-                        .catch(() => null)
-                    : Promise.resolve(null),
-                ),
-              );
-              transformed = requests.map((tr, i) =>
-                transformTradeRequest(tr, trade, userProfiles[i]),
-              );
-            }
-          } else {
-            // v1: fetch system matches (buy offers only)
-            const res = await get(
-              `/offer/${trade.id}/matches?page=0&size=21&sortBy=bestReputation`,
+            transformed = requests.map((tr, i) =>
+              transformTradeRequest(tr, trade, userProfiles[i]),
             );
-            if (res.ok) {
-              const data = await res.json();
-              transformed = (data.matches ?? []).map(transformMatch);
-            }
           }
-          if (transformed.length > 0) {
-            setLocalMatches((prev) => ({ ...prev, [trade.id]: transformed }));
+        } else {
+          // v1: fetch system matches (buy offers only)
+          const res = await get(
+            `/offer/${trade.id}/matches?page=0&size=21&sortBy=bestReputation`,
+          );
+          if (res.ok) {
+            const data = await res.json();
+            transformed = (data.matches ?? []).map(transformMatch);
           }
-        } catch {}
-        setMatchesLoading(false);
-      }
+        }
+        if (transformed.length > 0) {
+          setLocalMatches((prev) => ({ ...prev, [trade.id]: transformed }));
+        } else {
+          // Cached status was stale — swap to the normal offer-detail popup.
+          setMatchesPopup(null);
+          openOfferDetail(trade);
+          setRefreshKey((k) => k + 1);
+        }
+      } catch {}
+      setMatchesLoading(false);
       return;
     }
     // Never-matched canceled sell offer (contract-shaped in /contracts/summary
@@ -1940,6 +1947,9 @@ export default function TradesDashboard() {
           setLocalMatches((prev) => ({ ...prev, [trade.id]: previousMatches }));
           setMatchesPopup(trade);
           setMatchError("Could not decline this request. Please try again.");
+        } else {
+          // Refresh so the offer's tradeStatus updates.
+          setRefreshKey((k) => k + 1);
         }
       } catch {
         setLocalMatches((prev) => ({ ...prev, [trade.id]: previousMatches }));
@@ -1980,6 +1990,8 @@ export default function TradesDashboard() {
           setToast("Request rejected");
           setToastTone("error");
           setTimeout(() => { setToast(null); setToastTone("default"); }, 3000);
+          // Refresh so the offer's tradeStatus updates (no more pending requests).
+          setRefreshKey((k) => k + 1);
         }
       } catch {
         setLocalMatches((prev) => ({ ...prev, [trade.id]: previousMatches }));
