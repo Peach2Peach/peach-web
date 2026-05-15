@@ -1639,6 +1639,203 @@ export default function TradeExecution() {
                   </div>
                 )}
 
+                {/* Payment too late — seller POV */}
+                {status === "paymentTooLate" && role === "seller" && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      background: "var(--warning-soft)",
+                      border: "1px solid rgba(154,112,0,.15)",
+                      borderRadius: 8,
+                      padding: "10px 12px",
+                      marginBottom: 12,
+                      fontSize: ".83rem",
+                      color: "var(--warning)",
+                      fontWeight: 600,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    <IconClock />
+                    <span>
+                      The buyer did not pay in time. You can either cancel the trade
+                      without a reputation penalty, or give the buyer some more
+                      time.
+                    </span>
+                  </div>
+                )}
+
+                {/* refundOrReviveRequired — seller POV: republish or refund */}
+                {status === "refundOrReviveRequired" &&
+                  role === "seller" &&
+                  !scenario.revived &&
+                  !scenario.refunded && (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        background: "var(--warning-soft)",
+                        border: "1px solid rgba(154,112,0,.15)",
+                        borderRadius: 8,
+                        padding: "10px 12px",
+                        marginBottom: 12,
+                        fontSize: ".83rem",
+                        color: "var(--warning)",
+                        fontWeight: 600,
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      <span>
+                        The trade was cancelled. You can republish your offer or
+                        request a refund of the escrow.
+                      </span>
+                    </div>
+                  )}
+
+                {/* refundOrReviveRequired — already revived */}
+                {status === "refundOrReviveRequired" && scenario.revived && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      background: "var(--success-bg)",
+                      border: "1px solid rgba(5,168,90,.15)",
+                      borderRadius: 8,
+                      padding: "10px 12px",
+                      marginBottom: 12,
+                      fontSize: ".83rem",
+                      color: "var(--success)",
+                      fontWeight: 600,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    <span>
+                      Offer has been republished
+                      {scenario.newOfferId
+                        ? ` (new offer: ${formatTradeId(scenario.newOfferId, "offer")})`
+                        : ""}
+                      .
+                    </span>
+                  </div>
+                )}
+
+                {/* refundOrReviveRequired — already refunded */}
+                {status === "refundOrReviveRequired" && scenario.refunded && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      background: "var(--black-5)",
+                      border: "1px solid rgba(0,0,0,.08)",
+                      borderRadius: 8,
+                      padding: "10px 12px",
+                      marginBottom: 12,
+                      fontSize: ".83rem",
+                      color: "var(--black-65)",
+                      fontWeight: 600,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    <span>Escrow has been refunded.</span>
+                  </div>
+                )}
+
+                {/* refundTxSignatureRequired — seller must sign the refund tx from mobile */}
+                {status === "refundTxSignatureRequired" && role === "seller" && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      background: "var(--primary-mild)",
+                      border: "1px solid rgba(196,81,4,.15)",
+                      borderRadius: 8,
+                      padding: "10px 12px",
+                      marginBottom: 12,
+                      fontSize: ".83rem",
+                      color: "var(--primary-dark)",
+                      fontWeight: 600,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    <span>
+                      The escrow refund is ready. Sign the refund transaction on your
+                      mobile app to recover the funds.
+                    </span>
+                  </div>
+                )}
+
+                {/* Trade cancelled — final state */}
+                {(status === "tradeCanceled" || status === "confirmCancelation") && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      background: "var(--error-bg)",
+                      border: "1px solid rgba(223,50,31,.2)",
+                      borderRadius: 8,
+                      padding: "12px 14px",
+                      marginBottom: 12,
+                      fontSize: ".83rem",
+                      color: "var(--error)",
+                      fontWeight: 600,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    <IconAlert />
+                    <span>
+                      {(() => {
+                        // Seller republished this trade — show republish copy first.
+                        if (scenario.revived && role === "seller") {
+                          return "You have decided to re-publish this trade. You can find the new offer below";
+                        }
+                        // Buyer-payment-timeout detection: prefer the live-polling
+                        // signal, fall back to derived check for the case where the
+                        // user navigates straight to a contract that already
+                        // transitioned past `paymentTooLate`.
+                        const wasBuyerPaymentTimeout =
+                          scenario.paymentTimedOut ||
+                          (!!scenario.canceled &&
+                            !scenario.paymentMade &&
+                            scenario.contract?.paymentExpectedBy != null &&
+                            scenario.contract.paymentExpectedBy < Date.now() &&
+                            !scenario.escrowFundingTimeLimitExpired);
+                        if (wasBuyerPaymentTimeout) {
+                          return role === "buyer"
+                            ? "This trade has been cancelled. Your reputation has been affected."
+                            : "You have decided to refund this trade to your refund wallet";
+                        }
+                        if (scenario.escrowFundingTimeLimitExpired) {
+                          return role === "seller"
+                            ? "This trade has been cancelled because you have not funded the escrow on time. Your reputation has been affected."
+                            : "This trade has been cancelled because the seller did not fund the escrow on time. The seller's reputation has been affected.";
+                        }
+                        // Mediator auto-cancel due to escrow funding timeout — the seller is
+                        // the responsible party (mediator itself has no reputation).
+                        const responsibleParty =
+                          scenario.canceledBy === "mediator" &&
+                          scenario.escrowFundingTimeLimitExpired
+                            ? "seller"
+                            : scenario.canceledBy;
+                        if (
+                          responsibleParty === "buyer" ||
+                          responsibleParty === "seller"
+                        ) {
+                          return responsibleParty === role
+                            ? "This trade has been cancelled. Your reputation has been affected."
+                            : `This trade has been cancelled. The ${responsibleParty}'s reputation has been affected.`;
+                        }
+                        return "This trade has been cancelled.";
+                      })()}
+                    </span>
+                  </div>
+                )}
+
                 {/* Payout pending — buyer: sats arriving */}
                 {status === "payoutPending" && role === "buyer" && (
                   <SuccessBanner
