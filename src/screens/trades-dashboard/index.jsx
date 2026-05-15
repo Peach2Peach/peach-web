@@ -14,6 +14,7 @@ import { IS_PHONE, buildMobileActionDeepLink } from "../../utils/mobileAction.js
 import MobileSigningModal from "../../components/MobileSigningModal.jsx";
 import Toast from "../../components/Toast.jsx";
 import { useUnread } from "../../hooks/useUnread.js";
+import txInMempoolImg from "../../assets/tx-in-mempool.png";
 import {
   isApiError,
   generateSymmetricKey,
@@ -2796,18 +2797,104 @@ export default function TradesDashboard() {
                       Escrow address
                     </div>
                     {odEscrowAddress ? (
+                      fundingStage === "mempool" ? (
+                        <div style={{ paddingTop: 4 }}>
+                          <div
+                            style={{
+                              fontSize: ".82rem",
+                              color: "var(--black-65)",
+                              lineHeight: 1.55,
+                              fontWeight: 500,
+                              marginBottom: 14,
+                            }}
+                          >
+                            Your bitcoin transaction is pending... You can go do something else, we'll automatically publish your offer as soon as it's confirmed!
+                          </div>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "center",
+                              margin: "8px 0 14px",
+                            }}
+                          >
+                            <img
+                              src={txInMempoolImg}
+                              alt="Transaction pending in mempool"
+                              style={{
+                                maxWidth: "70%",
+                                height: "auto",
+                                display: "block",
+                              }}
+                            />
+                          </div>
+                          <div style={{ textAlign: "center", marginBottom: 12 }}>
+                            <a
+                              href={`https://mempool.space/address/${odEscrowAddress}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                fontSize: ".78rem",
+                                fontWeight: 700,
+                                color: "var(--primary)",
+                                textDecoration: "underline",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 6,
+                              }}
+                            >
+                              show in explorer
+                              <svg
+                                width="11"
+                                height="11"
+                                viewBox="0 0 11 11"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.7"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <path d="M2 9L9 2M9 2H5M9 2v4" />
+                              </svg>
+                            </a>
+                          </div>
+                          <div
+                            onClick={() => {
+                              navigator.clipboard
+                                .writeText(odEscrowAddress)
+                                .catch(() => {});
+                              setOdCopiedAddr(true);
+                              setTimeout(() => setOdCopiedAddr(false), 2000);
+                            }}
+                            style={{
+                              fontFamily: "monospace",
+                              fontSize: ".78rem",
+                              background: "var(--black-5)",
+                              border: "1px solid var(--black-10)",
+                              borderRadius: 8,
+                              padding: "10px 12px",
+                              wordBreak: "break-all",
+                              cursor: "pointer",
+                            }}
+                          >
+                            {odEscrowAddress}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: ".7rem",
+                              fontWeight: 700,
+                              color: "var(--success)",
+                              minHeight: 16,
+                              marginTop: 4,
+                            }}
+                          >
+                            {odCopiedAddr
+                              ? "✓ Copied to clipboard"
+                              : "Click to copy"}
+                          </div>
+                        </div>
+                      ) : (
                       <div style={{ position: "relative" }}>
-                        <div
-                          style={
-                            fundingStage === "mempool"
-                              ? {
-                                  filter: "blur(6px)",
-                                  pointerEvents: "none",
-                                  userSelect: "none",
-                                }
-                              : undefined
-                          }
-                        >
+                        <div>
                         <div
                           onClick={() => {
                             navigator.clipboard
@@ -3131,23 +3218,6 @@ export default function TradesDashboard() {
                           )}
                         </div>
                         </div>
-                        {fundingStage === "mempool" && (
-                          <div
-                            style={{
-                              position: "absolute",
-                              inset: 0,
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              color: "var(--error)",
-                              fontWeight: 800,
-                              fontSize: ".95rem",
-                              pointerEvents: "none",
-                            }}
-                          >
-                            funding in progress
-                          </div>
-                        )}
 
                         {/* Wrong-amount call to action — parity with offer-creation step 2 */}
                         {offerDetails?.funding?.status ===
@@ -3227,6 +3297,7 @@ export default function TradesDashboard() {
                           </div>
                         )}
                       </div>
+                      )
                     ) : (
                       <div
                         style={{
