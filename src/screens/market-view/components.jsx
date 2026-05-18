@@ -8,6 +8,7 @@ import { SatsAmount } from "../../components/BitcoinAmount.jsx";
 import PeachRating from "../../components/PeachRating.jsx";
 import Avatar from "../../components/Avatar.jsx";
 import { fmtPct, fmtFiat, toPeaches } from "../../utils/format.js";
+import { BadgesInfoPopup } from "../../components/InfoPopup.jsx";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -152,6 +153,10 @@ export function Chips({ items, className }) {
 // ── RepCell ───────────────────────────────────────────────────────────────────
 
 export function RepCell({ offer }) {
+  const [helpOpen, setHelpOpen] = useState(false);
+  const onBadgeClick = (e) => { e.stopPropagation(); setHelpOpen(true); };
+  const badgeStyle = { cursor:"pointer" };
+
   if (offer.isOwn) {
     return (
       <div className="rep-cell rep-cell-own">
@@ -159,10 +164,11 @@ export function RepCell({ offer }) {
         <span className="my-offer-badge">My offer</span>
         {offer.badges.length > 0 && (
           <div className="badges-row">
-            {offer.badges.includes("supertrader") && <span className="badge badge-super">🏆 Super</span>}
-            {offer.badges.includes("fast")        && <span className="badge badge-fast">⚡ Fast</span>}
+            {offer.badges.includes("supertrader") && <span className="badge badge-super" style={badgeStyle} onClick={onBadgeClick}>🏆 Super</span>}
+            {offer.badges.includes("fast")        && <span className="badge badge-fast"  style={badgeStyle} onClick={onBadgeClick}>⚡ Fast</span>}
           </div>
         )}
+        {helpOpen && <BadgesInfoPopup onClose={() => setHelpOpen(false)} />}
       </div>
     );
   }
@@ -178,12 +184,13 @@ export function RepCell({ offer }) {
           </div>
           {offer.badges.length > 0 && (
             <div className="badges-row">
-              {offer.badges.includes("supertrader") && <span className="badge badge-super">🏆 Super</span>}
-              {offer.badges.includes("fast")        && <span className="badge badge-fast">⚡ Fast</span>}
+              {offer.badges.includes("supertrader") && <span className="badge badge-super" style={badgeStyle} onClick={onBadgeClick}>🏆 Super</span>}
+              {offer.badges.includes("fast")        && <span className="badge badge-fast"  style={badgeStyle} onClick={onBadgeClick}>⚡ Fast</span>}
             </div>
           )}
         </div>
       </div>
+      {helpOpen && <BadgesInfoPopup onClose={() => setHelpOpen(false)} />}
     </div>
   );
 }

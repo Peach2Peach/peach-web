@@ -271,6 +271,21 @@ export function useQRAuth({ baseUrl, auto = true }) {
 
         if (!mountedRef.current) return "aborted";
 
+        // Fetch the user's blocked-users list so all profile surfaces can
+        // show the count without each refetching on mount. Failure is silent.
+        let initialBlockedUsers = { count: 0, list: [] };
+        try {
+          const blockedRes = await fetch(`${baseUrl}/v069/selfUser/blockedUsers`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            signal: ac.signal,
+          });
+          if (blockedRes.ok) {
+            const blockedData = await blockedRes.json();
+            const list = Array.isArray(blockedData?.users) ? blockedData.users : [];
+            initialBlockedUsers = { count: list.length, list };
+          }
+        } catch {}
+
         // Set global auth
         window.__PEACH_AUTH__ = {
           token: accessToken,
@@ -280,6 +295,7 @@ export function useQRAuth({ baseUrl, auto = true }) {
           peachId: userProfile.id || userProfile.publicKey || null,
           baseUrl: baseUrl + "/v1",
           profile: userProfile,
+          blockedUsers: initialBlockedUsers,
           loginTime: Date.now(),
         };
 

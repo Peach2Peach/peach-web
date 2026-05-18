@@ -11,6 +11,7 @@ import { BTC_PRICE_FALLBACK as BTC_PRICE, satsToFiatRaw, relTime as relativeTime
 import { STATUS_CONFIG } from "../../data/statusConfig.js";
 import Avatar from "../../components/Avatar.jsx";
 import StatusChip from "../../components/StatusChip.jsx";
+import { BadgesInfoPopup } from "../../components/InfoPopup.jsx";
 export { default as PeachRating } from "../../components/PeachRating.jsx";
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
@@ -131,16 +132,26 @@ const BUYER_LABEL = {
 
 
 // ─── BADGE — sober outlined style ─────────────────────────────────────────────
+// Clickable: opens shared BadgesInfoPopup. stopPropagation so parent rows
+// (which often have their own onClick) don't fire underneath.
 export function Badge({ label, icon }) {
+  const [helpOpen, setHelpOpen] = useState(false);
   return (
-    <span style={{
-      display:"inline-flex", alignItems:"center", gap:5,
-      border:"1.5px solid var(--primary)", borderRadius:999,
-      padding:"1px 8px", fontSize:".65rem", fontWeight:700,
-      color:"var(--primary)", background:"transparent", whiteSpace:"nowrap",
-    }}>
-      {label} {icon && <span style={{ fontSize:".7rem" }}>{icon}</span>}
-    </span>
+    <>
+      <span
+        onClick={(e) => { e.stopPropagation(); setHelpOpen(true); }}
+        style={{
+          display:"inline-flex", alignItems:"center", gap:5,
+          border:"1.5px solid var(--primary)", borderRadius:999,
+          padding:"1px 8px", fontSize:".65rem", fontWeight:700,
+          color:"var(--primary)", background:"transparent", whiteSpace:"nowrap",
+          cursor:"pointer",
+        }}
+      >
+        {label} {icon && <span style={{ fontSize:".7rem" }}>{icon}</span>}
+      </span>
+      {helpOpen && <BadgesInfoPopup onClose={() => setHelpOpen(false)} />}
+    </>
   );
 }
 

@@ -31,6 +31,7 @@ import Avatar from "../../components/Avatar.jsx";
 import StatusChip from "../../components/StatusChip.jsx";
 import PeachRating from "../../components/PeachRating.jsx";
 import RepeatTraderBadge from "../../components/RepeatTraderBadge.jsx";
+import { BadgesInfoPopup } from "../../components/InfoPopup.jsx";
 import {
   IconBack,
   IconAlert,
@@ -442,6 +443,7 @@ export default function TradeExecution() {
   }, [auth, routeId]);
 
   const [mobileTab, setMobileTab] = useState("details"); // "details" | "chat"
+  const [badgesHelpOpen, setBadgesHelpOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== "undefined" &&
     window.matchMedia("(max-width:900px)").matches,
@@ -1419,10 +1421,10 @@ export default function TradeExecution() {
         }}
       >
         {counterparty.badges?.includes("supertrader") && (
-          <span className="badge-supertrader">🏆 Supertrader</span>
+          <span className="badge-supertrader" style={{cursor:"pointer"}} onClick={() => setBadgesHelpOpen(true)}>🏆 Supertrader</span>
         )}
         {counterparty.badges?.includes("fast") && (
-          <span className="badge-fast">⚡ Fast</span>
+          <span className="badge-fast" style={{cursor:"pointer"}} onClick={() => setBadgesHelpOpen(true)}>⚡ Fast</span>
         )}
         <RepeatTraderBadge userId={counterparty.id} />
       </div>
@@ -3394,6 +3396,8 @@ export default function TradeExecution() {
 
       {/* ── TOAST ── */}
       <Toast message={toast} tone={toastTone} bottom={80} />
+
+      {badgesHelpOpen && <BadgesInfoPopup onClose={() => setBadgesHelpOpen(false)} />}
     </>
   );
 }

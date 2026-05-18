@@ -7,6 +7,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { formatPeachId, PeachIcon } from "../../components/Navbars.jsx";
 import { useApi } from "../../hooks/useApi.js";
+import { useAuth, refreshBlockedUsers } from "../../hooks/useAuth.js";
 import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 import {
   syncCustomRefundAddressToServer,
@@ -27,7 +28,7 @@ import {
 import PeachRating from "../../components/PeachRating.jsx";
 import Avatar from "../../components/Avatar.jsx";
 import { toPeaches, getSigningPeachId } from "../../utils/format.js";
-import InfoPopup, { InfoDot } from "../../components/InfoPopup.jsx";
+import InfoPopup, { InfoDot, BadgesInfoPopup, TradingLimitsInfoPopup } from "../../components/InfoPopup.jsx";
 
 // ── ProfileSubScreen ─────────────────────────────────────────────────────────
 
@@ -49,6 +50,10 @@ const PROFILE_CSS = `
   .mp-card{background:var(--surface);border:1px solid var(--black-10);border-radius:16px;padding:18px 20px}
   .mp-card-title{font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em;
     color:var(--primary);margin-bottom:12px}
+  .mp-card-clickable{cursor:pointer;transition:background .15s ease}
+  .mp-card-clickable:hover{background:var(--black-5)}
+  .mp-card-row{display:flex;align-items:center;justify-content:space-between;gap:16px}
+  .mp-card-row .mp-card-title{margin-bottom:6px}
 
   .mp-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
   .mp-stats.is-3{grid-template-columns:repeat(3,1fr)}
@@ -75,7 +80,9 @@ const PROFILE_CSS = `
 `;
 
 export function ProfileSubScreen({ onBack }) {
+  const navigate = useNavigate();
   const { get, auth, isLoggedIn } = useApi();
+  const { blockedUsers } = useAuth();
   const liveProfile = auth?.profile ?? null;
 
   const peachId = auth?.peachId ? formatPeachId(auth.peachId) : "—";
@@ -107,6 +114,10 @@ export function ProfileSubScreen({ onBack }) {
   const memberSince = creationDate
     ? creationDate.toLocaleDateString("en-US", { month: "long", year: "numeric" })
     : "—";
+
+  // ── Help popups ──
+  const [badgesHelpOpen, setBadgesHelpOpen] = useState(false);
+  const [limitsHelpOpen, setLimitsHelpOpen] = useState(false);
 
   // ── Trading limits (fetch from API) ──
   const [liveLimit, setLiveLimit] = useState(null);
@@ -142,7 +153,16 @@ export function ProfileSubScreen({ onBack }) {
             </div>
             <div className="mp-since">Member since {memberSince}</div>
             <div className="mp-badges">
-              {badges.map(b => <span key={b} className="mp-badge">{b}</span>)}
+              {badges.map(b => (
+                <span
+                  key={b}
+                  className="mp-badge"
+                  style={{ cursor:"pointer" }}
+                  onClick={() => setBadgesHelpOpen(true)}
+                >
+                  {b}
+                </span>
+              ))}
             </div>
           </div>
         </div>
@@ -191,8 +211,27 @@ export function ProfileSubScreen({ onBack }) {
           </div>
         </div>
 
+        {/* Blocked Users — deep-links to the Block Users sub-screen */}
+        {isLoggedIn && (
+          <div
+            className="mp-card mp-card-clickable"
+            onClick={() => navigate("/settings", { state: { openSection: "block-users" } })}
+          >
+            <div className="mp-card-row">
+              <div>
+                <div className="mp-card-title">Blocked Users</div>
+                <div className="mp-stat-val">{blockedUsers?.count ?? 0}</div>
+              </div>
+              <span style={{ color: "var(--primary)", fontSize: "1.4rem", fontWeight: 700 }}>→</span>
+            </div>
+          </div>
+        )}
+
         {/* Trading Limits */}
-        <div className="mp-card">
+        <div className="mp-card" style={{ position:"relative" }}>
+          <div style={{ position:"absolute", top:14, right:14 }}>
+            <InfoDot ariaLabel="About trading limits" onClick={() => setLimitsHelpOpen(true)} />
+          </div>
           <div className="mp-card-title">Trading Limits</div>
           <div className="mp-limits">
             {volumes.map(v => {
@@ -244,6 +283,8 @@ export function ProfileSubScreen({ onBack }) {
         </div>
 
       </div>
+      {badgesHelpOpen && <BadgesInfoPopup onClose={() => setBadgesHelpOpen(false)} />}
+      {limitsHelpOpen && <TradingLimitsInfoPopup onClose={() => setLimitsHelpOpen(false)} />}
     </SubScreenWrapper>
   );
 }
@@ -1069,6 +1110,7 @@ export function BlockUsersSubScreen({ onBack }) {
         return;
       }
       fetchBlockedUsers();
+      refreshBlockedUsers();
     } catch {
       setListError("Network error — check your connection");
     }
@@ -1097,6 +1139,7 @@ export function BlockUsersSubScreen({ onBack }) {
       setInputId("");
       setBlocking(false);
       fetchBlockedUsers();
+      refreshBlockedUsers();
     } catch {
       setError("Network error — check your connection");
       setBlocking(false);

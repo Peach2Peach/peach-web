@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { formatPeachId } from "../../components/Navbars.jsx";
 import { SatsAmount } from "../../components/BitcoinAmount.jsx";
-import { useAuth } from "../../hooks/useAuth.js";
+import { useAuth, refreshBlockedUsers } from "../../hooks/useAuth.js";
 import { useApi } from "../../hooks/useApi.js";
 import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 import PeachRating from "../../components/PeachRating.jsx";
@@ -10,6 +10,7 @@ import Avatar from "../../components/Avatar.jsx";
 import RepeatTraderBadge from "../../components/RepeatTraderBadge.jsx";
 import { fmtFiat, formatTradeId, toPeaches } from "../../utils/format.js";
 import { methodDisplayName } from "../../data/paymentMethodMeta.js";
+import { BadgesInfoPopup } from "../../components/InfoPopup.jsx";
 
 const CSS = `
   .page-wrap{display:flex;flex-direction:column;flex:1;margin-top:var(--topbar);margin-left:68px}
@@ -26,6 +27,7 @@ const CSS = `
   .ou-badges:empty{display:none}
   .ou-badge{font-size:.7rem;font-weight:700;color:var(--primary);border:1.5px solid var(--primary);
     border-radius:999px;padding:2px 10px}
+  .ou-badge-blocked{color:var(--error);border-color:var(--error);background:rgba(239,68,68,0.08)}
   .ou-disabled{background:var(--error-bg);color:var(--error);border:1.5px solid var(--error);
     border-radius:10px;padding:10px 14px;font-size:.82rem;font-weight:700}
 
@@ -159,6 +161,7 @@ export default function OtherUserPage() {
   const [offersError, setOffersError] = useState(null);
 
   const [isBlocked, setIsBlocked] = useState(false);
+  const [badgesHelpOpen, setBadgesHelpOpen] = useState(false);
   const [blockSubmitting, setBlockSubmitting] = useState(false);
   const [blockError, setBlockError] = useState(null);
 
@@ -268,6 +271,7 @@ export default function OtherUserPage() {
         return;
       }
       setIsBlocked(!isBlocked);
+      refreshBlockedUsers();
     } catch {
       setBlockError("Network error — check your connection");
     } finally {
@@ -312,8 +316,20 @@ export default function OtherUserPage() {
                     </div>
                     <div className="ou-since">Member since {creationDate ? creationDate.toLocaleDateString("en-US",{month:"long",year:"numeric"}) : "—"}</div>
                     <div className="ou-badges">
-                      {badges.map(b => <span key={b} className="ou-badge">{b}</span>)}
+                      {badges.map(b => (
+                        <span
+                          key={b}
+                          className="ou-badge"
+                          style={{ cursor:"pointer" }}
+                          onClick={() => setBadgesHelpOpen(true)}
+                        >
+                          {b}
+                        </span>
+                      ))}
                       <RepeatTraderBadge userId={userId} />
+                      {isLoggedIn && !isSelf && isBlocked && (
+                        <span className="ou-badge ou-badge-blocked">You blocked this user</span>
+                      )}
                     </div>
                   </div>
                   {isLoggedIn && !isSelf && (
@@ -433,6 +449,7 @@ export default function OtherUserPage() {
 
           </div>
         </div>
+        {badgesHelpOpen && <BadgesInfoPopup onClose={() => setBadgesHelpOpen(false)} />}
     </>
   );
 }

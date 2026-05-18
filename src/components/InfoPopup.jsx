@@ -39,6 +39,15 @@ const INFO_CSS = `
     transition:background .12s,color .12s}
   .ip-dot:hover{background:${INFO_BLUE};color:#fff}
   .ip-dot:focus-visible{outline:2px solid ${INFO_BLUE};outline-offset:2px}
+
+  .ip-badge-row{display:flex;align-items:flex-start;gap:10px;margin-top:14px}
+  .ip-badge-row:first-of-type{margin-top:0}
+  .ip-badge-ico{flex-shrink:0;width:22px;height:22px;border-radius:50%;
+    background:${INFO_BLUE};color:#fff;display:inline-flex;align-items:center;
+    justify-content:center;font-size:.8rem;font-weight:800;line-height:1}
+  .ip-badge-body{flex:1;min-width:0}
+  .ip-badge-name{font-weight:800;color:var(--text);font-size:.92rem;line-height:1.2}
+  .ip-badge-desc{font-size:.85rem;line-height:1.5;color:var(--black-65);margin-top:4px}
 `;
 
 export function InfoDot({ onClick, ariaLabel }) {
@@ -57,6 +66,58 @@ export function InfoDot({ onClick, ariaLabel }) {
         ?
       </button>
     </>
+  );
+}
+
+// ── Pre-canned: Peach badges explainer ──
+// Single source of truth for the four badge descriptions. Mounted by every
+// clickable badge across the app; copy is verbatim from the mobile help popup.
+export function BadgesInfoPopup({ onClose }) {
+  return (
+    <InfoPopup title="Peach badges" onClose={onClose}>
+      <div className="ip-badge-row">
+        <span className="ip-badge-ico" aria-hidden="true">★</span>
+        <div className="ip-badge-body">
+          <div className="ip-badge-name">supertrader</div>
+          <div className="ip-badge-desc">A supertrader is a very active Peach user. They have done at least 20 trades.</div>
+        </div>
+      </div>
+      <div className="ip-badge-row">
+        <span className="ip-badge-ico" aria-hidden="true">⚡</span>
+        <div className="ip-badge-body">
+          <div className="ip-badge-name">fast trader</div>
+          <div className="ip-badge-desc">A fast trader is as quick as the lightning network. They accept matches and make or confirm payments almost instantly.</div>
+        </div>
+      </div>
+      <div className="ip-badge-row">
+        <span className="ip-badge-ico" aria-hidden="true">🏅</span>
+        <div className="ip-badge-body">
+          <div className="ip-badge-name">early adopter</div>
+          <div className="ip-badge-desc">These fine people have been with us from the very beginning!</div>
+        </div>
+      </div>
+      <div className="ip-badge-row">
+        <span className="ip-badge-ico" aria-hidden="true">🔁</span>
+        <div className="ip-badge-body">
+          <div className="ip-badge-name">repeat trader</div>
+          <div className="ip-badge-desc">The number of times you have traded with this user in the past.</div>
+        </div>
+      </div>
+    </InfoPopup>
+  );
+}
+
+// ── Pre-canned: Trading limits explainer ──
+export function TradingLimitsInfoPopup({ onClose }) {
+  return (
+    <InfoPopup title="trading limits" onClose={onClose}>
+      <p className="ip-text">Peach enforces trading limits to comply with Swiss law:</p>
+      <p className="ip-text">
+        Daily: up to 1,000 CHF in bitcoin<br/>
+        Monthly (anonymous methods: cash or online gift cards): up to 1,000 CHF<br/>
+        Yearly: up to 100,000 CHF in bitcoin
+      </p>
+    </InfoPopup>
   );
 }
 

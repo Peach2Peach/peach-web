@@ -14,6 +14,7 @@ import { RefreshIndicator } from "../components/RefreshIndicator.jsx";
 import { AttentionStrip, AttentionPill } from "../components/AttentionIndicators.jsx";
 import { API_V1 } from "../utils/network.js";
 import { useCurrency } from "../components/AppLayout.jsx";
+import { BadgesInfoPopup } from "../components/InfoPopup.jsx";
 
 const ATTENTION_DISMISS_KEY = "peach.attention.dismissed";
 
@@ -132,6 +133,11 @@ const css = `
   .profile-stat{background:var(--black-5);border-radius:10px;padding:10px;text-align:center}
   .profile-stat-val{font-size:1.2rem;font-weight:800;color:var(--black);line-height:1}
   .profile-stat-lbl{font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--black-65);margin-top:3px}
+  .profile-blocked-card{display:flex;align-items:center;justify-content:space-between;background:var(--black-5);border-radius:10px;padding:12px 14px;margin-top:8px;cursor:pointer;transition:background .15s ease}
+  .profile-blocked-card:hover{background:var(--black-10)}
+  .profile-blocked-lbl{font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--black-65)}
+  .profile-blocked-val{font-size:1.2rem;font-weight:800;color:var(--black);line-height:1;margin-top:3px}
+  .profile-blocked-arrow{color:var(--primary);font-size:1.2rem;font-weight:700}
   .profile-row{display:flex;flex-direction:column;gap:5px}
   .profile-row-label{font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--black-25)}
   .profile-badges{display:flex;gap:5px;flex-wrap:wrap}
@@ -311,7 +317,7 @@ export default function PeachHome() {
   // AppLayout owns Topbar/SideNav state (avatar menu, mobile drawer, currency).
   // Home only needs auth/isLoggedIn for profile + attention-strip, and
   // handleLogin for the logged-out CTA buttons.
-  const { auth, isLoggedIn, handleLogin } = useAuth();
+  const { auth, isLoggedIn, handleLogin, blockedUsers } = useAuth();
   const { get } = useApi();
   const { allPrices } = useCurrency();
   const liveProfile = auth?.profile ?? null;
@@ -335,11 +341,10 @@ export default function PeachHome() {
     preferredCurrencies: liveProfile?.preferredCurrencies ?? [],
     totalVolumeBtc:      liveProfile?.totalVolumeBtc ?? 0,
     lastTradeDaysAgo:    liveProfile?.lastTradeDaysAgo ?? null,
-    blockedByCount:      liveProfile?.blockedByCount ?? 0,
   } : {
     peachId: "—", memberSince: "—", trades: 0, disputesTotal: 0,
     rating: 0, badges: [], preferredMethods: [], preferredCurrencies: [],
-    totalVolumeBtc: 0, lastTradeDaysAgo: null, blockedByCount: 0,
+    totalVolumeBtc: 0, lastTradeDaysAgo: null,
   };
 
   useEffect(() => {
@@ -421,6 +426,7 @@ export default function PeachHome() {
     try { return sessionStorage.getItem(ATTENTION_DISMISS_KEY) === "1"; } catch { return false; }
   });
   const [welcomeOutOfView, setWelcomeOutOfView] = useState(false);
+  const [badgesHelpOpen, setBadgesHelpOpen] = useState(false);
   const sentinelRef = useRef(null);
 
   useEffect(() => {
@@ -683,15 +689,15 @@ export default function PeachHome() {
                   <div className="profile-row">
                     <span className="profile-row-label">Badges</span>
                     <div className="profile-badges">
-                      {user.badges.includes("superTrader") && <span className="badge badge-super">🏆 Supertrader</span>}
-                      {user.badges.includes("fastTrader") && <span className="badge badge-fast">⚡ Fast Trader</span>}
-                      {user.badges.includes("ambassador") && <span className="badge badge-fast">🎖️ Ambassador</span>}
+                      {user.badges.includes("superTrader") && <span className="badge badge-super" style={{cursor:"pointer"}} onClick={() => setBadgesHelpOpen(true)}>🏆 Supertrader</span>}
+                      {user.badges.includes("fastTrader") && <span className="badge badge-fast" style={{cursor:"pointer"}} onClick={() => setBadgesHelpOpen(true)}>⚡ Fast Trader</span>}
+                      {user.badges.includes("ambassador") && <span className="badge badge-fast" style={{cursor:"pointer"}} onClick={() => setBadgesHelpOpen(true)}>🎖️ Ambassador</span>}
                       {user.badges.length === 0 && <span style={{fontSize:".78rem",color:"var(--black-65)"}}>No badges yet</span>}
                     </div>
                   </div>
 
-                  {/* Row 1: Rating · Disputes · Blocked by */}
-                  <div className="profile-stats">
+                  {/* Row 1: Rating · Disputes */}
+                  <div className="profile-stats" style={{gridTemplateColumns:"repeat(2,1fr)"}}>
                     <div className="profile-stat">
                       <div className="profile-stat-val"><PeachRating rep={user.rating} size={14} trades={user.trades}/></div>
                       <div className="profile-stat-lbl">Rating</div>
@@ -701,12 +707,6 @@ export default function PeachHome() {
                         {user.disputesTotal}
                       </div>
                       <div className="profile-stat-lbl">Disputes</div>
-                    </div>
-                    <div className="profile-stat">
-                      <div className="profile-stat-val" style={{color: user.blockedByCount > 0 ? "var(--error)" : "var(--black-65)"}}>
-                        {user.blockedByCount}
-                      </div>
-                      <div className="profile-stat-lbl">Blocked by</div>
                     </div>
                   </div>
 
@@ -724,6 +724,18 @@ export default function PeachHome() {
                       <div className="profile-stat-val">{lastTradeDate ? relTime(lastTradeDate) : "—"}</div>
                       <div className="profile-stat-lbl">Last Trade</div>
                     </div>
+                  </div>
+
+                  {/* Blocked Users card — deep-links to Settings → Block Users */}
+                  <div
+                    className="profile-blocked-card"
+                    onClick={() => navigate("/settings", { state: { openSection: "block-users" } })}
+                  >
+                    <div>
+                      <div className="profile-blocked-lbl">Blocked Users</div>
+                      <div className="profile-blocked-val">{blockedUsers?.count ?? 0}</div>
+                    </div>
+                    <span className="profile-blocked-arrow">→</span>
                   </div>
                 </div>
               ) : (
@@ -911,6 +923,7 @@ export default function PeachHome() {
           </div>
         </div>
       )}
+      {badgesHelpOpen && <BadgesInfoPopup onClose={() => setBadgesHelpOpen(false)} />}
     </>
   );
 }

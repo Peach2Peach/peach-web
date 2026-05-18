@@ -15,7 +15,7 @@ import {
   BTC_PRICE_FALLBACK,
 } from "../../utils/format.js";
 import { IS_PHONE, buildMobileActionDeepLink } from "../../utils/mobileAction.js";
-import { InfoDot } from "../../components/InfoPopup.jsx";
+import { InfoDot, BadgesInfoPopup } from "../../components/InfoPopup.jsx";
 import { getTopbarPeachId } from "../../components/Navbars.jsx";
 import Avatar from "../../components/Avatar.jsx";
 import PeachRating from "../../components/PeachRating.jsx";
@@ -94,6 +94,7 @@ export function LivePreview({
   const premCls = p === 0 ? "prem-zero" : isSell ? (p > 0 ? "prem-good" : "prem-bad") : (p < 0 ? "prem-good" : "prem-bad");
 
   const showOfferBadges = form.instantMatch || form.experienceLevel;
+  const [badgesHelpOpen, setBadgesHelpOpen] = useState(false);
 
   return (
     <div>
@@ -120,8 +121,8 @@ export function LivePreview({
             <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
               <PeachRating rep={userRep} size={14} trades={userTrades} />
               {userTrades > 0 && <span className="rep-trades">({userTrades})</span>}
-              {userBadges.includes("supertrader") && <span className="badge badge-super">🏆</span>}
-              {userBadges.includes("fast") && <span className="badge badge-fast">⚡</span>}
+              {userBadges.includes("supertrader") && <span className="badge badge-super" style={{cursor:"pointer"}} onClick={() => setBadgesHelpOpen(true)}>🏆</span>}
+              {userBadges.includes("fast") && <span className="badge badge-fast" style={{cursor:"pointer"}} onClick={() => setBadgesHelpOpen(true)}>⚡</span>}
             </div>
             {showOfferBadges && (
               <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
@@ -163,6 +164,7 @@ export function LivePreview({
           )}
         </div>
       )}
+      {badgesHelpOpen && <BadgesInfoPopup onClose={() => setBadgesHelpOpen(false)} />}
     </div>
   );
 }

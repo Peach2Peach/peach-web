@@ -53,6 +53,7 @@ import MatchesPopup, {
 import { normalizeOffer, normalizeContract, hasInstantTradeEnabled } from "../../utils/tradesNormalize.js";
 import RequestedOfferPopup from "../../components/RequestedOfferPopup.jsx";
 import { RefreshIndicator } from "../../components/RefreshIndicator.jsx";
+import { InfoDot, TradingLimitsInfoPopup } from "../../components/InfoPopup.jsx";
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const CSS = `
@@ -1175,6 +1176,7 @@ export default function TradesDashboard() {
   const ANON_USED = liveLimit?.monthlyAnonymousAmount ?? 0;
   const ANNUAL_TOTAL = liveLimit?.yearly ?? 100000;
   const ANNUAL_USED = liveLimit?.yearlyAmount ?? 0;
+  const [limitsHelpOpen, setLimitsHelpOpen] = useState(false);
   const limitPct = LIMIT_TOTAL
     ? Math.min(100, (LIMIT_USED / LIMIT_TOTAL) * 100)
     : 0;
@@ -2076,8 +2078,12 @@ export default function TradesDashboard() {
               minWidth: 260,
               maxWidth: 380,
               width: "100%",
+              position: "relative",
             }}
           >
+            <div style={{ position:"absolute", top:0, right:0 }}>
+              <InfoDot ariaLabel="About trading limits" onClick={() => setLimitsHelpOpen(true)} />
+            </div>
             {/* Daily */}
             <div className="limit-bar-top">
               <span className="limit-bar-label">Daily Limit</span>
@@ -4038,6 +4044,8 @@ export default function TradesDashboard() {
 
       {/* ── TOAST ── */}
       <Toast message={toast} tone={toastTone} />
+
+      {limitsHelpOpen && <TradingLimitsInfoPopup onClose={() => setLimitsHelpOpen(false)} />}
     </>
   );
 }

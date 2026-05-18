@@ -18,6 +18,7 @@ import RequestedOfferPopup from "../../components/RequestedOfferPopup.jsx";
 import Toast from "../../components/Toast.jsx";
 import { RefreshIndicator } from "../../components/RefreshIndicator.jsx";
 import { LoadingSpinner } from "../../components/LoadingSpinner.jsx";
+import { BadgesInfoPopup } from "../../components/InfoPopup.jsx";
 import { CSS } from "./styles.js";
 import { premiumStats, premiumCls, currSym, MultiSelect, Chips, RepCell, AmountCell, PriceCell, OfferIdCopy } from "./components.jsx";
 import { CATEGORY_META } from "../../components/AddPMFlow.jsx";
@@ -103,6 +104,7 @@ export default function PeachMarket() {
 
   // ── Popup state ──
   const [popupOffer,     setPopupOffer]     = useState(null);   // offer object or null
+  const [badgesHelpOpen, setBadgesHelpOpen] = useState(false);
   const [selectedPM,     setSelectedPM]     = useState(null);   // PM id for trade popup
   const [popupCurrency,  setPopupCurrency]  = useState(null);   // currency for trade popup
   const [requestAnim,    setRequestAnim]    = useState(false);  // "Trade requested" animation
@@ -1335,9 +1337,9 @@ export default function PeachMarket() {
                 </div>
               </div>
               <div className="popup-user-badges">
-                {offer.badges.includes("supertrader") && <span className="badge badge-super">🏆 Super</span>}
-                {offer.badges.includes("fast") && <span className="badge badge-fast">⚡ Fast</span>}
-                {offer.badges.includes("ambassador") && <span className="badge badge-ambassador">⭐ Early adopter</span>}
+                {offer.badges.includes("supertrader") && <span className="badge badge-super" style={{cursor:"pointer"}} onClick={(e) => { e.stopPropagation(); setBadgesHelpOpen(true); }}>🏆 Super</span>}
+                {offer.badges.includes("fast") && <span className="badge badge-fast" style={{cursor:"pointer"}} onClick={(e) => { e.stopPropagation(); setBadgesHelpOpen(true); }}>⚡ Fast</span>}
+                {offer.badges.includes("ambassador") && <span className="badge badge-ambassador" style={{cursor:"pointer"}} onClick={(e) => { e.stopPropagation(); setBadgesHelpOpen(true); }}>⭐ Early adopter</span>}
                 <RepeatTraderBadge userId={offer.userId} />
               </div>
             </div>
@@ -1882,8 +1884,8 @@ export default function PeachMarket() {
                   {offer.isOwn ? (
                     <div style={{flex:1,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                       <span className="my-offer-badge">My offer</span>
-                      {offer.badges.includes("supertrader")&&<span className="badge badge-super">🏆</span>}
-                      {offer.badges.includes("fast")&&<span className="badge badge-fast">⚡</span>}
+                      {offer.badges.includes("supertrader")&&<span className="badge badge-super" style={{cursor:"pointer"}} onClick={(e) => { e.stopPropagation(); setBadgesHelpOpen(true); }}>🏆</span>}
+                      {offer.badges.includes("fast")&&<span className="badge badge-fast" style={{cursor:"pointer"}} onClick={(e) => { e.stopPropagation(); setBadgesHelpOpen(true); }}>⚡</span>}
                     </div>
                   ) : (
                     <>
@@ -1891,8 +1893,8 @@ export default function PeachMarket() {
                       <div style={{flex:1,display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
                         <PeachRating rep={offer.rep} size={14} trades={offer.trades}/>
                         <span className="rep-trades">({offer.trades})</span>
-                        {offer.badges.includes("supertrader")&&<span className="badge badge-super">🏆</span>}
-                        {offer.badges.includes("fast")&&<span className="badge badge-fast">⚡</span>}
+                        {offer.badges.includes("supertrader")&&<span className="badge badge-super" style={{cursor:"pointer"}} onClick={(e) => { e.stopPropagation(); setBadgesHelpOpen(true); }}>🏆</span>}
+                        {offer.badges.includes("fast")&&<span className="badge badge-fast" style={{cursor:"pointer"}} onClick={(e) => { e.stopPropagation(); setBadgesHelpOpen(true); }}>⚡</span>}
                         <RepeatTraderBadge userId={offer.userId} />
                       </div>
                     </>
@@ -2025,6 +2027,7 @@ export default function PeachMarket() {
           )}
 
         </div>
+      {badgesHelpOpen && <BadgesInfoPopup onClose={() => setBadgesHelpOpen(false)} />}
     </>
   );
 }
