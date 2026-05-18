@@ -1718,7 +1718,7 @@ export default function PeachMarket() {
                   disabled={!isLoggedIn}
                 />
                 <span className="my-offers-check-box"/>
-                Compare my offers
+                Show my offers
               </label>
               <span
                 className="info-dot"

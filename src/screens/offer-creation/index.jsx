@@ -1279,7 +1279,7 @@ export default function OfferCreation({ initialType="buy" }) {
                 {/* Offers below/above this premium */}
                 {!marketStats.loading && marketStats.hasData && (
                   <div className="market-stats-row market-stats-center" style={{marginTop:10}}>
-                    {marketStats.beyondCount} offers {isSell ? "below" : "above"} this premium
+                    {marketStats.beyondCount} competing offers {isSell ? "below" : "above"} this premium
                   </div>
                 )}
               </div>

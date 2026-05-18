@@ -334,6 +334,7 @@ export default function PeachAuth() {
 
   const [desktopShowCode, setDesktopShowCode] = useState(false);
   const [mobileShowQR, setMobileShowQR] = useState(false);
+  const [mobileShowPayload, setMobileShowPayload] = useState(false);
   const [appNotInstalled, setAppNotInstalled] = useState(false);
   const [openingApp, setOpeningApp] = useState(false);
 
@@ -652,84 +653,6 @@ export default function PeachAuth() {
                   </Step>
                 </div>
 
-                {/* Connection payload (if available) */}
-                {qrPayload && (
-                  <div
-                    style={{ display: "flex", flexDirection: "column", gap: 8 }}
-                  >
-                    <label
-                      style={{
-                        fontSize: ".78rem",
-                        fontWeight: 700,
-                        color: "var(--black-75)",
-                        letterSpacing: ".02em",
-                        textTransform: "uppercase",
-                      }}
-                    >
-                      Connection Payload
-                    </label>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        padding: "14px 16px",
-                        borderRadius: 12,
-                        background: "var(--black-5)",
-                        border: "1.5px solid var(--black-10)",
-                        gap: 10,
-                        position: "relative",
-                      }}
-                    >
-                      {qrPhase !== "error" && phase !== "success" && (
-                        <CountdownBorder
-                          secondsLeft={secsLeft}
-                          total={TOTAL}
-                          radius={12}
-                          gradientId="cb-grad-mcp"
-                        />
-                      )}
-                      <span
-                        style={{
-                          fontFamily: "monospace",
-                          fontSize: ".95rem",
-                          fontWeight: 700,
-                          color: "var(--black)",
-                          letterSpacing: ".08em",
-                          wordBreak: "break-all",
-                        }}
-                      >
-                        {`{"desktopConnectionId":"...","ephemeralPgpPublicKey":"..."}`}
-                      </span>
-                      <button
-                        onClick={handleCopyConnId}
-                        style={{
-                          flexShrink: 0,
-                          padding: "8px 14px",
-                          borderRadius: 999,
-                          background: connIdCopied
-                            ? "var(--success)"
-                            : "var(--grad)",
-                          color: "white",
-                          border: "none",
-                          cursor: "pointer",
-                          fontFamily: "'Baloo 2',cursive",
-                          fontSize: ".78rem",
-                          fontWeight: 800,
-                          letterSpacing: ".02em",
-                          transition: "background .2s",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 6,
-                          position: "relative",
-                        }}
-                      >
-                        {connIdCopied ? "✓ Copied" : "Copy"}
-                      </button>
-                    </div>
-                  </div>
-                )}
-
                 {/* Show QR code (mobile collapsible) */}
                 {qrPayload && phase !== "success" && qrPhase !== "error" && (
                   <div
@@ -803,6 +726,124 @@ export default function PeachAuth() {
                           />
                         )}
                         <QRDisplay qrPayload={qrPayload} size={mobileQrSize} />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Show connection payload (mobile collapsible) */}
+                {qrPayload && (
+                  <div
+                    style={{ display: "flex", flexDirection: "column", gap: 8 }}
+                  >
+                    <button
+                      onClick={() => setMobileShowPayload((s) => !s)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        padding: 0,
+                        width: "100%",
+                        textAlign: "left",
+                      }}
+                    >
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 12 12"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        style={{
+                          color: "var(--black-75)",
+                          transform: mobileShowPayload
+                            ? "rotate(90deg)"
+                            : "rotate(0deg)",
+                          transition: "transform .2s",
+                        }}
+                      >
+                        <polyline points="4,2 8,6 4,10" />
+                      </svg>
+                      <span
+                        style={{
+                          fontSize: ".78rem",
+                          fontWeight: 700,
+                          color: "var(--black-75)",
+                          letterSpacing: ".02em",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        {mobileShowPayload
+                          ? "Hide connection payload"
+                          : "Show connection payload"}
+                      </span>
+                    </button>
+
+                    {mobileShowPayload && (
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          padding: "14px 16px",
+                          borderRadius: 12,
+                          background: "var(--black-5)",
+                          border: "1.5px solid var(--black-10)",
+                          gap: 10,
+                          position: "relative",
+                          animation: "fadeIn .2s ease both",
+                        }}
+                      >
+                        {qrPhase !== "error" && phase !== "success" && (
+                          <CountdownBorder
+                            secondsLeft={secsLeft}
+                            total={TOTAL}
+                            radius={12}
+                            gradientId="cb-grad-mcp"
+                          />
+                        )}
+                        <span
+                          style={{
+                            fontFamily: "monospace",
+                            fontSize: ".95rem",
+                            fontWeight: 700,
+                            color: "var(--black)",
+                            letterSpacing: ".08em",
+                            wordBreak: "break-all",
+                          }}
+                        >
+                          {`{"desktopConnectionId":"...","ephemeralPgpPublicKey":"..."}`}
+                        </span>
+                        <button
+                          onClick={handleCopyConnId}
+                          style={{
+                            flexShrink: 0,
+                            padding: "8px 14px",
+                            borderRadius: 999,
+                            background: connIdCopied
+                              ? "var(--success)"
+                              : "var(--grad)",
+                            color: "white",
+                            border: "none",
+                            cursor: "pointer",
+                            fontFamily: "'Baloo 2',cursive",
+                            fontSize: ".78rem",
+                            fontWeight: 800,
+                            letterSpacing: ".02em",
+                            transition: "background .2s",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                            position: "relative",
+                          }}
+                        >
+                          {connIdCopied ? "✓ Copied" : "Copy"}
+                        </button>
                       </div>
                     )}
                   </div>
