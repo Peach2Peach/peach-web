@@ -269,6 +269,7 @@ body{font-family:var(--font);background:var(--primary-bg);color:var(--black)}
 .mobile-price-main{font-size:.82rem;font-weight:800;color:var(--black);white-space:nowrap}
 .mobile-price-sats{font-size:.68rem;font-weight:500;color:var(--black-65);white-space:nowrap}
 .mobile-cur-select{flex-shrink:0}
+.mobile-cur-select .cur-select-menu{top:auto;bottom:calc(100% + 6px)}
 .avatar-ring-wrap{position:relative;width:44px;height:44px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .avatar-ring{position:absolute;inset:0;transform:scaleX(-1) rotate(-90deg);pointer-events:none}
 .avatar-ring-track{fill:none;stroke:var(--black-10);stroke-width:2}
