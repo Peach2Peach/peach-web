@@ -1264,6 +1264,7 @@ export default function TradesDashboard() {
   // Fund-escrow enrichment (sell offers in fundEscrow status)
   const [odEscrowAddress, setOdEscrowAddress] = useState(null);
   const [odCopiedAddr, setOdCopiedAddr] = useState(false);
+  const [odCopiedAmt, setOdCopiedAmt] = useState(false);
   const [odCopiedRefund, setOdCopiedRefund] = useState(false);
   const [odCopiedEscrowSummary, setOdCopiedEscrowSummary] = useState(false);
   const [odQrWithAmount, setOdQrWithAmount] = useState(true);
@@ -2780,7 +2781,7 @@ export default function TradesDashboard() {
                   (fundingStage === "needs" || fundingStage === "mempool") && (
                   <div
                     style={{
-                      padding: "12px 20px 16px",
+                      padding: "12px 20px 0",
                       borderTop: "1px solid var(--black-10)",
                     }}
                   >
@@ -2872,24 +2873,34 @@ export default function TradesDashboard() {
                               border: "1px solid var(--black-10)",
                               borderRadius: 8,
                               padding: "10px 12px",
-                              wordBreak: "break-all",
                               cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 10,
                             }}
                           >
-                            {odEscrowAddress}
-                          </div>
-                          <div
-                            style={{
-                              fontSize: ".7rem",
-                              fontWeight: 700,
-                              color: "var(--success)",
-                              minHeight: 16,
-                              marginTop: 4,
-                            }}
-                          >
-                            {odCopiedAddr
-                              ? "✓ Copied to clipboard"
-                              : "Click to copy"}
+                            <span style={{ flex: 1, minWidth: 0, wordBreak: "break-all" }}>
+                              {odEscrowAddress}
+                            </span>
+                            <span
+                              style={{
+                                flexShrink: 0,
+                                display: "inline-flex",
+                                alignItems: "center",
+                                color: odCopiedAddr ? "var(--success)" : "var(--black-65)",
+                              }}
+                            >
+                              {odCopiedAddr ? (
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                              ) : (
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                </svg>
+                              )}
+                            </span>
                           </div>
                         </div>
                       ) : (
@@ -2910,28 +2921,38 @@ export default function TradesDashboard() {
                             border: "1px solid var(--black-10)",
                             borderRadius: 8,
                             padding: "10px 12px",
-                            wordBreak: "break-all",
                             cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 10,
                           }}
                         >
-                          {odEscrowAddress}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: ".7rem",
-                            fontWeight: 700,
-                            color: "var(--success)",
-                            minHeight: 16,
-                            marginTop: 4,
-                          }}
-                        >
-                          {odCopiedAddr
-                            ? "✓ Copied to clipboard"
-                            : "Click to copy"}
+                          <span style={{ flex: 1, minWidth: 0, wordBreak: "break-all" }}>
+                            {odEscrowAddress}
+                          </span>
+                          <span
+                            style={{
+                              flexShrink: 0,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              color: odCopiedAddr ? "var(--success)" : "var(--black-65)",
+                            }}
+                          >
+                            {odCopiedAddr ? (
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            ) : (
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                              </svg>
+                            )}
+                          </span>
                         </div>
 
                         <div
-                          style={{ textAlign: "right", marginTop: 6 }}
+                          style={{ textAlign: "right", marginTop: 2 }}
                         >
                           <a
                             href={`https://mempool.space/address/${odEscrowAddress}`}
@@ -2967,7 +2988,45 @@ export default function TradesDashboard() {
                           style={{
                             display: "flex",
                             justifyContent: "center",
-                            margin: "14px 0 8px",
+                            alignItems: "center",
+                            gap: 10,
+                            margin: "12px 0 4px",
+                          }}
+                        >
+                          <SatsAmount sats={o.amount} fontSize="1.4rem" />
+                          <span
+                            onClick={() => {
+                              navigator.clipboard
+                                .writeText(String(o.amount))
+                                .catch(() => {});
+                              setOdCopiedAmt(true);
+                              setTimeout(() => setOdCopiedAmt(false), 2000);
+                            }}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              cursor: "pointer",
+                              color: odCopiedAmt ? "var(--success)" : "var(--black-65)",
+                            }}
+                          >
+                            {odCopiedAmt ? (
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            ) : (
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                              </svg>
+                            )}
+                          </span>
+                        </div>
+
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "center",
+                            margin: "8px 0 8px",
                           }}
                         >
                           <div
@@ -3087,12 +3146,11 @@ export default function TradesDashboard() {
                             marginBottom: 12,
                           }}
                         >
-                          Send exactly <SatsAmount sats={o.amount} /> to
-                          activate your offer
+                          Send any amount within the accepted limits to activate your offer
                         </div>
 
                         {/* Fund via mobile app — alternative to scanning QR */}
-                        <div style={{ marginBottom: 12 }}>
+                        <div>
                           {IS_PHONE && typeof odFundMobileActionId === "number" ? (
                             <a
                               href={buildMobileActionDeepLink("fundEscrow", odFundMobileActionId)}
@@ -3228,6 +3286,7 @@ export default function TradesDashboard() {
                               border: "1px solid var(--error)",
                               borderRadius: 10,
                               padding: "12px 14px",
+                              marginTop: 12,
                             }}
                           >
                             <div

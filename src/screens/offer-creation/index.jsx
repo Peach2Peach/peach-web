@@ -1728,8 +1728,59 @@ export default function OfferCreation({ initialType="buy" }) {
                 <>
                   <div style={{fontSize:".84rem",color:"var(--black-65)",fontWeight:500,
                     lineHeight:1.6,marginBottom:20}}>
-                    Send exactly the amount below to activate your offer. It goes live on confirmation.
+                    Send any amount within the accepted limits to the address below to activate your offer. It goes live on confirmation.
                   </div>
+                  {fundingStatus === "FUNDED" ? (
+                    <div style={{background:"var(--success-bg)",borderRadius:12,
+                      border:"1px solid var(--success)",padding:"14px 16px",
+                      display:"flex",alignItems:"center",gap:14,marginBottom:18,
+                      animation:"stepFwd .4s ease both"}}>
+                      <div style={{width:26,height:26,borderRadius:"50%",flexShrink:0,
+                        background:"var(--success)",display:"flex",alignItems:"center",
+                        justifyContent:"center",color:"white",fontSize:".75rem",fontWeight:800}}>✓</div>
+                      <div>
+                        <div style={{fontSize:".8rem",fontWeight:700,color:"var(--success)",marginBottom:2}}>
+                          Confirmed!
+                        </div>
+                        <div style={{fontSize:".7rem",color:"var(--black-65)",fontWeight:500}}>
+                          Your offer is going live...
+                        </div>
+                      </div>
+                    </div>
+                  ) : fundingStatus === "MEMPOOL" ? (
+                    <div style={{background:"var(--success-bg)",borderRadius:12,
+                      border:"1px solid var(--success)",padding:"14px 16px",
+                      display:"flex",alignItems:"center",gap:14,marginBottom:18,
+                      animation:"stepFwd .4s ease both"}}>
+                      <div style={{width:26,height:26,borderRadius:"50%",flexShrink:0,
+                        background:"var(--success)",display:"flex",alignItems:"center",
+                        justifyContent:"center",color:"white",fontSize:".75rem",fontWeight:800}}>✓</div>
+                      <div>
+                        <div style={{fontSize:".8rem",fontWeight:700,color:"var(--success)",marginBottom:2}}>
+                          Transaction detected!
+                        </div>
+                        <div style={{fontSize:".7rem",color:"var(--black-65)",fontWeight:500}}>
+                          Waiting for confirmation<span className="wait-dot"/> (~10–30 min)
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{background:"var(--black-5)",borderRadius:12,
+                      border:"1px solid var(--black-10)",padding:"14px 16px",
+                      display:"flex",alignItems:"center",gap:14,marginBottom:18}}>
+                      <div style={{width:26,height:26,borderRadius:"50%",flexShrink:0,
+                        border:"3px solid var(--black-10)",borderTopColor:"var(--primary)",
+                        animation:"spin .9s linear infinite"}}/>
+                      <div>
+                        <div style={{fontSize:".8rem",fontWeight:700,marginBottom:2}}>
+                          Waiting for funding<span className="wait-dot"/>
+                        </div>
+                        <div style={{fontSize:".7rem",color:"var(--black-65)",fontWeight:500}}>
+                          Send any amount within the accepted limits to this address
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <label className="field-label" style={{marginBottom:6}}>Escrow address</label>
                   {escrowAddress ? (
                   <>
@@ -1737,12 +1788,31 @@ export default function OfferCreation({ initialType="buy" }) {
                     onClick={()=>{
                       navigator.clipboard.writeText(escrowAddress).catch(()=>{});
                       setCopiedAddr(true);setTimeout(()=>setCopiedAddr(false),2000);
-                    }}>
-                    {escrowAddress}
+                    }}
+                    style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}>
+                    <span style={{flex:1,minWidth:0,wordBreak:"break-all"}}>{escrowAddress}</span>
+                    <span style={{flexShrink:0,display:"inline-flex",alignItems:"center",
+                      color: copiedAddr ? "var(--success)" : "var(--black-65)"}}>
+                      {copiedAddr ? (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                      ) : (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                        </svg>
+                      )}
+                    </span>
                   </div>
-                  <div style={{fontSize:".7rem",fontWeight:700,color:"var(--success)",
-                    minHeight:18,marginTop:4,marginBottom:20}}>
-                    {copiedAddr?"✓ Copied to clipboard":"Click to copy"}
+                  <div style={{textAlign:"center",marginBottom:14}}>
+                    <label className="field-label" style={{marginBottom:6,display:"block"}}>Amount to send</label>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:12}}>
+                      <SatsAmount sats={form.amtFixed} fontSize="1.6rem"/>
+                      <span style={{fontSize:".88rem",color:"var(--black-65)",fontWeight:600}}>
+                        ≈ {currSym(selectedCurrency)}{fmtEur(satsToFiat(form.amtFixed,effP))}
+                      </span>
+                    </div>
                   </div>
                   {/* QR code / green check on detection */}
                   <div style={{display:"flex",justifyContent:"center",marginBottom:12}}>
@@ -1887,67 +1957,6 @@ export default function OfferCreation({ initialType="buy" }) {
                   <div style={{padding:"24px 0",textAlign:"center",color:"var(--black-40)",fontSize:".84rem",fontWeight:600}}>
                     Waiting for escrow address…
                   </div>
-                  )}
-                  <label className="field-label" style={{marginBottom:6}}>Exact amount to send</label>
-                  <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:22}}>
-                    <SatsAmount sats={form.amtFixed} fontSize="1.6rem"/>
-                    <span style={{fontSize:".88rem",color:"var(--black-65)",fontWeight:600}}>
-                      ≈ {currSym(selectedCurrency)}{fmtEur(satsToFiat(form.amtFixed,effP))}
-                    </span>
-                  </div>
-                  {/* ── Funding status indicator ──
-                    WRONG_FUNDING_AMOUNT is handled by the top-level branch which
-                    redirects to /trades — no case needed here. */}
-                  {fundingStatus === "FUNDED" ? (
-                    <div style={{background:"var(--success-bg)",borderRadius:12,
-                      border:"1px solid var(--success)",padding:"14px 16px",
-                      display:"flex",alignItems:"center",gap:14,marginBottom:18,
-                      animation:"stepFwd .4s ease both"}}>
-                      <div style={{width:26,height:26,borderRadius:"50%",flexShrink:0,
-                        background:"var(--success)",display:"flex",alignItems:"center",
-                        justifyContent:"center",color:"white",fontSize:".75rem",fontWeight:800}}>✓</div>
-                      <div>
-                        <div style={{fontSize:".8rem",fontWeight:700,color:"var(--success)",marginBottom:2}}>
-                          Confirmed!
-                        </div>
-                        <div style={{fontSize:".7rem",color:"var(--black-65)",fontWeight:500}}>
-                          Your offer is going live...
-                        </div>
-                      </div>
-                    </div>
-                  ) : fundingStatus === "MEMPOOL" ? (
-                    <div style={{background:"var(--success-bg)",borderRadius:12,
-                      border:"1px solid var(--success)",padding:"14px 16px",
-                      display:"flex",alignItems:"center",gap:14,marginBottom:18,
-                      animation:"stepFwd .4s ease both"}}>
-                      <div style={{width:26,height:26,borderRadius:"50%",flexShrink:0,
-                        background:"var(--success)",display:"flex",alignItems:"center",
-                        justifyContent:"center",color:"white",fontSize:".75rem",fontWeight:800}}>✓</div>
-                      <div>
-                        <div style={{fontSize:".8rem",fontWeight:700,color:"var(--success)",marginBottom:2}}>
-                          Transaction detected!
-                        </div>
-                        <div style={{fontSize:".7rem",color:"var(--black-65)",fontWeight:500}}>
-                          Waiting for confirmation<span className="wait-dot"/> (~10–30 min)
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{background:"var(--black-5)",borderRadius:12,
-                      border:"1px solid var(--black-10)",padding:"14px 16px",
-                      display:"flex",alignItems:"center",gap:14,marginBottom:18}}>
-                      <div style={{width:26,height:26,borderRadius:"50%",flexShrink:0,
-                        border:"3px solid var(--black-10)",borderTopColor:"var(--primary)",
-                        animation:"spin .9s linear infinite"}}/>
-                      <div>
-                        <div style={{fontSize:".8rem",fontWeight:700,marginBottom:2}}>
-                          Waiting for funding<span className="wait-dot"/>
-                        </div>
-                        <div style={{fontSize:".7rem",color:"var(--black-65)",fontWeight:500}}>
-                          Send the exact amount above to this address
-                        </div>
-                      </div>
-                    </div>
                   )}
                 </>
               ):(
