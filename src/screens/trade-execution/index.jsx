@@ -42,6 +42,7 @@ import {
   ActionPanel,
   RatingPanel,
   TradeCompleteModal,
+  BatchInfoModal,
   ChatPanel,
   DisputeFlow,
   BuyerGroupHugDisplay,
@@ -303,6 +304,52 @@ const CSS = `
   .tc-thanks{padding:30px 0;animation:celebrationPop .4s cubic-bezier(.34,1.56,.64,1);font-weight:700;color:var(--success)}
   .tc-checkmark{font-size:2.6rem;color:var(--success);font-weight:800;margin-bottom:6px}
 
+  /* ── Batch info (GroupHug) modal ── */
+  .bi-modal-card{
+    position:relative;background:var(--surface);
+    border:1.5px solid var(--black-10);
+    border-radius:20px;padding:30px 24px 22px;
+    max-width:440px;width:100%;
+    box-shadow:0 24px 70px rgba(0,0,0,.28);
+    animation:modalIn .22s ease;
+  }
+  .bi-headline{font-size:1.1rem;font-weight:800;color:var(--success);margin-bottom:6px}
+  .bi-sub{font-size:.85rem;color:var(--black-65);line-height:1.5;margin-bottom:18px}
+  .bi-fill-row{margin-bottom:14px}
+  .bi-fill-label{
+    display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+    font-size:.82rem;color:var(--black-75);margin-bottom:6px;
+  }
+  .bi-eta{font-weight:700;color:var(--primary-dark);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .bi-fill-track{
+    width:100%;height:8px;border-radius:999px;background:var(--black-5);overflow:hidden;
+  }
+  .bi-fill-bar{
+    height:100%;background:var(--success);border-radius:999px;
+    transition:width .4s ease;
+  }
+  .bi-row{
+    display:flex;justify-content:space-between;align-items:center;gap:10px;
+    padding:10px 0;border-top:1px solid var(--black-10);
+  }
+  .bi-row-label{font-size:.78rem;color:var(--black-65);font-weight:600}
+  .bi-row-value{font-size:.82rem;color:var(--black);font-weight:600}
+  .bi-mono{font-family:monospace}
+  .bi-addr{
+    background:none;border:none;cursor:pointer;color:var(--black);
+    display:inline-flex;align-items:center;gap:6px;padding:0;font:inherit;font-weight:600;
+  }
+  .bi-addr:hover{opacity:.75}
+  .bi-copy{color:var(--primary-dark);font-size:.95rem}
+  .bi-accel{
+    display:block;margin-top:14px;width:100%;
+    background:none;border:1.5px solid var(--primary);
+    color:var(--primary-dark);
+    border-radius:999px;padding:9px 14px;
+    font:inherit;font-weight:700;font-size:.82rem;cursor:pointer;
+  }
+  .bi-accel:hover{background:var(--primary-mild)}
+
   /* ── Chat ── */
   .chat-panel{display:flex;flex-direction:column;flex:1;overflow:hidden}
   .chat-enc-notice{
@@ -449,6 +496,7 @@ export default function TradeExecution() {
   const [celebrationOpen, setCelebrationOpen] = useState(false);
   const [celebrationDismissed, setCelebrationDismissed] = useState(null);
   const [payoutCelebOpen, setPayoutCelebOpen] = useState(false);
+  const [batchInfoOpen, setBatchInfoOpen] = useState(false);
 
   // Load the buyer's saved custom payout address from /v069/selfUser once
   // on mount (canonical source: PGP-encrypted blob, same as Settings reads).
@@ -718,6 +766,28 @@ export default function TradeExecution() {
             prev ? { ...prev, unreadMessages: c.unreadMessages } : prev,
           );
         }
+        // Always sync batchInfo — its participants/timeRemaining tick while the
+        // trade sits in payoutPending and the tradeStatus stays unchanged.
+        {
+          const prevBI = liveContract.contract?.batchInfo ?? null;
+          const nextBI = c.batchInfo ?? null;
+          const changed =
+            (prevBI == null) !== (nextBI == null) ||
+            (prevBI && nextBI && (
+              prevBI.participants !== nextBI.participants ||
+              prevBI.maxParticipants !== nextBI.maxParticipants ||
+              prevBI.timeRemaining !== nextBI.timeRemaining ||
+              prevBI.completed !== nextBI.completed ||
+              prevBI.txId !== nextBI.txId
+            ));
+          if (changed) {
+            setLiveContract((prev) =>
+              prev
+                ? { ...prev, contract: { ...prev.contract, batchInfo: nextBI } }
+                : prev,
+            );
+          }
+        }
         if (!newStatus || newStatus === liveContract.tradeStatus) return;
         setLiveContract((prev) =>
           prev
@@ -931,6 +1001,7 @@ export default function TradeExecution() {
             ratingBuyer: c.ratingBuyer ?? null,
             ratingSeller: c.ratingSeller ?? null,
             buyOffer69Id: c.buyOffer69Id ?? null,
+            batchInfo: c.batchInfo ?? null,
           },
           counterparty: (() => {
             const cp = isBuyer ? (c.seller ?? {}) : (c.buyer ?? {});
@@ -1286,10 +1357,23 @@ export default function TradeExecution() {
 
   const unreadCount = liveContract?.unreadMessages ?? 0;
 
+  const hasBatchInfo = !!contract?.batchInfo;
   const payoutPendingSubtitle = (
     <>
-      Your sats are on their way to your wallet. This may take a few minutes,
-      especially if you use Group Hug. Accelerate your payout in the{" "}
+      Your sats are{" "}
+      {hasBatchInfo ? (
+        <button
+          type="button"
+          className="payout-batching-link"
+          onClick={() => setBatchInfoOpen(true)}
+        >
+          on their way to your wallet
+        </button>
+      ) : (
+        "on their way to your wallet"
+      )}
+      . This may take a few minutes, especially if you use Group Hug.
+      Accelerate your payout in the{" "}
       <button
         type="button"
         className="payout-batching-link"
@@ -2902,6 +2986,18 @@ export default function TradeExecution() {
           }}
         />
       )}
+
+      {/* ── BATCH INFO (GROUPHUG) MODAL ── */}
+      <BatchInfoModal
+        open={batchInfoOpen}
+        onClose={() => setBatchInfoOpen(false)}
+        batchInfo={contract?.batchInfo}
+        payoutAddress={liveContract?.releaseAddress}
+        onAccelerate={() => {
+          setBatchInfoOpen(false);
+          navigate("/settings", { state: { openSection: "tx-batching" } });
+        }}
+      />
 
       {/* ── PAYOUT PENDING CELEBRATION (auto-dismiss after 2s) ── */}
       {payoutCelebOpen && (

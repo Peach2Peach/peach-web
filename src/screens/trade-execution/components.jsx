@@ -3493,6 +3493,153 @@ export function TradeCompleteModal({ role, counterpartyName, onRate, onClose }) 
   );
 }
 
+// ─── BATCH INFO MODAL ─────────────────────────────────────────────────────────
+// Shown to the buyer at the payoutPending stage when the contract carries
+// `batchInfo` from /v1/contract/:id — i.e. the payout is queued in a GroupHug
+// batch rather than sent individually. Mirrors the mobile "PendingPayoutInfo"
+// card but adds richer detail (participant count, address, accelerator link).
+export function BatchInfoModal({
+  open,
+  onClose,
+  batchInfo,
+  payoutAddress,
+  onAccelerate,
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  const [endsAt, setEndsAt] = useState(null);
+  const [copied, setCopied] = useState(false);
+
+  // Re-anchor the countdown end-time whenever batchInfo.timeRemaining changes
+  // (the 5s contract poll refreshes batchInfo). -2 from the API means "TBA".
+  useEffect(() => {
+    if (!open || !batchInfo) {
+      setEndsAt(null);
+      return;
+    }
+    if (
+      typeof batchInfo.timeRemaining !== "number" ||
+      batchInfo.timeRemaining < 0
+    ) {
+      setEndsAt(null);
+      return;
+    }
+    setEndsAt(Date.now() + batchInfo.timeRemaining * 1000);
+  }, [open, batchInfo?.timeRemaining]);
+
+  useEffect(() => {
+    if (!open) return;
+    const iv = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(iv);
+  }, [open]);
+
+  if (!open) return null;
+
+  const completed = !!batchInfo?.completed;
+  const txId = batchInfo?.txId ?? null;
+  const participants = batchInfo?.participants ?? 0;
+  const maxParticipants = batchInfo?.maxParticipants ?? 0;
+  const fillPct =
+    maxParticipants > 0
+      ? Math.min(100, Math.round((participants / maxParticipants) * 100))
+      : 0;
+
+  let etaLabel = "TBA";
+  if (endsAt) {
+    const left = Math.max(0, endsAt - now);
+    const mins = Math.floor(left / 60000);
+    const secs = Math.floor((left % 60000) / 1000);
+    etaLabel = `${mins}m ${String(secs).padStart(2, "0")}s`;
+  }
+
+  const truncAddr = payoutAddress
+    ? `${payoutAddress.slice(0, 10)}…${payoutAddress.slice(-6)}`
+    : null;
+  const truncTx = txId ? `${txId.slice(0, 8)}…${txId.slice(-6)}` : null;
+
+  function copyAddr() {
+    if (!payoutAddress) return;
+    navigator.clipboard?.writeText(payoutAddress).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  return (
+    <div className="tc-modal-backdrop" onClick={onClose}>
+      <div className="bi-modal-card" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          className="tc-close"
+          onClick={onClose}
+          aria-label="Close"
+        >
+          ✕
+        </button>
+
+        {completed && txId ? (
+          <>
+            <div className="bi-headline">Batch broadcast</div>
+            <div className="bi-sub">
+              Your payout has been broadcast to the Bitcoin network.
+            </div>
+            <div className="bi-row">
+              <div className="bi-row-label">Transaction</div>
+              <div className="bi-row-value bi-mono">{truncTx}</div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="bi-headline">Save up to 23% in network fees</div>
+            <div className="bi-sub">
+              The bucket isn't full yet; waiting for more participants.
+            </div>
+
+            <div className="bi-fill-row">
+              <div className="bi-fill-label">
+                <span>
+                  <strong>{participants}</strong> of{" "}
+                  <strong>{maxParticipants}</strong> slots filled
+                </span>
+                <span className="bi-eta">ETA: {etaLabel}</span>
+              </div>
+              <div className="bi-fill-track">
+                <div
+                  className="bi-fill-bar"
+                  style={{ width: `${fillPct}%` }}
+                />
+              </div>
+            </div>
+
+            {truncAddr && (
+              <div className="bi-row">
+                <div className="bi-row-label">Will be sent to</div>
+                <button
+                  type="button"
+                  className="bi-addr"
+                  onClick={copyAddr}
+                  title="Copy address"
+                >
+                  <span className="bi-mono">{truncAddr}</span>
+                  <span className="bi-copy">{copied ? "✓" : "⧉"}</span>
+                </button>
+              </div>
+            )}
+
+            {typeof onAccelerate === "function" && (
+              <button
+                type="button"
+                className="bi-accel"
+                onClick={onAccelerate}
+              >
+                Accelerate payout in settings
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── CHAT PANEL ───────────────────────────────────────────────────────────────
 export function ChatPanel({
   messages,
