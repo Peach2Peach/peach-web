@@ -39,6 +39,7 @@ export function ProfileSubScreen({ onBack }) {
   const badges  = isLoggedIn ? (liveProfile?.medals ?? liveProfile?.badges ?? []) : [];
   const rating  = isLoggedIn ? toPeaches(liveProfile?.rating ?? 0) : 0;
   const trades  = isLoggedIn ? (liveProfile?.trades ?? 0) : 0;
+  const linkedIdsCount = isLoggedIn ? (liveProfile?.linkedIds?.length ?? 0) : 0;
 
   // ── Disputes — API returns number or object ──
   const rawDisputes = liveProfile?.disputes;
@@ -127,6 +128,10 @@ export function ProfileSubScreen({ onBack }) {
 
       {/* Meta rows */}
       <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+        <div>
+          <div style={{ fontSize:".72rem", color:"var(--black-65)" }}>linked IDs:</div>
+          <div style={{ fontSize:".88rem", fontWeight:700, color:"var(--black)" }}>{linkedIdsCount}</div>
+        </div>
         <div>
           <div style={{ fontSize:".72rem", color:"var(--black-65)" }}>account created:</div>
           <div style={{ fontSize:".88rem", fontWeight:700, color:"var(--black)" }}>{createdStr}</div>

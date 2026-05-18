@@ -108,10 +108,13 @@ const css = `
   .market-name{font-weight:700;color:var(--black)}
   .market-count{font-size:.72rem;font-weight:500;color:var(--black-65)}
   .market-empty{padding:8px 0;color:var(--black-40);font-size:.78rem;font-weight:600}
+  .market-cols{display:flex;align-items:stretch;gap:18px}
+  .market-col{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:6px}
+  .market-divider{width:1px;background:var(--black-10);align-self:stretch}
 
   /* ── SEE-ALL POPUP ── */
   .seeall-overlay{position:fixed;inset:0;background:rgba(43,25,17,.55);display:flex;align-items:center;justify-content:center;z-index:600;animation:seeallFadeIn .12s ease-out}
-  .seeall-popup{background:#fff;border-radius:16px;width:min(92vw,520px);max-height:80vh;display:flex;flex-direction:column;overflow:hidden;animation:seeallSlideUp .18s ease-out}
+  .seeall-popup{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:min(92vw,520px);max-height:80vh;display:flex;flex-direction:column;overflow:hidden;animation:seeallSlideUp .18s ease-out}
   .seeall-header{display:flex;align-items:center;justify-content:space-between;padding:18px 22px 12px;border-bottom:1px solid var(--black-5)}
   .seeall-title{font-size:1rem;font-weight:800;color:var(--black);text-transform:uppercase;letter-spacing:.08em}
   .seeall-close{background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--black-65);padding:4px 8px;line-height:1}
@@ -517,8 +520,8 @@ export default function PeachHome() {
     : null;
 
   // ── DERIVED: top 5 from market breakdown (full lists go to See-all popup) ──
-  const topPms        = marketBreakdown.pms.slice(0, 5);
-  const topCurrencies = marketBreakdown.currencies.slice(0, 5);
+  const topPms        = marketBreakdown.pms.slice(0, 3);
+  const topCurrencies = marketBreakdown.currencies.slice(0, 3);
 
   const navWidth = isMobile ? 0 : 68;
 
@@ -777,32 +780,40 @@ export default function PeachHome() {
               <div className="cards-row" style={{display:"flex",gap:18,flexWrap:"wrap"}}>
                 <div className="card" style={{flex:"1 1 280px",minWidth:260,width:"auto"}}>
                   <div className="card-header">
-                    <span className="card-title" style={{fontSize:".9rem"}}>Market Top</span>
+                    <span className="card-title" style={{fontSize:".9rem"}}>Top payment methods</span>
                     <span className="card-link" onClick={() => setSeeAllOpen(true)}>See all →</span>
                   </div>
 
-                  <div className="market-section-label">Payment Methods</div>
-                  <div className="market-list">
-                    {topPms.length === 0 ? (
-                      <div className="market-empty">No outstanding offers</div>
-                    ) : topPms.map(({ name, count }) => (
-                      <div className="market-row" key={`pm-${name}`}>
-                        <span className="market-name">{methodDisplayName(name)}</span>
-                        <span className="market-count">{count} offer{count === 1 ? "" : "s"}</span>
+                  <div className="market-cols">
+                    <div className="market-col">
+                      <div className="market-section-label">Payment Methods</div>
+                      <div className="market-list">
+                        {topPms.length === 0 ? (
+                          <div className="market-empty">No outstanding offers</div>
+                        ) : topPms.map(({ name, count }) => (
+                          <div className="market-row" key={`pm-${name}`}>
+                            <span className="market-name">{methodDisplayName(name)}</span>
+                            <span className="market-count">{count} offer{count === 1 ? "" : "s"}</span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    </div>
 
-                  <div className="market-section-label" style={{marginTop:14}}>Currencies</div>
-                  <div className="market-list">
-                    {topCurrencies.length === 0 ? (
-                      <div className="market-empty">No outstanding offers</div>
-                    ) : topCurrencies.map(({ name, count }) => (
-                      <div className="market-row" key={`cur-${name}`}>
-                        <span className="market-name">{name}</span>
-                        <span className="market-count">{count} offer{count === 1 ? "" : "s"}</span>
+                    <div className="market-divider" />
+
+                    <div className="market-col">
+                      <div className="market-section-label">Currencies</div>
+                      <div className="market-list">
+                        {topCurrencies.length === 0 ? (
+                          <div className="market-empty">No outstanding offers</div>
+                        ) : topCurrencies.map(({ name, count }) => (
+                          <div className="market-row" key={`cur-${name}`}>
+                            <span className="market-name">{name}</span>
+                            <span className="market-count">{count} offer{count === 1 ? "" : "s"}</span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    </div>
                   </div>
                 </div>
               </div>
