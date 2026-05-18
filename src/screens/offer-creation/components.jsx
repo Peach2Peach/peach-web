@@ -12,6 +12,7 @@ import {
   fmtFiat as fmtEur,
   formatTradeId,
   toPeaches,
+  BTC_PRICE_FALLBACK,
 } from "../../utils/format.js";
 import { IS_PHONE, buildMobileActionDeepLink } from "../../utils/mobileAction.js";
 import { InfoDot } from "../../components/InfoPopup.jsx";
@@ -19,19 +20,31 @@ import { getTopbarPeachId } from "../../components/Navbars.jsx";
 import Avatar from "../../components/Avatar.jsx";
 import PeachRating from "../../components/PeachRating.jsx";
 import { methodDisplayName } from "../../data/paymentMethodMeta.js";
+import { useCurrency } from "../../components/AppLayout.jsx";
 
-const PREVIEW_CURRENCY_SYMBOL = {
+export const CURRENCY_SYMBOL = {
   EUR: "€", GBP: "£", USD: "$", CHF: "CHF", JPY: "¥", SEK: "kr", NOK: "kr", DKK: "kr",
 };
-function previewCurrSym(c) { return PREVIEW_CURRENCY_SYMBOL[c] || c; }
+export function currSym(c) { return CURRENCY_SYMBOL[c] || c; }
 function stripPmIndex(id) { return String(id || "").replace(/[-_]\d+$/, ""); }
 
 // ─── CONSTANTS (shared with index.jsx) ──────────────────────────────────────
 
-export const CHF_EUR = 0.96; // TODO: fetch live rate from /market/prices
-export const LIMIT_EUR = 1000 * CHF_EUR; // ≈ 960 EUR — daily trading limit
+// Daily trading limit is regulatory and denominated in CHF. The cap in any
+// other currency is derived live from /market/prices (CHF → target).
+export const LIMIT_CHF = 1000;
 export const MIN_SATS = 20_000;
-export const maxSatsAtPrice = (price) => Math.floor((LIMIT_EUR / price) * SAT);
+// Falls back to BTC_PRICE_FALLBACK (EUR-like, within ~5% of CHF) during the
+// brief window before /market/prices resolves, so the slider and form
+// validation stay usable on first render.
+export const maxSatsAtLimit = (chfPrice) =>
+  Math.floor((LIMIT_CHF / (chfPrice || BTC_PRICE_FALLBACK)) * SAT);
+export const limitInCurrency = (allPrices, currency) => {
+  const chf = allPrices?.CHF;
+  const target = allPrices?.[currency];
+  if (!chf || !target) return null;
+  return LIMIT_CHF * (target / chf);
+};
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
 
@@ -47,13 +60,18 @@ export function getSteps(type) {
 export function LivePreview({
   type,
   form,
-  btcPrice,
   offerMethods,
   offerCurrencies,
 }) {
+  // Preview reflects the offer's own denomination (first PM currency), not the
+  // topbar's display currency — so other traders see the offer faithfully.
+  const { allPrices } = useCurrency();
+  const previewCurrency = offerCurrencies[0] || "EUR";
+  const previewBtcPrice = allPrices?.[previewCurrency] ?? 0;
+
   const isSell = type === "sell";
   const p = parseFloat(form.premium) || 0;
-  const effP = btcPrice * (1 + p / 100);
+  const effP = previewBtcPrice * (1 + p / 100);
   const hasAmt = form.amtFixed > 0;
   const hasPay = offerMethods.length > 0;
   const hasPrem = form.premium !== "";
@@ -67,7 +85,7 @@ export function LivePreview({
   const userRep = profile?.rating != null ? toPeaches(profile.rating) : 0;
   const userBadges = profile?.medals ?? profile?.badges ?? [];
 
-  const sym = previewCurrSym(offerCurrencies[0] || "EUR");
+  const sym = currSym(previewCurrency);
   const rate = Math.round(effP);
   const rateStr = `${rate.toLocaleString("fr-FR")} ${sym}`;
   const fiatVal = hasAmt ? `${sym}${fmtEur(satsToFiat(form.amtFixed, effP))}` : "—";
@@ -152,17 +170,24 @@ export function LivePreview({
 // ─── AMOUNT SLIDER (unified buy + sell) ─────────────────────────────────────
 
 export function AmountSlider({ form, setF, btcPrice }) {
-  const maxSats = maxSatsAtPrice(btcPrice);
+  // Limit math is sats-based and currency-independent (anchored to CHF live).
+  // Display values follow the topbar's selectedCurrency.
+  const { allPrices, selectedCurrency } = useCurrency();
+  const maxSats = maxSatsAtLimit(allPrices?.CHF);
   const val = form.amtFixed || MIN_SATS;
-  const pct = ((val - MIN_SATS) / (maxSats - MIN_SATS)) * 100;
+  const span = Math.max(1, maxSats - MIN_SATS);
+  const pct = ((val - MIN_SATS) / span) * 100;
 
   const currentFiat = satsToFiat(val, btcPrice);
-  const pctOfLimit = currentFiat / LIMIT_EUR;
+  const pctOfLimit = maxSats ? val / maxSats : 0;
   const nearLimit = pctOfLimit >= 0.9;
 
-  const pctRiseToLimit = nearLimit ? (LIMIT_EUR / currentFiat - 1) * 100 : null;
+  const pctRiseToLimit = nearLimit && val ? (maxSats / val - 1) * 100 : null;
 
   const barColor = pctOfLimit < 0.9 ? "var(--success)" : "var(--warning)";
+
+  const sym = currSym(selectedCurrency);
+  const limitInSel = limitInCurrency(allPrices, selectedCurrency);
 
   // Editable sats input state
   const [inputVal, setInputVal] = useState(String(val));
@@ -235,7 +260,7 @@ export function AmountSlider({ form, setF, btcPrice }) {
           <span className="amt-pill-black">Sats</span>
         </div>
         <div className="amt-pill fiat-pill">
-          <span className="amt-pill-fiat">≈ €{fmtEur(currentFiat)}</span>
+          <span className="amt-pill-fiat">≈ {sym}{fmtEur(currentFiat)}</span>
         </div>
       </div>
 
@@ -273,8 +298,8 @@ export function AmountSlider({ form, setF, btcPrice }) {
               color: pctOfLimit >= 0.9 ? "var(--warning)" : "var(--black-65)",
             }}
           >
-            €{Math.round(currentFiat).toLocaleString()} / €
-            {Math.round(LIMIT_EUR).toLocaleString()}
+            {sym}{Math.round(currentFiat).toLocaleString()} / {sym}
+            {limitInSel != null ? Math.round(limitInSel).toLocaleString() : "—"}
           </span>
         </div>
         <div className="limit-bar-track">

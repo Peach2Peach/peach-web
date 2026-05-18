@@ -21,7 +21,7 @@ import { extractCustomRefundAddressFromProfile } from "../../utils/customRefundA
 import { BITCOIN_NETWORK } from "../../utils/network.js";
 import { CSS } from "./styles.js";
 import {
-  MIN_SATS, maxSatsAtPrice,
+  MIN_SATS, maxSatsAtLimit, currSym,
   getSteps, LivePreview, AmountSlider,
   MultiOfferControl, MultiEscrowFunding,
 } from "./components.jsx";
@@ -101,7 +101,7 @@ export default function OfferCreation({ initialType="buy" }) {
   const [type,         setType]         = useState(typeFromUrl);
   const [step,         setStep]         = useState(0);
   // Currency state lives in AppLayout. Read btcPrice + selectedCurrency for offer math.
-  const { btcPrice, selectedCurrency, pricesLoaded } = useCurrency();
+  const { btcPrice, selectedCurrency, pricesLoaded, allPrices } = useCurrency();
   const [done,         setDone]         = useState(false);
   const [copiedAddr,   setCopiedAddr]   = useState(false);
   const [qrWithAmount, setQrWithAmount] = useState(true);
@@ -501,7 +501,7 @@ export default function OfferCreation({ initialType="buy" }) {
   }
 
   // Validation for Configure step
-  const maxS   = maxSatsAtPrice(btcPrice);
+  const maxS   = maxSatsAtLimit(allPrices?.CHF);
   const amtOk  = isSell
     ? form.amtFixed>=MIN_SATS&&form.amtFixed<=maxS
     : form.amtFixed>=MIN_SATS&&form.amtFixed<=maxS;
@@ -1246,7 +1246,7 @@ export default function OfferCreation({ initialType="buy" }) {
                   <div style={{flex:1,textAlign:"center"}}>
                     <div style={{fontSize:".65rem",fontWeight:700,color:"var(--black-65)",
                       textTransform:"uppercase",letterSpacing:".06em",marginBottom:2}}>Market</div>
-                    <div style={{fontSize:".88rem",fontWeight:800}}>€{pricesLoaded ? btcPrice.toLocaleString() : "?"}</div>
+                    <div style={{fontSize:".88rem",fontWeight:800}}>{currSym(selectedCurrency)}{pricesLoaded ? btcPrice.toLocaleString() : "?"}</div>
                   </div>
                   <div style={{width:1,background:"var(--black-10)"}}/>
                   <div style={{flex:1,textAlign:"center"}}>
@@ -1255,7 +1255,7 @@ export default function OfferCreation({ initialType="buy" }) {
                     <div style={{fontSize:".88rem",fontWeight:800,
                       color:prem===0?"var(--black)":
                         isSell?(prem>0?"var(--success)":"var(--error)"):(prem<0?"var(--success)":"var(--error)")}}>
-                      €{Math.round(effP).toLocaleString()}
+                      {currSym(selectedCurrency)}{Math.round(effP).toLocaleString()}
                     </div>
                   </div>
                   {(isSell?form.amtFixed:form.amtFixed)>0&&(
@@ -1268,8 +1268,8 @@ export default function OfferCreation({ initialType="buy" }) {
                         </div>
                         <div style={{fontSize:".88rem",fontWeight:800}}>
                           {isSell
-                            ? `€${fmtEur(satsToFiat(form.amtFixed,effP))}`
-                            : `€${fmtEur(satsToFiat(form.amtFixed,effP))}`}
+                            ? `${currSym(selectedCurrency)}${fmtEur(satsToFiat(form.amtFixed,effP))}`
+                            : `${currSym(selectedCurrency)}${fmtEur(satsToFiat(form.amtFixed,effP))}`}
                         </div>
                       </div>
                     </>
@@ -1615,7 +1615,7 @@ export default function OfferCreation({ initialType="buy" }) {
                     <span style={{display:"inline-flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                       <SatsAmount sats={form.amtFixed}/>
                       <span style={{color:"var(--black-65)",fontWeight:600,fontSize:".82rem"}}>
-                        ≈ €{fmtEur(satsToFiat(form.amtFixed,effP))}
+                        ≈ {currSym(selectedCurrency)}{fmtEur(satsToFiat(form.amtFixed,effP))}
                       </span>
                     </span>],
                   ["Premium",
@@ -1623,7 +1623,7 @@ export default function OfferCreation({ initialType="buy" }) {
                       isSell?(prem>0?"var(--success)":"var(--error)"):(prem<0?"var(--success)":"var(--error)")}}>
                       {prem>0?"+":""}{prem.toFixed(1)}%
                     </span>],
-                  ["Current effective price", `€${Math.round(effP).toLocaleString()}/BTC`],
+                  ["Current effective price", `${currSym(selectedCurrency)}${Math.round(effP).toLocaleString()}/BTC`],
                   ["Methods", offerMethods.join(", ")||"—"],
                   ["Currencies", offerCurrencies.join(", ")||"—"],
                   ...(form.instantMatch?[["Instant Trade", "⚡ Enabled"]]:[]),
@@ -1892,7 +1892,7 @@ export default function OfferCreation({ initialType="buy" }) {
                   <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:22}}>
                     <SatsAmount sats={form.amtFixed} fontSize="1.6rem"/>
                     <span style={{fontSize:".88rem",color:"var(--black-65)",fontWeight:600}}>
-                      ≈ €{fmtEur(satsToFiat(form.amtFixed,effP))}
+                      ≈ {currSym(selectedCurrency)}{fmtEur(satsToFiat(form.amtFixed,effP))}
                     </span>
                   </div>
                   {/* ── Funding status indicator ──
@@ -2018,7 +2018,7 @@ export default function OfferCreation({ initialType="buy" }) {
 
         {/* ── PREVIEW PANEL ── */}
         <div className="preview-panel">
-          <LivePreview type={type} form={form} btcPrice={btcPrice}
+          <LivePreview type={type} form={form}
             offerMethods={offerMethods} offerCurrencies={offerCurrencies}/>
 
           {!marketStats.loading && marketStats.hasData && (
