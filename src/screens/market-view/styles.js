@@ -269,45 +269,6 @@ export const CSS = `
   .offer-card .amount-sats{font-size:1.15rem}
   .offer-card .amount-fiat{font-size:.82rem}
 
-  /* ── SIDENAV ── */
-  .sidenav{
-    position:fixed;top:var(--topbar);left:0;bottom:0;
-    width:68px;background:var(--surface);border-right:1px solid var(--black-10);
-    z-index:150;display:flex;flex-direction:column;align-items:center;
-    padding:8px 0;gap:2px;
-    overflow:hidden;
-  }
-  .sidenav-item{
-    width:calc(100% - 16px);display:flex;flex-direction:column;align-items:center;
-    justify-content:center;gap:3px;padding:8px 4px;border-radius:10px;
-    border:none;background:transparent;cursor:pointer;color:var(--black-65);
-    font-family:var(--font);transition:all .14s;flex-shrink:0;
-  }
-  .sidenav-item:hover{background:var(--black-5);color:var(--black)}
-  .sidenav-active{background:var(--primary-mild)!important;color:var(--primary-dark)!important}
-  .sidenav-icon{display:flex;align-items:center;justify-content:center;height:22px;flex-shrink:0}
-  .sidenav-label{
-    font-size:.57rem;font-weight:700;letter-spacing:.02em;
-    text-transform:uppercase;white-space:nowrap;overflow:hidden;
-    transition:opacity .15s, max-height .2s;
-    max-height:20px;opacity:1;
-  }
-  /* Backdrop (mobile overlay) */
-  .sidenav-backdrop{
-    display:none;position:fixed;inset:0;z-index:149;
-    background:rgba(43,25,17,.4);
-    animation:fadeIn .2s ease;
-  }
-  .sidenav-backdrop.open{display:block}
-  /* Burger (mobile topbar) */
-  .burger-btn{
-    display:none;align-items:center;justify-content:center;
-    width:34px;height:34px;border-radius:8px;border:none;
-    background:transparent;cursor:pointer;color:var(--black-65);
-    flex-shrink:0;transition:background .14s;
-  }
-  .burger-btn:hover{background:var(--black-5)}
-
   /* ── SEARCH ── */
   .search-inp{width:180px;border:1.5px solid var(--black-10);border-radius:8px;padding:5px 12px;font-family:var(--font);font-size:.8rem;font-weight:600;color:var(--black);background:var(--surface);outline:none;transition:border-color .14s}
   .search-inp:focus{border-color:var(--primary)}
@@ -441,8 +402,6 @@ export const CSS = `
     .subheader{padding:10px 14px;gap:8px}
     .table-wrap{display:none}
     .cards{display:flex}
-    .topbar-price{display:none}          /* hidden from topbar on mobile — shown inside sidenav instead */
-    .sidenav-price-slot{display:block}   /* visible inside sidenav on mobile only */
     .cta-btn{padding:6px 14px;font-size:.78rem}
     .stat-pill.hide-mobile{display:none}
     .filters-desktop{display:none}
@@ -450,27 +409,6 @@ export const CSS = `
     .refresh-btn{display:none}
   }
   @media(max-width:767px){
-    .sidenav{
-      width:220px;left:0;
-      transform:translateX(-100%);
-      transition:transform .25s cubic-bezier(.4,0,.2,1);
-      z-index:500;
-      align-items:flex-start;
-      box-shadow:none;
-    }
-    .sidenav.sidenav-mobile-open{
-      transform:translateX(0);
-      box-shadow:6px 0 28px rgba(43,25,17,.16);
-    }
-    .sidenav-item{
-      width:calc(100% - 16px);flex-direction:row;justify-content:flex-start;
-      gap:12px;padding:10px 14px;
-    }
-    .sidenav-label{
-      opacity:1!important;max-height:none!important;
-      font-size:.8rem;text-transform:none;font-weight:600;letter-spacing:0;
-    }
-    .burger-btn{display:flex}
     .page-wrap{margin-left:0!important}
   }
 

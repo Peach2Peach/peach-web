@@ -268,18 +268,6 @@ const css = `
 
   /* ── RESPONSIVE ── */
   @media(max-width:767px){
-    .burger-btn{display:flex}
-    .topbar-price{display:none}
-    .sidenav-price-slot{display:block}
-    .sidenav{
-      width:220px;transform:translateX(-100%);
-      transition:transform .25s cubic-bezier(.4,0,.2,1);
-      z-index:500;align-items:flex-start;box-shadow:none;
-    }
-    .sidenav.sidenav-mobile-open{transform:translateX(0);box-shadow:6px 0 28px rgba(43,25,17,.16)}
-    .sidenav-item{width:calc(100% - 16px);flex-direction:row;justify-content:flex-start;gap:12px;padding:10px 14px}
-    .sidenav-label{opacity:1!important;max-height:none!important;font-size:.8rem;text-transform:none;font-weight:600;letter-spacing:0}
-    .sidenav-backdrop.open{display:block}
     .dashboard-grid{grid-template-columns:1fr}
     .dashboard-grid .card{width:100%!important;max-width:100%!important}
     .offerbook-cols{grid-template-columns:1fr}
@@ -781,7 +769,7 @@ export default function PeachHome() {
               <div className="cards-row" style={{display:"flex",gap:18,flexWrap:"wrap"}}>
                 <div className="card home-stack-card" style={{flex:"1 1 280px",minWidth:260,width:"auto"}}>
                   <div className="card-header">
-                    <span className="card-title" style={{fontSize:".9rem"}}>Top payment methods</span>
+                    <span className="card-title">Top payment methods</span>
                     <span className="card-link" onClick={() => setSeeAllOpen(true)}>See all →</span>
                   </div>
 
