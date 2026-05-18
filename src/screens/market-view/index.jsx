@@ -1,20 +1,17 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { formatPeachId } from "../../components/Navbars.jsx";
 import { SatsAmount } from "../../components/BitcoinAmount.jsx";
 import { useAuth } from "../../hooks/useAuth.js";
 import { useApi } from "../../hooks/useApi.js";
 import { useCurrency } from "../../components/AppLayout.jsx";
-import { useUserPMs } from "../../hooks/useUserPMs.js";
-import { markSentRequestCreated } from "../../hooks/useNotifications.js";
 import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
-import { isApiError, generateSymmetricKey, encryptForRecipients, encryptSymmetric, encryptForPublicKey, signPGPMessage, hashPaymentFields } from "../../utils/pgp.js";
 import { getCached, setCache, clearCache } from "../../hooks/useApi.js";
 import { fmtPct, fmtFiat, formatTradeId, toPeaches } from "../../utils/format.js";
+import { normalizeOffer } from "../../utils/normalizeOffer.js";
 import PeachRating from "../../components/PeachRating.jsx";
 import Avatar from "../../components/Avatar.jsx";
 import RepeatTraderBadge from "../../components/RepeatTraderBadge.jsx";
-import RequestedOfferPopup from "../../components/RequestedOfferPopup.jsx";
+import OfferDetailPopup from "../../components/OfferDetailPopup.jsx";
 import Toast from "../../components/Toast.jsx";
 import { RefreshIndicator } from "../../components/RefreshIndicator.jsx";
 import { LoadingSpinner } from "../../components/LoadingSpinner.jsx";
@@ -81,10 +78,8 @@ export default function PeachMarket() {
   const PTR_THRESHOLD = 70;
 
   // ── AUTH + API ──
-  const { get, post, patch, auth } = useApi();
+  const { get, post, auth } = useApi();
   const [liveOffers,   setLiveOffers]   = useState(() => getCached("market-offers")?.data ?? null);
-  const { pms: pmsRaw, error: pmFetchError } = useUserPMs(auth);
-  const pmError = !!pmFetchError;
   const [offersLoading, setOffersLoading] = useState(() => !getCached("market-offers"));
   const [isRefetching, setIsRefetching] = useState(false);
   const [pmCatalogue,  setPmCatalogue]  = useState(() => getCached("pm-catalogue")?.data ?? null);
@@ -102,531 +97,26 @@ export default function PeachMarket() {
     return () => document.removeEventListener("mousedown", handler);
   }, [showMyOffersInfo]);
 
-  // ── Popup state ──
-  const [popupOffer,     setPopupOffer]     = useState(null);   // offer object or null
+  // ── Popup + list state ──
+  // The OfferDetailPopup owns all popup-internal state; market-view only
+  // remembers which offer id is currently open and tracks list-level state
+  // that survives popup mount/unmount (requested pill, undo flash, etc.).
+  const [popupOfferId,   setPopupOfferId]   = useState(null);
   const [badgesHelpOpen, setBadgesHelpOpen] = useState(false);
-  const [selectedPM,     setSelectedPM]     = useState(null);   // PM id for trade popup
-  const [popupCurrency,  setPopupCurrency]  = useState(null);   // currency for trade popup
-  const [requestAnim,    setRequestAnim]    = useState(false);  // "Trade requested" animation
   const [undoAnim,       setUndoAnim]       = useState(null);   // offer id being undone
   const [localRequested, setLocalRequested] = useState(() => new Set()); // track requested state locally
   const [acceptedContracts, setAcceptedContracts] = useState(() => new Map()); // offerId → contractId once seller accepts a sent request
-  const [detailsLoading, setDetailsLoading] = useState(false);  // fetching /offer/:id/details
-  const [offerDetails,   setOfferDetails]   = useState(null);   // fetched details for popupOffer
   const [highlightedIds, setHighlightedIds] = useState(() => new Set()); // newly published offers, briefly highlighted
-
-  // ── Own-offer edit / withdraw state ──
-  const [editingPremium,   setEditingPremium]   = useState(false);   // toggle edit mode
-  const [editPremiumVal,   setEditPremiumVal]   = useState("");      // input value
-  const [editSaving,       setEditSaving]       = useState(false);
-  const [editError,        setEditError]        = useState(null);
-  const [withdrawConfirm,  setWithdrawConfirm]  = useState(false);   // show confirm step
-  const [withdrawing,      setWithdrawing]       = useState(false);
-  const [withdrawError,    setWithdrawError]    = useState(null);
-  const [signingModal,     setSigningModal]     = useState(null);    // { offerId } for sell offer cancel
-  const [toast,            setToast]            = useState(null);
-  const [toastTone,        setToastTone]        = useState("default"); // "default" | "error" | "orange" | "success"
-  const [tradeLoading,     setTradeLoading]     = useState(false);
-  // Optimistic pending state during the 5s cancel window before the API fires.
-  // Mirrors the mobile UndoButton pattern (peach-app UndoButton.tsx, TIMER_DURATION = 5000).
-  const [pendingRequest,   setPendingRequest]   = useState(null); // { offer, kind: 'request' | 'instant' }
-  const pendingTimerRef = useRef(null);
-  useEffect(() => () => { if (pendingTimerRef.current) clearTimeout(pendingTimerRef.current); }, []);
-
-  // Popup-session signals used to disambiguate "request disappeared because
-  // counterparty accepted (contract lagging in /contracts/summary)" vs "request
-  // disappeared because counterparty rejected (no contract will ever appear)".
-  // Mirrors the two-tick confirmation pattern in useNotifications.js.
-  const popupRequestSeenRef    = useRef(false);
-  const popupRequestMissingRef = useRef(0);
+  const [signingModal,   setSigningModal]   = useState(null);    // { offerId } for sell offer cancel
+  const [toast,          setToast]          = useState(null);
+  const [toastTone,      setToastTone]      = useState("default"); // "default" | "error" | "orange" | "success"
 
   const isSellTab = tab === "sell";
 
-  // ── Popup helpers ──
-  function openPopup(offer) {
-    if (!isLoggedIn) { navigate("/"); return; }
-    setSelectedPM(null);
-    setPopupCurrency(offer.currencies.length === 1 ? offer.currencies[0] : null);
-    setEditingPremium(false); setEditError(null);
-    setWithdrawConfirm(false); setWithdrawError(null);
-    popupRequestSeenRef.current = false;
-    popupRequestMissingRef.current = 0;
-    setPopupOffer(offer);
-  }
-  function closePopup() {
-    if (pendingTimerRef.current) {
-      clearTimeout(pendingTimerRef.current);
-      pendingTimerRef.current = null;
-    }
-    setPendingRequest(null);
-    setPopupOffer(null);
-    setSelectedPM(null);
-    setPopupCurrency(null);
-    setRequestAnim(false);
-    setTradeLoading(false);
-    setEditingPremium(false); setEditError(null);
-    setWithdrawConfirm(false); setWithdrawError(null);
-    setDetailsLoading(false);
-    setOfferDetails(null);
-    popupRequestSeenRef.current = false;
-    popupRequestMissingRef.current = 0;
-  }
-
-  // ── Fetch details when a sell offer is opened, then poll every 10s ──
-  // Fires two v069 calls in parallel on open and on every poll tick:
-  //   GET /sellOffer/:id                        — full offer details
-  //   GET /sellOffer/:id/tradeRequestPerformed  — existing trade request + chat messages
-  //     · 200 + SellOfferTradeRequest body → request exists (mark as requested)
-  //     · 200 + APISuccess body ({success:true}) → no request exists
-  //     · 404 → no request exists (treat same as APISuccess)
-  // Skipped for own offers (the second endpoint is only meaningful for browsers).
-  useEffect(() => {
-    if (!popupOffer || !auth) {
-      setDetailsLoading(false);
-      setOfferDetails(null);
-      return;
-    }
-    const offerId = popupOffer.id;
-    const isOwn = popupOffer.isOwn;
-    const isSell = popupOffer.type === "ask";
-    const offerTypePath = isSell ? "sellOffer" : "buyOffer";
-    let cancelled = false;
-    setDetailsLoading(true);
-    setOfferDetails(null);
-
-    async function refresh(isInitial) {
-      try {
-        const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
-        const hdrs = { Authorization: `Bearer ${auth.token}` };
-        const [detailsRes, tradeReqRes, contractsRes] = await Promise.all([
-          // Sell-offer details endpoint is sell-exclusive; skip for buy offers.
-          isSell
-            ? fetchWithSessionCheck(`${v069Base}/sellOffer/${offerId}`, { headers: hdrs })
-            : Promise.resolve(null),
-          isOwn
-            ? Promise.resolve(null)
-            : fetchWithSessionCheck(`${v069Base}/${offerTypePath}/${offerId}/tradeRequestPerformed`, { headers: hdrs }),
-          // Detect "seller accepted my request" → a contract appears whose composite
-          // ID ({buyOfferId}-{sellOfferId}) contains this offer's id.
-          isOwn
-            ? Promise.resolve(null)
-            : get('/contracts/summary'),
-        ]);
-        if (cancelled) return;
-        const details = detailsRes && detailsRes.ok ? await detailsRes.json().catch(() => null) : null;
-        let tradeReq = null;
-        let tradeReqExists = false;
-        if (tradeReqRes) {
-          if (tradeReqRes.status === 404) {
-            tradeReqExists = false;
-          } else if (tradeReqRes.ok) {
-            const body = await tradeReqRes.json().catch(() => null);
-            // APISuccess shape ({success:true}) means "no trade request"; anything
-            // else is a SellOfferTradeRequest with chatMessages.
-            if (body && body.success !== true) {
-              tradeReq = body;
-              tradeReqExists = true;
-            }
-          }
-        }
-        // Match a contract back to this offer. Primary: ContractSummary.offerId
-        // (mobile-canonical, mirrors useNotifications.js). Fallback: c.id
-        // dash-split (legacy convention, may not hold — see
-        // notification-poller-false-rejection-bug.md).
-        let acceptedContractId = null;
-        let contractsConfirmedNoMatch = false;
-        if (contractsRes && contractsRes.ok) {
-          const list = await contractsRes.json().catch(() => null);
-          if (Array.isArray(list)) {
-            const offerIdStr = String(offerId);
-            const match = list.find(c =>
-              (c.offerId != null && String(c.offerId) === offerIdStr) ||
-              String(c.id).split("-").includes(offerIdStr)
-            );
-            if (match) acceptedContractId = String(match.id);
-            else contractsConfirmedNoMatch = true;
-          }
-        }
-        if (cancelled) return;
-        setOfferDetails({ details, tradeRequest: tradeReq });
-        if (acceptedContractId) {
-          setAcceptedContracts(prev => {
-            if (prev.get(offerId) === acceptedContractId) return prev;
-            const m = new Map(prev); m.set(offerId, acceptedContractId); return m;
-          });
-        }
-        // Reconcile local optimistic state with server truth, with a tolerance
-        // window for the acceptance/rejection ambiguity once the request body
-        // disappears. See the notification poller's two-tick pattern for prior art.
-        if (tradeReqExists) {
-          popupRequestSeenRef.current = true;
-          popupRequestMissingRef.current = 0;
-          setLocalRequested(prev => prev.has(offerId) ? prev : new Set([...prev, offerId]));
-        } else if (!isOwn && contractsConfirmedNoMatch) {
-          if (popupRequestSeenRef.current) {
-            // Request was alive earlier in this popup; now gone, no contract
-            // matched. Could be (a) acceptance + lagging /contracts/summary,
-            // (b) rejection, or (c) linkage still broken (see
-            // notification-poller-false-rejection-bug.md). Tolerate ~30s.
-            popupRequestMissingRef.current += 1;
-            if (
-              popupRequestMissingRef.current >= 3 &&
-              !acceptedContracts.has(offerId)
-            ) {
-              setLocalRequested(prev => {
-                if (!prev.has(offerId)) return prev;
-                const s = new Set(prev); s.delete(offerId); return s;
-              });
-              closePopup();
-            }
-          } else {
-            // Never saw a live request in this popup — stale optimistic state.
-            setLocalRequested(prev => {
-              if (!prev.has(offerId)) return prev;
-              const s = new Set(prev); s.delete(offerId); return s;
-            });
-          }
-        }
-      } catch {
-        // Swallow — popup still shows cached offer data on failure.
-      } finally {
-        if (isInitial && !cancelled) setDetailsLoading(false);
-      }
-    }
-
-    refresh(true);
-    const iv = setInterval(() => refresh(false), 10000);
-    return () => { cancelled = true; clearInterval(iv); };
-  }, [popupOffer?.id, popupOffer?.type, popupOffer?.isOwn]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Own-offer handlers ──
-  async function handleSavePremium(offer) {
-    const val = parseFloat(editPremiumVal);
-    if (isNaN(val)) { setEditError("Enter a valid number"); return; }
-    setEditSaving(true); setEditError(null);
-    try {
-      const res = await patch(`/offer/${offer.id}`, { premium: val });
-      if (!res.ok) {
-        const d = await res.json().catch(() => null);
-        throw new Error(d?.error || d?.message || `Server error ${res.status}`);
-      }
-      // Update offer in local state
-      setPopupOffer(prev => ({ ...prev, premium: val }));
-      if (liveOffers) {
-        setLiveOffers(prev => prev.map(o => o.id === offer.id ? { ...o, premium: val } : o));
-      }
-      setEditingPremium(false);
-      setToast("Premium updated");
-      setToastTone("success");
-      setTimeout(() => { setToast(null); setToastTone("default"); }, 3000);
-    } catch (err) {
-      setEditError(err.message || "Failed to save");
-    } finally {
-      setEditSaving(false);
-    }
-  }
-
-  async function handleWithdraw(offer) {
-    setWithdrawing(true); setWithdrawError(null);
-    try {
-      const res = await post(`/offer/${offer.id}/cancel`, {});
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(data?.error || data?.message || `Server error ${res.status}`);
-      }
-      // Sell offers return a PSBT → needs mobile signing
-      if (data?.psbt) {
-        setSigningModal({ offerId: offer.id });
-        closePopup();
-        // Remove from list
-        if (liveOffers) setLiveOffers(prev => prev.filter(o => o.id !== offer.id));
-        setToast("Refund sent to mobile for signing");
-        setToastTone("orange");
-        setTimeout(() => { setToast(null); setToastTone("default"); }, 4000);
-        return;
-      }
-      // Buy offers — done
-      closePopup();
-      if (liveOffers) setLiveOffers(prev => prev.filter(o => o.id !== offer.id));
-      setToast("Offer withdrawn");
-      setToastTone("success");
-      setTimeout(() => { setToast(null); setToastTone("default"); }, 3000);
-    } catch (err) {
-      setWithdrawError(err.message || "Failed to withdraw");
-    } finally {
-      setWithdrawing(false);
-    }
-  }
-
-  // Does a user's PM have a valid combination for a given currency on this offer?
-  // Requires BOTH: the offer accepts this PM type for that currency AND the user
-  // has configured that currency on their PM.
-  function pmWorksForCurrency(offer, pm, currency) {
-    const methods = offer._raw?.meansOfPayment?.[currency] ?? [];
-    return methods.includes(pm.type) && (pm.currencies ?? []).includes(currency);
-  }
-
-  // Resolve the offer owner's PGP public keys.
-  // v069 SellOffer responses include a full `user` object with `pgpPublicKeys`,
-  // but v069 BuyOffer69 responses only have `userId` — in that case we must
-  // fetch the user profile separately (same approach as mobile's useUserDetails).
-  async function resolveCounterpartyKeys(offer) {
-    const direct = (offer._raw?.user?.pgpPublicKeys ?? [])
-      .map(k => typeof k === "string" ? k : k?.publicKey)
-      .filter(Boolean);
-    if (direct.length > 0) return direct;
-
-    const userId = offer._raw?.userId ?? offer._raw?.user?.id;
-    if (!userId) return [];
-    try {
-      const res = await get(`/user/${userId}`);
-      if (!res.ok) return [];
-      const user = await res.json().catch(() => null);
-      return (user?.pgpPublicKeys ?? [])
-        .map(k => typeof k === "string" ? k : k?.publicKey)
-        .filter(Boolean);
-    } catch {
-      return [];
-    }
-  }
-
-  // Begin the 5s cancel window. The popup swaps the action buttons for an Undo
-  // button whose fill drains over 5s; on expiry executeRequestTrade/executeInstantTrade
-  // fires the actual API call. Tapping Undo (or closing the popup) cancels.
-  function stageRequest(offer, kind) {
-    if (!auth?.pgpPrivKey || !selectedPM || !popupCurrency || tradeLoading) return;
-    if (pendingTimerRef.current) clearTimeout(pendingTimerRef.current);
-    setPendingRequest({ offer, kind });
-    pendingTimerRef.current = setTimeout(() => {
-      pendingTimerRef.current = null;
-      setPendingRequest(null);
-      if (kind === "instant") executeInstantTrade(offer);
-      else executeRequestTrade(offer);
-    }, 5000);
-  }
-
-  function cancelPendingRequest() {
-    if (pendingTimerRef.current) {
-      clearTimeout(pendingTimerRef.current);
-      pendingTimerRef.current = null;
-    }
-    setPendingRequest(null);
-  }
-
-  function sendNowPendingRequest() {
-    if (!pendingRequest) return;
-    if (pendingTimerRef.current) {
-      clearTimeout(pendingTimerRef.current);
-      pendingTimerRef.current = null;
-    }
-    const { offer, kind } = pendingRequest;
-    setPendingRequest(null);
-    if (kind === "instant") executeInstantTrade(offer);
-    else executeRequestTrade(offer);
-  }
-
-  async function executeRequestTrade(offer) {
-    if (!auth?.pgpPrivKey || !selectedPM || !popupCurrency || tradeLoading) return;
-    setTradeLoading(true);
-
-    const pmObj = userPMs.find(pm => pm.id === selectedPM);
-    if (!pmObj) return;
-
-    // Build clean PM data (strip structural fields, keep payment details only)
-    const STRUCTURAL = new Set(["id", "methodId", "type", "name", "label", "currencies", "hashes", "details", "data", "country", "anonymous"]);
-    const cleanData = {};
-    const pmDetails = pmObj.details || {};
-    for (const [k, v] of Object.entries(pmDetails)) {
-      if (!STRUCTURAL.has(k) && typeof v !== "object") cleanData[k] = v;
-    }
-
-    try {
-      // Encrypt PM data with symmetric key, encrypt symmetric key for counterparty
-      const symmetricKey = generateSymmetricKey();
-      const counterpartyKeys = await resolveCounterpartyKeys(offer);
-      if (counterpartyKeys.length === 0) {
-        setToast("Could not load recipient PGP key — please try again");
-        setToastTone("error");
-        setTimeout(() => { setToast(null); setToastTone("default"); }, 4000);
-        setTradeLoading(false);
-        return;
-      }
-
-      let symmetricKeyEncrypted = null;
-      let symmetricKeySignature = null;
-      let paymentDataEncrypted = null;
-      let paymentDataSignature = null;
-      let paymentDataHashed = null;
-
-      const keyResult = await encryptForRecipients(symmetricKey, counterpartyKeys, auth.pgpPrivKey);
-      if (keyResult) {
-        symmetricKeyEncrypted = keyResult.encrypted;
-        symmetricKeySignature = keyResult.signature;
-      }
-
-      if (Object.keys(cleanData).length > 0 && symmetricKey) {
-        const pmJson = JSON.stringify(cleanData);
-        paymentDataEncrypted = await encryptSymmetric(pmJson, symmetricKey);
-        paymentDataSignature = await signPGPMessage(pmJson, auth.pgpPrivKey);
-        paymentDataHashed = await hashPaymentFields(pmObj.type, cleanData, pmDetails.country || undefined);
-      }
-
-      // POST trade request to v069
-      const offerType = offer.type === "bid" ? "buyOffer" : "sellOffer";
-      const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
-      const res = await fetchWithSessionCheck(`${v069Base}/${offerType}/${offer.id}/tradeRequestPerformed`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${auth.token}`,
-        },
-        body: JSON.stringify({
-          paymentMethod: pmObj.type,
-          currency: popupCurrency,
-          paymentDataHashed,
-          paymentDataEncrypted,
-          paymentDataSignature,
-          symmetricKeyEncrypted,
-          symmetricKeySignature,
-        }),
-      });
-
-      if (res.ok) {
-        // Show animation, mark as requested, refresh offers from API,
-        // then return to the offer modal in its "already requested" state.
-        markSentRequestCreated(offer.id, offerType);
-        setRequestAnim(true);
-        setLocalRequested(prev => new Set([...prev, offer.id]));
-        clearCache("market-offers");
-        fetchMarket();
-        setTimeout(() => {
-          setRequestAnim(false);
-          setTradeLoading(false);
-        }, 1600);
-      } else {
-        const err = await res.json().catch(() => ({}));
-        setToast("Trade request failed: " + (err.error || "try again"));
-        setToastTone("error");
-        setTimeout(() => { setToast(null); setToastTone("default"); }, 4000);
-        setTradeLoading(false);
-      }
-    } catch (e) {
-      setToast("Trade request error: " + e.message);
-      setToastTone("error");
-      setTimeout(() => { setToast(null); setToastTone("default"); }, 4000);
-      setTradeLoading(false);
-    }
-  }
-
-  async function executeInstantTrade(offer) {
-    console.log("[InstantTrade] called", { pgpPrivKey: !!auth?.pgpPrivKey, selectedPM, popupCurrency, tradeLoading, offerType: offer?.type, offerId: offer?.id });
-    if (!auth?.pgpPrivKey || !selectedPM || !popupCurrency || tradeLoading) return;
-    setTradeLoading(true);
-
-    // 1. Find the selected PM data
-    const pmObj = userPMs.find(pm => pm.id === selectedPM);
-    console.log("[InstantTrade] pmObj:", pmObj ? pmObj.id : "NOT FOUND", "selectedPM:", selectedPM, "userPMs IDs:", userPMs.map(p => p.id));
-    if (!pmObj) return;
-
-    // 2. Build clean PM data (same pattern as trades-dashboard match acceptance)
-    const STRUCTURAL = new Set(["id", "methodId", "type", "name", "label", "currencies", "hashes", "details", "data", "country", "anonymous"]);
-    const cleanData = {};
-    const pmDetails = pmObj.details || {};
-    for (const [k, v] of Object.entries(pmDetails)) {
-      if (!STRUCTURAL.has(k) && typeof v !== "object") cleanData[k] = v;
-    }
-    console.log("[InstantTrade] cleanData:", cleanData);
-
-    // 3. Generate symmetric key and encrypt for counterparty
-    let symmetricKeyEncrypted = null;
-    let symmetricKeySignature = null;
-    let paymentDataEncrypted = null;
-    let paymentDataSignature = null;
-    let paymentDataHashed = null;
-
-    try {
-      // Fetch server PGP public key (server must decrypt paymentDataEncrypted)
-      const infoRes = await get('/info');
-      const infoData = await infoRes.json().catch(() => null);
-      const serverPGPKey = infoData?.peach?.pgpPublicKey ?? null;
-      console.log("[InstantTrade] Server PGP key:", serverPGPKey ? "fetched" : "MISSING");
-
-      const symmetricKey = generateSymmetricKey();
-      const counterpartyKeys = await resolveCounterpartyKeys(offer);
-      console.log("[InstantTrade] counterpartyKeys count:", counterpartyKeys.length);
-      if (counterpartyKeys.length === 0) {
-        setToast("Could not load recipient PGP key — please try again");
-        setToastTone("error");
-        setTimeout(() => { setToast(null); setToastTone("default"); }, 4000);
-        setTradeLoading(false);
-        return;
-      }
-
-      const keyResult = await encryptForRecipients(symmetricKey, counterpartyKeys, auth.pgpPrivKey);
-      if (keyResult) {
-        symmetricKeyEncrypted = keyResult.encrypted;
-        symmetricKeySignature = keyResult.signature;
-      }
-      console.log("[InstantTrade] encryptForRecipients:", keyResult ? "OK" : "FAILED");
-
-      if (Object.keys(cleanData).length > 0 && symmetricKey) {
-        const pmJson = JSON.stringify(cleanData);
-        if (serverPGPKey) {
-          paymentDataEncrypted = await encryptForPublicKey(pmJson, serverPGPKey);
-          console.log("[InstantTrade] encryptForPublicKey result:", paymentDataEncrypted ? "OK" : "FAILED (null)");
-        }
-        if (!paymentDataEncrypted) {
-          console.warn("[InstantTrade] Falling back to symmetric encryption");
-          paymentDataEncrypted = await encryptSymmetric(pmJson, symmetricKey);
-        }
-        paymentDataSignature = await signPGPMessage(pmJson, auth.pgpPrivKey);
-        paymentDataHashed = await hashPaymentFields(pmObj.type, cleanData, pmDetails.country || undefined);
-      }
-      console.log("[InstantTrade] encryption done, paymentDataEncrypted:", !!paymentDataEncrypted);
-
-      // 4. Call performInstantTrade (with 30s timeout to avoid hanging)
-      const offerType = offer.type === "bid" ? "buyOffer" : "sellOffer";
-      const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 30000);
-      const res = await fetchWithSessionCheck(`${v069Base}/${offerType}/${offer.id}/performInstantTrade`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${auth.token}`,
-        },
-        body: JSON.stringify({
-          paymentMethod: pmObj.type,
-          currency: popupCurrency,
-          paymentDataHashed,
-          paymentDataEncrypted,
-          paymentDataSignature,
-          symmetricKeyEncrypted,
-          symmetricKeySignature,
-        }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
-
-      if (res.ok) {
-        const contract = await res.json();
-        const contractId = contract.id ?? contract.contractId;
-        closePopup();
-        if (contractId) navigate(`/trade/${contractId}`);
-      } else {
-        const err = await res.json().catch(() => ({}));
-        setToast("Instant trade failed: " + (err.error || "try again"));
-        setToastTone("error");
-        setTimeout(() => { setToast(null); setToastTone("default"); }, 4000);
-      }
-    } catch (e) {
-      const msg = e.name === "AbortError" ? "Request timed out — try again" : e.message;
-      setToast("Instant trade error: " + msg);
-      setToastTone("error");
-      setTimeout(() => { setToast(null); setToastTone("default"); }, 4000);
-    } finally {
-      setTradeLoading(false);
-    }
+  function showToast(message, tone = "default", durationMs = 3500) {
+    setToast(message);
+    setToastTone(tone);
+    setTimeout(() => { setToast(null); setToastTone("default"); }, durationMs);
   }
 
 
@@ -651,37 +141,6 @@ export default function PeachMarket() {
 
   // ── Offer normalizers (stable references, used by fetchMarket + refresh) ──
   const peachId = auth?.peachId ?? null;
-
-  function normalizeOffer(o, typeHint) {
-    const currencies = o.meansOfPayment ? Object.keys(o.meansOfPayment) : [];
-    const methods = o.meansOfPayment
-      ? [...new Set(Object.values(o.meansOfPayment).flat())]
-      : [];
-    return {
-      id: String(o.id),
-      tradeId: formatTradeId(o.id, "offer"),
-      type: o.type ?? typeHint,
-      amount: o.amountSats ?? (Array.isArray(o.amount) ? o.amount[0] : (o.amount ?? 0)),
-      premium: o.premium ?? 0,
-      methods,
-      currencies,
-      rep: toPeaches(o.user?.rating ?? 0),
-      trades: o.user?.trades ?? 0,
-      badges: (o.user?.medals ?? o.user?.badges ?? []).map((m) =>
-        m === "fastTrader" ? "fast"
-          : m === "superTrader" ? "supertrader"
-          : m,
-      ),
-      auto: o.allowedToInstantTrade ?? false,
-      experienceLevel: o.experienceLevelCriteria ?? null,
-      online: o.user?.online ?? false,
-      userId: o.user?.id ?? "",
-      peachId: o.user?.id ? ("PEACH" + o.user.id.slice(0, 8).toUpperCase()) : "",
-      isOwn: !!peachId && (o.user?.id === peachId || o.user?.id?.toLowerCase?.() === peachId?.toLowerCase?.()),
-      hasPerformedTradeRequest: !!o.hasPerformedTradeRequest,
-      _raw: o,
-    };
-  }
 
   function normalizeOwnOffer(o, type) {
     const methods = o.meansOfPayment ? Object.values(o.meansOfPayment).flat() : [];
@@ -740,8 +199,8 @@ export default function PeachMarket() {
         const merged = [];
         for (const o of ownBidsArr) { const id = String(o.id); if (!seen.has(id)) { seen.add(id); merged.push(normalizeOwnOffer(o, "bid")); } }
         for (const o of ownAsksArr) { const id = String(o.id); if (!seen.has(id)) { seen.add(id); merged.push(normalizeOwnOffer(o, "ask")); } }
-        for (const o of bidsArr)    { const id = String(o.id); if (!seen.has(id)) { seen.add(id); merged.push(normalizeOffer(o, "bid")); } }
-        for (const o of asksArr)    { const id = String(o.id); if (!seen.has(id)) { seen.add(id); merged.push(normalizeOffer(o, "ask")); } }
+        for (const o of bidsArr)    { const id = String(o.id); if (!seen.has(id)) { seen.add(id); merged.push(normalizeOffer(o, "bid", peachId)); } }
+        for (const o of asksArr)    { const id = String(o.id); if (!seen.has(id)) { seen.add(id); merged.push(normalizeOffer(o, "ask", peachId)); } }
         all = merged;
       } else {
         // Not authenticated: use v1 public search
@@ -757,8 +216,8 @@ export default function PeachMarket() {
         const asksArr = Array.isArray(asks) ? asks : asks?.offers ?? [];
         console.log("[MarketView] v1 bids:", bidsArr.length, "asks:", asksArr.length);
         all = [
-          ...bidsArr.map(normalizeOffer),
-          ...asksArr.map(normalizeOffer),
+          ...bidsArr.map(o => normalizeOffer(o, "bid", null)),
+          ...asksArr.map(o => normalizeOffer(o, "ask", null)),
         ];
       }
       setCache("market-offers", all);
@@ -855,80 +314,6 @@ export default function PeachMarket() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const marketOffers = liveOffers ?? [];
-  const userPMs = (() => {
-    if (!pmsRaw) return [];
-    const STRUCTURAL = new Set([
-      "id", "methodId", "type", "name", "label", "currencies", "hashes",
-      "details", "data", "country", "anonymous",
-    ]);
-    const shortId = (raw) => raw.replace(/-\d+$/, "");
-    const sweepFields = (obj) => {
-      const explicit = obj.data || obj.details || null;
-      if (explicit) return explicit;
-      const swept = {};
-      for (const [k, v] of Object.entries(obj)) {
-        if (!STRUCTURAL.has(k) && typeof v !== "object") swept[k] = v;
-      }
-      return swept;
-    };
-    if (Array.isArray(pmsRaw) && pmsRaw.length > 0) {
-      return pmsRaw.map(pm => ({
-        id: pm.id,
-        type: shortId(pm.type ?? pm.id),
-        currencies: pm.currencies ?? [],
-        details: sweepFields(pm),
-      }));
-    }
-    if (typeof pmsRaw === "object") {
-      return Object.entries(pmsRaw).map(([key, val]) => ({
-        id: val?.id || key,
-        type: shortId(key),
-        currencies: val?.currencies ?? [],
-        details: sweepFields(val || {}),
-      }));
-    }
-    return [];
-  })();
-
-  // ── Open popup from navigation state (e.g. clicked a sent trade request on TRADES) ──
-  // Once handled, clear the state so a remount/rerender doesn't reopen it.
-  const navHandledRef = useRef(false);
-  useEffect(() => {
-    if (navHandledRef.current) return;
-    const navState = location.state;
-    if (!navState?.openOfferId) return;
-    const found = marketOffers.find(o => String(o.id) === String(navState.openOfferId));
-    if (found) {
-      navHandledRef.current = true;
-      openPopup(found);
-      navigate(location.pathname, { replace: true, state: null });
-      return;
-    }
-    // Not in list — construct a minimal stub so the popup can fetch full details.
-    if (navState.openOfferData) {
-      navHandledRef.current = true;
-      const d = navState.openOfferData;
-      const stub = {
-        id: String(d.id ?? navState.openOfferId),
-        tradeId: d.tradeId ?? formatTradeId(d.id ?? navState.openOfferId, "offer"),
-        type: navState.openOfferType === "buyOffer" ? "bid" : "ask",
-        amount: d.amount ?? 0,
-        premium: d.premium ?? 0,
-        methods: d.methods ?? [],
-        currencies: d.currencies ?? [],
-        rep: 0, trades: 0, badges: [],
-        auto: false,
-        experienceLevel: null,
-        online: false,
-        userId: "",
-        peachId: "",
-        isOwn: false,
-        hasPerformedTradeRequest: true,
-      };
-      openPopup(stub);
-      navigate(location.pathname, { replace: true, state: null });
-    }
-  }, [location.state, marketOffers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Highlight newly published offers when arriving from Offer Creation ──
   // location.state shape: { highlightOfferIds: string[], highlightDirection: "buy"|"sell" }
@@ -1189,447 +574,46 @@ export default function PeachMarket() {
       : (n < 0 ? "var(--success)" : "var(--error)");
   }
 
-  // ── Popup renderer (inline JSX, not a component — avoids remount flicker) ──
-  const popupContent = (() => {
-    if (!popupOffer) return null;
-    const offer = popupOffer;
-    const isOwn = offer.isOwn;
-    const isReq = effectiveRequested.has(offer.id) && !isOwn;
-    const isInstant = offer.auto;
-    const sym = currSym(selectedCurrency);
-    const rate = Math.round(btcPrice * (1 + offer.premium / 100));
-    const fiat = (offer.amount / 100_000_000) * btcPrice * (1 + offer.premium / 100);
-    const premCls = offer.premium === 0 ? "prem-zero" : isSellTab
-      ? (offer.premium > 0 ? "prem-good" : "prem-bad")
-      : (offer.premium < 0 ? "prem-good" : "prem-bad");
-    // Compute valid PM/currency combinations: a row is valid iff the user's PM
-    // supports that currency AND the offer accepts the PM for that currency.
-    const validByPM = userPMs.map(pm => ({
-      pm,
-      currencies: offer.currencies.filter(c => pmWorksForCurrency(offer, pm, c)),
-    }));
-    const hasMissingPM = !validByPM.some(v => v.currencies.length > 0);
-    // PM list to render: when a currency is selected, narrow to PMs valid for it;
-    // otherwise show every PM that's valid for at least one offer currency.
-    const visiblePMs = popupCurrency
-      ? validByPM.filter(v => v.currencies.includes(popupCurrency)).map(v => v.pm)
-      : validByPM.filter(v => v.currencies.length > 0).map(v => v.pm);
-
-    // ── "Trade Requested" success animation ──
-    if (requestAnim) {
-      return (
-        <div className="popup-overlay" onClick={closePopup}>
-          <div className="popup-card popup-anim-card" onClick={e => e.stopPropagation()}>
-            <div className="popup-success-anim">
-              <div className="popup-success-circle">
-                <svg width="38" height="38" viewBox="0 0 38 38" fill="none">
-                  <path d="M10 19l6 6 12-12" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"
-                    className="popup-check-path"/>
-                </svg>
-              </div>
-              <div style={{fontWeight:800,fontSize:"1.1rem",color:"var(--black)",marginTop:16}}>Trade requested!</div>
-              <div style={{fontSize:".82rem",color:"var(--black-65)",fontWeight:500,marginTop:4}}>
-                You'll be notified when the {isSellTab ? "buyer" : "seller"} responds.
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // ── Already-requested offer → use the shared RequestedOfferPopup component
-    // (same modal as TRADES screen for sent trade requests).
-    if (isReq && !isOwn) {
-      const acceptedContractId = acceptedContracts.get(offer.id) || null;
-      return (
-        <RequestedOfferPopup
-          offer={offer}
-          auth={auth}
-          selectedCurrency={selectedCurrency}
-          btcPrice={btcPrice}
-          onClose={closePopup}
-          acceptedContractId={acceptedContractId}
-          onAccepted={(contractId) => {
-            setAcceptedContracts(prev => {
-              if (prev.get(offer.id) === contractId) return prev;
-              const m = new Map(prev); m.set(offer.id, contractId); return m;
-            });
-          }}
-          onOpenTrade={() => {
-            const id = acceptedContracts.get(offer.id);
-            if (!id) return;
-            closePopup();
-            navigate(`/trade/${id}`);
-          }}
-          onUndoSuccess={(offerId) => {
-            setLocalRequested(prev => { const s = new Set(prev); s.delete(offerId); return s; });
-            setUndoAnim(offerId);
-            setTimeout(() => setUndoAnim(null), 1200);
-            clearCache("market-offers");
-            fetchMarket();
-          }}
-        />
-      );
-    }
-
-    return (
-      <div className="popup-overlay" onClick={closePopup}>
-        <div className="popup-card" onClick={e => e.stopPropagation()}>
-          {/* Header */}
-          <div className="popup-header">
-            <div className="popup-header-left">
-              <span className="popup-title">
-                {isOwn ? "Your offer" : isReq ? "Trade requested" : "Offer details"}
-                <span className="offer-id-label" style={{marginLeft:8}}>{offer.tradeId}</span>
-                {detailsLoading && (
-                  <span
-                    aria-label="Loading details"
-                    title="Loading details"
-                    style={{
-                      display:"inline-block",
-                      marginLeft:8,
-                      fontSize:".78rem",
-                      animation:"spin 1s linear infinite",
-                      color:"var(--black-50)",
-                      verticalAlign:"middle",
-                    }}
-                  >↻</span>
-                )}
-              </span>
-              {isInstant && <span className="auto-badge">⚡ Instant</span>}
-              {offer.experienceLevel === "newUsersOnly" && <span className="exp-badge">🆕 FOR NEW USERS</span>}
-              {offer.experienceLevel === "experiencedUsersOnly" && <span className="exp-badge">👤 FOR EXPERIENCED USERS</span>}
-            </div>
-            <button className="popup-close" onClick={closePopup}>✕</button>
-          </div>
-
-          {/* Offer summary */}
-          <div className="popup-body">
-            {/* Peer row */}
-            <div className="popup-peer-row">
-              <div
-                style={{cursor: offer.userId && !isOwn ? "pointer" : "default"}}
-                onClick={(e) => { if (offer.userId && !isOwn) { e.stopPropagation(); closePopup(); navigate(`/user/${offer.userId}`); } }}
-                title={offer.userId && !isOwn ? "View user profile" : undefined}
-              >
-                <Avatar peachId={offer.userId} size={30} online={offer.online} />
-              </div>
-              <div style={{flex:1}}>
-                {offer.userId && (
-                  <div
-                    onClick={(e) => { if (!isOwn) { e.stopPropagation(); closePopup(); navigate(`/user/${offer.userId}`); } }}
-                    style={{
-                      fontSize:".76rem", fontWeight:700, fontFamily:"monospace", letterSpacing:".04em",
-                      color: isOwn ? "var(--black-65)" : "var(--primary)",
-                      cursor: isOwn ? "default" : "pointer",
-                      textDecoration: isOwn ? "none" : "underline",
-                      marginBottom: 2,
-                    }}
-                    title={isOwn ? undefined : "View user profile"}
-                  >
-                    {formatPeachId(offer.userId).toLowerCase()}
-                  </div>
-                )}
-                <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
-                  <PeachRating rep={offer.rep} size={16} trades={offer.trades}/>
-                  <span className="rep-trades">({offer.trades} trades)</span>
-                  {isOwn && <span className="own-label" style={{marginLeft:6}}>Your offer</span>}
-                </div>
-              </div>
-              <div className="popup-user-badges">
-                {offer.badges.includes("supertrader") && <span className="badge badge-super" style={{cursor:"pointer"}} onClick={(e) => { e.stopPropagation(); setBadgesHelpOpen(true); }}>🏆 Super</span>}
-                {offer.badges.includes("fast") && <span className="badge badge-fast" style={{cursor:"pointer"}} onClick={(e) => { e.stopPropagation(); setBadgesHelpOpen(true); }}>⚡ Fast</span>}
-                {offer.badges.includes("ambassador") && <span className="badge badge-ambassador" style={{cursor:"pointer"}} onClick={(e) => { e.stopPropagation(); setBadgesHelpOpen(true); }}>⭐ Early adopter</span>}
-                <RepeatTraderBadge userId={offer.userId} />
-              </div>
-            </div>
-
-            {/* Summary rows */}
-            <div className="popup-summary">
-              <div className="popup-row">
-                <span className="popup-label">Amount</span>
-                <span className="popup-value"><SatsAmount sats={offer.amount}/></span>
-              </div>
-              <div className="popup-row">
-                <span className="popup-label">Fiat value</span>
-                <span className="popup-value" style={{fontWeight:800}}>{sym}{fmtFiat(fiat)}</span>
-              </div>
-              <div className="popup-row">
-                <span className="popup-label">Price</span>
-                <span className="popup-value">{rate.toLocaleString("fr-FR")} {sym} / BTC</span>
-              </div>
-              <div className="popup-row">
-                <span className="popup-label">Premium</span>
-                <span className={`popup-value ${premCls}`} style={{fontWeight:800}}>
-                  {offer.premium > 0 ? "+" : ""}{offer.premium.toFixed(2)}%
-                </span>
-              </div>
-              <div className="popup-row">
-                <span className="popup-label">Payment methods</span>
-                <span className="popup-value">
-                  <span style={{display:"flex",gap:4,flexWrap:"wrap",justifyContent:"flex-end"}}>
-                    {offer.methods.map(m => <span key={m} className="method-chip">{methodDisplayName(m)}</span>)}
-                  </span>
-                </span>
-              </div>
-              <div className="popup-row">
-                <span className="popup-label">Currencies</span>
-                <span className="popup-value">
-                  <span style={{display:"flex",gap:3,flexWrap:"wrap",justifyContent:"flex-end"}}>
-                    {offer.currencies.map(c => <span key={c} className="currency-chip">{c}</span>)}
-                  </span>
-                </span>
-              </div>
-              {offerDetails?.details?.escrow && (
-                <div className="popup-row">
-                  <span className="popup-label">Onchain escrow</span>
-                  <span className="popup-value">
-                    <a
-                      href={`https://mempool.space/address/${offerDetails.details.escrow}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{
-                        fontSize:".78rem", fontWeight:600, color:"var(--primary)",
-                        textDecoration:"none", display:"inline-flex", alignItems:"center", gap:4,
-                      }}
-                    >
-                      See on mempool.space
-                      <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M2 9L9 2M9 2H5M9 2v4"/>
-                      </svg>
-                    </a>
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* ── TRADE REQUEST variant: PM selector ── */}
-            {!isOwn && !isReq && (
-              <>
-                <div className="popup-section-label">
-                  Select your payment method
-                </div>
-                {pmError ? (
-                  <div style={{padding:"12px 16px",borderRadius:10,background:"var(--error-bg)",
-                    color:"var(--error)",fontWeight:700,fontSize:".82rem",textAlign:"center"}}>
-                    Failed to load payment data
-                  </div>
-                ) : hasMissingPM ? (
-                  <div className="popup-pm-warning">
-                    <span style={{fontSize:"1rem",flexShrink:0}}>⚠️</span>
-                    <div>
-                      <div style={{fontWeight:700,fontSize:".82rem",color:"var(--black)",marginBottom:2}}>
-                        No matching payment method
-                      </div>
-                      <div style={{fontSize:".76rem",color:"var(--black-65)",lineHeight:1.5}}>
-                        This offer accepts {offer.methods.map(methodDisplayName).join(", ")} but you haven't configured any of these.
-                      </div>
-                      <button className="popup-pm-link" onClick={() => navigate("/payment-methods")}>
-                        Go to Payment Methods →
-                      </button>
-                    </div>
-                  </div>
-                ) : visiblePMs.length === 0 ? (
-                  <div className="popup-pm-warning">
-                    <span style={{fontSize:"1rem",flexShrink:0}}>⚠️</span>
-                    <div>
-                      <div style={{fontWeight:700,fontSize:".82rem",color:"var(--black)",marginBottom:2}}>
-                        No payment method for {popupCurrency}
-                      </div>
-                      <div style={{fontSize:".76rem",color:"var(--black-65)",lineHeight:1.5}}>
-                        None of your configured payment methods support {popupCurrency} for this offer.
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="popup-pm-list">
-                    {visiblePMs.map(pm => {
-                      const sel = selectedPM === pm.id;
-                      const detailStr = pm.type === "SEPA"
-                        ? `${pm.details.beneficiary} · ${pm.details.iban?.slice(0,8)}…`
-                        : pm.type === "Revolut"
-                          ? pm.details.userName
-                          : pm.details.email || pm.details.userName || "—";
-                      const validChips = pm.currencies.filter(c => pmWorksForCurrency(offer, pm, c));
-                      return (
-                        <button key={pm.id}
-                          className={`popup-pm-option${sel ? " selected" : ""}`}
-                          onClick={() => {
-                            if (sel) { setSelectedPM(null); return; }
-                            setSelectedPM(pm.id);
-                            const currencyValid = popupCurrency && pmWorksForCurrency(offer, pm, popupCurrency);
-                            if (!currencyValid) {
-                              // Auto-pick the first offer currency this PM supports
-                              const firstValid = offer.currencies.find(c => pmWorksForCurrency(offer, pm, c)) ?? null;
-                              setPopupCurrency(firstValid);
-                            }
-                          }}>
-                          <div className={`popup-pm-radio${sel ? " checked" : ""}`}>
-                            {sel && <div className="popup-pm-radio-dot"/>}
-                          </div>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontWeight:700,fontSize:".82rem"}}>{pm.type}</div>
-                            <div style={{fontSize:".72rem",color:"var(--black-65)",
-                              overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                              {detailStr}
-                            </div>
-                          </div>
-                          <span style={{display:"flex",gap:3,flexShrink:0}}>
-                            {validChips.map(c =>
-                              <span key={c} className="currency-chip" style={{fontSize:".6rem"}}>{c}</span>
-                            )}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Currency selector — only when offer has 2+ currencies */}
-                {!hasMissingPM && offer.currencies.length > 1 && (
-                  <>
-                    <div className="popup-section-label">
-                      Select currency
-                    </div>
-                    <div className="popup-currency-pills">
-                      {offer.currencies.map(c => (
-                        <button key={c}
-                          className={`popup-cur-pill${popupCurrency === c ? " selected" : ""}`}
-                          onClick={() => {
-                            if (popupCurrency === c) { setPopupCurrency(null); return; }
-                            setPopupCurrency(c);
-                            // Clear PM if the new currency makes it invalid
-                            const pm = userPMs.find(p => p.id === selectedPM);
-                            if (pm && !pmWorksForCurrency(offer, pm, c)) setSelectedPM(null);
-                          }}>
-                          {c}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </>
-            )}
-
-          </div>
-
-          {/* Footer actions */}
-          <div className="popup-footer">
-            {/* ── Trade request (not own, not already requested) ── */}
-            {!isOwn && !isReq && (
-              pendingRequest && pendingRequest.offer.id === offer.id ? (
-                <div className="popup-pending-row">
-                  <div className="popup-pending-top">
-                    <div className="popup-pending-copy">
-                      Sending in 5s — tap Undo to cancel
-                    </div>
-                    <button
-                      type="button"
-                      className="popup-pending-sendnow"
-                      onClick={sendNowPendingRequest}>
-                      send now →
-                    </button>
-                  </div>
-                  <button
-                    className={`popup-pending-btn${pendingRequest.kind === "instant" ? " popup-pending-btn-instant" : ""}`}
-                    onClick={cancelPendingRequest}>
-                    <span className="fill" />
-                    <span className="label">Undo</span>
-                  </button>
-                </div>
-              ) : isInstant ? (
-                <button className="popup-btn popup-btn-instant"
-                  disabled={!selectedPM || !popupCurrency || tradeLoading}
-                  onClick={() => stageRequest(offer, "instant")}>
-                  {tradeLoading ? "Requesting…" : "⚡ Instant trade"}
-                </button>
-              ) : (
-                <button className="popup-btn popup-btn-request"
-                  disabled={!selectedPM || !popupCurrency || tradeLoading}
-                  onClick={() => stageRequest(offer, "request")}>
-                  {tradeLoading ? "Sending…" : "Request trade"}
-                </button>
-              )
-            )}
-
-            {/* ── Own offer ── */}
-            {isOwn && !withdrawConfirm && (
-              <>
-                {/* Premium edit */}
-                {editingPremium ? (
-                  <div style={{display:"flex",gap:8,width:"100%",alignItems:"center"}}>
-                    <input type="number" step="0.1" value={editPremiumVal}
-                      onChange={e => setEditPremiumVal(e.target.value)}
-                      style={{flex:1,padding:"10px 14px",borderRadius:10,border:"1.5px solid var(--black-10)",
-                        fontFamily:"var(--font)",fontSize:".88rem",fontWeight:700,outline:"none"}}
-                      placeholder="e.g. 5.0" autoFocus/>
-                    <span style={{fontSize:".82rem",fontWeight:700,color:"var(--black-50)"}}>%</span>
-                    <button className="popup-btn popup-btn-edit" onClick={() => handleSavePremium(offer)}
-                      disabled={editSaving} style={{flex:"none",width:"auto",padding:"10px 20px"}}>
-                      {editSaving ? "Saving…" : "Save"}
-                    </button>
-                    <button className="popup-btn popup-btn-withdraw" onClick={() => { setEditingPremium(false); setEditError(null); }}
-                      style={{flex:"none",width:"auto",padding:"10px 16px"}}>
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <div style={{display:"flex",gap:8,width:"100%"}}>
-                    <button className="popup-btn popup-btn-edit"
-                      onClick={() => { setEditPremiumVal(String(offer.premium ?? 0)); setEditingPremium(true); setEditError(null); }}>
-                      Edit premium
-                    </button>
-                    <button className="popup-btn popup-btn-withdraw"
-                      onClick={() => { setWithdrawConfirm(true); setWithdrawError(null); }}>
-                      {offer.type === "ask" ? "Cancel and refund offer" : "Withdraw"}
-                    </button>
-                  </div>
-                )}
-                {editError && (
-                  <div style={{color:"var(--error)",fontSize:".78rem",fontWeight:600,marginTop:6}}>{editError}</div>
-                )}
-              </>
-            )}
-            {/* ── Withdraw confirmation ── */}
-            {isOwn && withdrawConfirm && (
-              <div style={{width:"100%"}}>
-                <div style={{fontSize:".84rem",fontWeight:600,color:"var(--black)",marginBottom:10}}>
-                  Withdraw this offer?
-                </div>
-                <div style={{fontSize:".78rem",color:"var(--black-65)",lineHeight:1.5,marginBottom:12}}>
-                  {offer.type === "ask"
-                    ? "The escrow funds will be returned via your mobile app."
-                    : "This action cannot be undone."}
-                </div>
-                {withdrawError && (
-                  <div style={{color:"var(--error)",fontSize:".78rem",fontWeight:600,marginBottom:8}}>{withdrawError}</div>
-                )}
-                <div style={{display:"flex",gap:8}}>
-                  <button className="popup-btn popup-btn-edit"
-                    onClick={() => { setWithdrawConfirm(false); setWithdrawError(null); }}>
-                    Keep offer
-                  </button>
-                  <button className="popup-btn popup-btn-withdraw" style={{background:"var(--error)",color:"white",borderColor:"var(--error)"}}
-                    onClick={() => handleWithdraw(offer)} disabled={withdrawing}>
-                    {withdrawing
-                      ? "Withdrawing…"
-                      : (offer.type === "ask" ? "Refund (sign on mobile)" : "Yes, withdraw")}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  })();
 
   return (
     <>
       <style>{CSS}</style>
 
         {/* ── POPUP ── */}
-        {popupContent}
+        {popupOfferId && isLoggedIn && (() => {
+          const offer = marketOffers.find(o => String(o.id) === String(popupOfferId));
+          if (!offer) return null;
+          return (
+            <OfferDetailPopup
+              key={offer.id}
+              offer={offer}
+              onClose={() => setPopupOfferId(null)}
+              onLocalRequestedChange={(id, req) => {
+                setLocalRequested(prev => {
+                  const s = new Set(prev);
+                  if (req) s.add(id); else s.delete(id);
+                  return s;
+                });
+              }}
+              onOfferUpdated={(updated) => {
+                setLiveOffers(prev => prev ? prev.map(x => x.id === updated.id ? updated : x) : prev);
+              }}
+              onOfferWithdrawn={(id, { needsMobileSign }) => {
+                setLiveOffers(prev => prev ? prev.filter(x => x.id !== id) : prev);
+                if (needsMobileSign) setSigningModal({ offerId: id });
+              }}
+              onContractAccepted={(contractId) => {
+                setPopupOfferId(null);
+                navigate(`/trade/${contractId}`);
+              }}
+              onTradeRequested={() => {
+                clearCache("market-offers");
+                fetchMarket();
+              }}
+              onToast={(message, tone) => showToast(message, tone)}
+            />
+          );
+        })()}
 
         {/* ── UNDO TOAST ── */}
         {undoAnim && <Toast message="↩ Trade request undone" />}
@@ -1791,7 +775,7 @@ export default function PeachMarket() {
                         undoAnim===offer.id?"undo-row":"",
                         highlightedIds.has(offer.id)?"new-offer-row":""
                       ].filter(Boolean).join(" ")}
-                      style={{cursor: "pointer"}} onClick={() => openPopup(offer)}>
+                      style={{cursor: "pointer"}} onClick={() => { if (isLoggedIn) setPopupOfferId(offer.id); else navigate("/"); }}>
                       <td><RepCell offer={offer}/></td>
                       <td><AmountCell offer={offer} btcPrice={btcPrice} currency={selectedCurrency}/></td>
                       <td><PriceCell offer={offer} btcPrice={btcPrice} currency={selectedCurrency} isSellTab={isSellTab}/></td>
@@ -1874,7 +858,7 @@ export default function PeachMarket() {
               </div>
             ) : displayOffers.map(offer => (
             <div key={offer.id} className={`offer-card${offer.isOwn?" own-card":""}${effectiveRequested.has(offer.id)&&!offer.auto&&!offer.isOwn?" requested-card":""}${undoAnim===offer.id?" undo-card":""}${highlightedIds.has(offer.id)?" new-offer-card":""}`}
-              style={{cursor: "pointer"}} onClick={() => openPopup(offer)}>
+              style={{cursor: "pointer"}} onClick={() => { if (isLoggedIn) setPopupOfferId(offer.id); else navigate("/"); }}>
                 {/* Row 1: PeachID + avatar · rep/badges (left) | offer ID + action (right) */}
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
                   <span className="user-peach-id">{offer.peachId}</span>

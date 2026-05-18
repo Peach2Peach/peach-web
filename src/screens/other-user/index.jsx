@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { formatPeachId } from "../../components/Navbars.jsx";
 import { SatsAmount } from "../../components/BitcoinAmount.jsx";
@@ -8,9 +8,12 @@ import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 import PeachRating from "../../components/PeachRating.jsx";
 import Avatar from "../../components/Avatar.jsx";
 import RepeatTraderBadge from "../../components/RepeatTraderBadge.jsx";
-import { fmtFiat, formatTradeId, toPeaches } from "../../utils/format.js";
+import { formatTradeId, toPeaches } from "../../utils/format.js";
 import { methodDisplayName } from "../../data/paymentMethodMeta.js";
 import { BadgesInfoPopup } from "../../components/InfoPopup.jsx";
+import OfferDetailPopup from "../../components/OfferDetailPopup.jsx";
+import Toast from "../../components/Toast.jsx";
+import { normalizeOffer } from "../../utils/normalizeOffer.js";
 
 const CSS = `
   .page-wrap{display:flex;flex-direction:column;flex:1;margin-top:var(--topbar);margin-left:68px}
@@ -165,7 +168,17 @@ export default function OtherUserPage() {
   const [blockSubmitting, setBlockSubmitting] = useState(false);
   const [blockError, setBlockError] = useState(null);
 
+  const [popupOffer, setPopupOffer] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [toastTone, setToastTone] = useState("default");
+
   const isSelf = auth?.peachId && userId && auth.peachId.toLowerCase() === userId.toLowerCase();
+
+  function showToast(message, tone = "default", durationMs = 3500) {
+    setToast(message);
+    setToastTone(tone);
+    setTimeout(() => { setToast(null); setToastTone("default"); }, durationMs);
+  }
 
   useEffect(() => {
     if (!userId) return;
@@ -190,33 +203,32 @@ export default function OtherUserPage() {
     })();
   }, [userId]);
 
-  useEffect(() => {
+  const refreshOffers = useCallback(async () => {
     if (!auth || !userId) {
       setOffersLoading(false);
       return;
     }
     setOffersLoading(true);
     setOffersError(null);
-    (async () => {
-      try {
-        const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
-        const res = await fetchWithSessionCheck(`${v069Base}/user/${encodeURIComponent(userId)}/offers`, {
-          headers: { Authorization: `Bearer ${auth.token}` },
-        });
-        if (!res.ok) {
-          setOffersError(`Failed to load offers (${res.status})`);
-          setOffersLoading(false);
-          return;
-        }
-        const data = await res.json();
-        setOffersData(data);
-      } catch {
-        setOffersError("Network error — check your connection");
-      } finally {
-        setOffersLoading(false);
+    try {
+      const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
+      const res = await fetchWithSessionCheck(`${v069Base}/user/${encodeURIComponent(userId)}/offers`, {
+        headers: { Authorization: `Bearer ${auth.token}` },
+      });
+      if (!res.ok) {
+        setOffersError(`Failed to load offers (${res.status})`);
+        return;
       }
-    })();
+      const data = await res.json();
+      setOffersData(data);
+    } catch {
+      setOffersError("Network error — check your connection");
+    } finally {
+      setOffersLoading(false);
+    }
   }, [auth, userId]);
+
+  useEffect(() => { refreshOffers(); }, [refreshOffers]);
 
   useEffect(() => {
     if (!auth || !userId || isSelf) return;
@@ -234,26 +246,15 @@ export default function OtherUserPage() {
     })();
   }, [auth, userId, isSelf]);
 
-  function handleOpenOffer(offer, type) {
-    const amount = offer.amountSats ?? (Array.isArray(offer.amount) ? offer.amount[0] : (offer.amount ?? 0));
-    const currencies = offer.meansOfPayment ? Object.keys(offer.meansOfPayment) : [];
-    const methods = offer.meansOfPayment
-      ? [...new Set(Object.values(offer.meansOfPayment).flat())]
-      : [];
-    navigate("/market", {
-      state: {
-        openOfferId: String(offer.id),
-        openOfferType: type === "bid" ? "buyOffer" : "sellOffer",
-        openOfferData: {
-          id: String(offer.id),
-          tradeId: formatTradeId(offer.id, "offer"),
-          amount,
-          premium: offer.premium ?? 0,
-          methods,
-          currencies,
-        },
-      },
-    });
+  function handleOpenOffer(rawOffer, type) {
+    // Enrich raw offer with the profile user so normalizeOffer can fill in
+    // rating/badges/pgpPublicKeys (the /v069/user/:id/offers endpoint does
+    // not embed user data on each offer since they all belong to userId).
+    const enriched = {
+      ...rawOffer,
+      user: rawOffer.user ?? { id: userId, ...(user ?? {}) },
+    };
+    setPopupOffer(normalizeOffer(enriched, type, auth?.peachId ?? null));
   }
 
   async function handleToggleBlock() {
@@ -428,7 +429,7 @@ export default function OtherUserPage() {
                           key={`ask-${o.id}`}
                           offer={o}
                           type="ask"
-                          disabled={!isLoggedIn || isSelf}
+                          disabled={!isLoggedIn}
                           onClick={() => handleOpenOffer(o, "ask")}
                         />
                       ))}
@@ -437,7 +438,7 @@ export default function OtherUserPage() {
                           key={`bid-${o.id}`}
                           offer={o}
                           type="bid"
-                          disabled={!isLoggedIn || isSelf}
+                          disabled={!isLoggedIn}
                           onClick={() => handleOpenOffer(o, "bid")}
                         />
                       ))}
@@ -450,6 +451,20 @@ export default function OtherUserPage() {
           </div>
         </div>
         {badgesHelpOpen && <BadgesInfoPopup onClose={() => setBadgesHelpOpen(false)} />}
+        {popupOffer && (
+          <OfferDetailPopup
+            key={popupOffer.id}
+            offer={popupOffer}
+            onClose={() => setPopupOffer(null)}
+            onLocalRequestedChange={() => refreshOffers()}
+            onOfferUpdated={() => refreshOffers()}
+            onOfferWithdrawn={() => { setPopupOffer(null); refreshOffers(); }}
+            onContractAccepted={(contractId) => { setPopupOffer(null); navigate(`/trade/${contractId}`); }}
+            onTradeRequested={() => refreshOffers()}
+            onToast={(message, tone) => showToast(message, tone)}
+          />
+        )}
+        <Toast message={toast} tone={toastTone} />
     </>
   );
 }
