@@ -17,6 +17,7 @@ import RepeatTraderBadge from "../../components/RepeatTraderBadge.jsx";
 import RequestedOfferPopup from "../../components/RequestedOfferPopup.jsx";
 import Toast from "../../components/Toast.jsx";
 import { RefreshIndicator } from "../../components/RefreshIndicator.jsx";
+import { LoadingSpinner } from "../../components/LoadingSpinner.jsx";
 import { CSS } from "./styles.js";
 import { premiumStats, premiumCls, currSym, MultiSelect, Chips, RepCell, AmountCell, PriceCell, OfferIdCopy } from "./components.jsx";
 import { CATEGORY_META } from "../../components/AddPMFlow.jsx";
@@ -83,7 +84,7 @@ export default function PeachMarket() {
   const [liveOffers,   setLiveOffers]   = useState(() => getCached("market-offers")?.data ?? null);
   const { pms: pmsRaw, error: pmFetchError } = useUserPMs(auth);
   const pmError = !!pmFetchError;
-  const [offersLoading, setOffersLoading] = useState(() => !!auth && !getCached("market-offers"));
+  const [offersLoading, setOffersLoading] = useState(() => !getCached("market-offers"));
   const [isRefetching, setIsRefetching] = useState(false);
   const [pmCatalogue,  setPmCatalogue]  = useState(() => getCached("pm-catalogue")?.data ?? null);
 
@@ -1760,11 +1761,8 @@ export default function PeachMarket() {
             <div className="info-sentence">
               Request as many trades as you want. You'll enter a trade with the first {isSellTab ? "buyer" : "seller"} who accepts your request, and your other requests will be automatically cancelled.
             </div>
-            {offersLoading && auth ? (
-              <div className="empty">
-                <div className="empty-icon" style={{animation:"spin 1s linear infinite"}}>↻</div>
-                <div className="empty-title">Loading offers…</div>
-              </div>
+            {offersLoading ? (
+              <LoadingSpinner label="Loading offers…" />
             ) : displayOffers.length === 0 ? (
               <div className="empty">
                 <div className="empty-icon">🍑</div>
@@ -1864,11 +1862,8 @@ export default function PeachMarket() {
               </span>
               {isMobile && <span className="info-sentence-chev">{bannerOpen ? "▴" : "▾"}</span>}
             </div>
-            {offersLoading && auth ? (
-              <div className="empty">
-                <div className="empty-icon" style={{animation:"spin 1s linear infinite"}}>↻</div>
-                <div className="empty-title">Loading offers…</div>
-              </div>
+            {offersLoading ? (
+              <LoadingSpinner label="Loading offers…" />
             ) : displayOffers.length === 0 ? (
               <div className="empty">
                 <div className="empty-icon">🍑</div>

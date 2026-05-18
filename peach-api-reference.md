@@ -37,7 +37,7 @@ await fetch(`${v069Base}/selfUser`, {
 | GET | `/info` | trade-execution (dispute flow) | Platform info: PGP key, fees, payment methods list. Used to get the platform PGP public key when filing a dispute. |
 | GET | `/info/paymentMethods` | payment-methods | List all supported payment methods with their currencies. Used to build the PM catalogue. |
 | GET | `/estimateFees` | settings | Current Bitcoin fee estimates (sat/vB). Used in the network fees sub-screen. |
-| GET | `/market/offers/stats` | peach-home | Live market stats. Response: `{ buy: { open }, sell: { open }, totalAvgPremium }`. Polled every 60s for the home screen "Peach Stats" widget. |
+| GET | `/market/offers/stats` | peach-home | Live market stats. Response: `{ buy: { open, avgPremium }, sell: { open, avgPremium }, totalAvgPremium }`. Polled every 60s for the home screen "Peach Stats" widget. |
 | GET | `/market/tradePricePeaks` | peach-home | ATH trade prices per currency and period. Response: `{ tradePeaks: { [period]: { [currency]: price } } }`. Public endpoint — fetched directly via `VITE_API_BASE` (not through `useApi`). |
 
 ---

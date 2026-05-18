@@ -282,7 +282,8 @@ const css = `
     .content{padding:18px 14px 48px;max-width:100%}
     .profile-stats{grid-template-columns:repeat(3,1fr)}
     .card{width:100%!important;max-width:100%!important;min-width:0!important}
-    .cards-row{flex-direction:column!important}
+    .card.home-stack-card{max-width:450px!important}
+    .cards-row{flex-direction:column!important;align-items:stretch!important}
     .ath-price-value{font-size:1.5rem}
     .ath-controls{gap:8px}
   }
@@ -766,7 +767,7 @@ export default function PeachHome() {
               {/* Right column: PM+Currencies side by side, then Peach Stats */}
               <div style={{display:"flex",flexDirection:"column",gap:18,flex:"1 1 0",minWidth:0}}>
               <div className="cards-row" style={{display:"flex",gap:18,flexWrap:"wrap"}}>
-                <div className="card" style={{flex:"1 1 280px",minWidth:260,width:"auto"}}>
+                <div className="card home-stack-card" style={{flex:"1 1 280px",minWidth:260,width:"auto"}}>
                   <div className="card-header">
                     <span className="card-title" style={{fontSize:".9rem"}}>Top payment methods</span>
                     <span className="card-link" onClick={() => setSeeAllOpen(true)}>See all →</span>
@@ -808,7 +809,7 @@ export default function PeachHome() {
 
               {/* Peach Stats — 24h Volume, Trades Today, Active Offers */}
               <div className="stats-card-wrap">
-              <div className="card" style={{width:"100%"}}>
+              <div className="card home-stack-card" style={{width:"100%"}}>
                 <div className="card-header">
                   <span className="card-title">Peach Stats</span>
                 </div>
@@ -834,18 +835,23 @@ export default function PeachHome() {
                     </div>
 
                     {/* Active Offers */}
+                    {(() => {
+                      const fmtPremium = (p) =>
+                        p == null ? "—" : `${p > 0 ? "+" : ""}${Math.round(p)}%`;
+                      return (
                     <div style={{display:"flex",flexDirection:"column",gap:4}}>
                       <span style={{fontSize:".72rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--black-65)"}}>Active Offers</span>
                       <div className="stat-big">{marketStats ? (marketStats.buy.open + marketStats.sell.open) : "—"}</div>
                       <div className="stat-sub">
                         <span style={{color:"var(--success)",fontWeight:700}}>{marketStats?.buy?.open ?? 0} buy</span>
+                        <span style={{color:"var(--black-65)",marginLeft:4}}>({fmtPremium(marketStats?.buy?.avgPremium)})</span>
                         {" · "}
                         <span style={{color:"var(--error)",fontWeight:700}}>{marketStats?.sell?.open ?? 0} sell</span>
-                      </div>
-                      <div style={{display:"flex",flexDirection:"column",gap:4,alignItems:"flex-start",marginTop:2}}>
-                        <span className="stat-change neu" style={{width:"fit-content"}}>{marketStats ? `avg ${marketStats.totalAvgPremium?.toFixed(1) ?? 0}% premium` : "—"}</span>
+                        <span style={{color:"var(--black-65)",marginLeft:4}}>({fmtPremium(marketStats?.sell?.avgPremium)})</span>
                       </div>
                     </div>
+                      );
+                    })()}
 
                   </div>{/* end stats-bottom */}
 
