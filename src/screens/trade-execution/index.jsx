@@ -1854,71 +1854,77 @@ export default function TradeExecution() {
                 )}
 
                 {/* Trade cancelled — final state */}
-                {(status === "tradeCanceled" || status === "confirmCancelation") && (
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      background: "var(--error-bg)",
-                      border: "1px solid rgba(223,50,31,.2)",
-                      borderRadius: 8,
-                      padding: "12px 14px",
-                      marginBottom: 12,
-                      fontSize: ".83rem",
-                      color: "var(--error)",
-                      fontWeight: 600,
-                      lineHeight: 1.5,
-                    }}
-                  >
-                    <IconAlert />
-                    <span>
-                      {(() => {
-                        // Seller republished this trade — show republish copy first.
-                        if (scenario.revived && role === "seller") {
-                          return "You have decided to re-publish this trade. You can find the new offer below";
-                        }
-                        // Buyer-payment-timeout detection: prefer the live-polling
-                        // signal, fall back to derived check for the case where the
-                        // user navigates straight to a contract that already
-                        // transitioned past `paymentTooLate`.
-                        const wasBuyerPaymentTimeout =
-                          scenario.paymentTimedOut ||
-                          (!!scenario.canceled &&
-                            !scenario.paymentMade &&
-                            scenario.contract?.paymentExpectedBy != null &&
-                            scenario.contract.paymentExpectedBy < Date.now() &&
-                            !scenario.escrowFundingTimeLimitExpired);
-                        if (wasBuyerPaymentTimeout) {
-                          return role === "buyer"
-                            ? "This trade has been cancelled. Your reputation has been affected."
-                            : "You have decided to refund this trade to your refund wallet";
-                        }
-                        if (scenario.escrowFundingTimeLimitExpired) {
-                          return role === "seller"
-                            ? "This trade has been cancelled because you have not funded the escrow on time. Your reputation has been affected."
-                            : "This trade has been cancelled because the seller did not fund the escrow on time. The seller's reputation has been affected.";
-                        }
-                        // Mediator auto-cancel due to escrow funding timeout — the seller is
-                        // the responsible party (mediator itself has no reputation).
-                        const responsibleParty =
-                          scenario.canceledBy === "mediator" &&
-                          scenario.escrowFundingTimeLimitExpired
-                            ? "seller"
-                            : scenario.canceledBy;
-                        if (
-                          responsibleParty === "buyer" ||
-                          responsibleParty === "seller"
-                        ) {
-                          return responsibleParty === role
-                            ? "This trade has been cancelled. Your reputation has been affected."
-                            : `This trade has been cancelled. The ${responsibleParty}'s reputation has been affected.`;
-                        }
-                        return "This trade has been cancelled.";
-                      })()}
-                    </span>
-                  </div>
-                )}
+                {(status === "tradeCanceled" || status === "confirmCancelation") && (() => {
+                  const message = (() => {
+                    // Seller republished this trade — show republish copy first.
+                    if (scenario.revived && role === "seller") {
+                      return "You have decided to re-publish this trade. You can find the new offer below";
+                    }
+                    // Buyer-payment-timeout detection: prefer the live-polling
+                    // signal, fall back to derived check for the case where the
+                    // user navigates straight to a contract that already
+                    // transitioned past `paymentTooLate`.
+                    const wasBuyerPaymentTimeout =
+                      scenario.paymentTimedOut ||
+                      (!!scenario.canceled &&
+                        !scenario.paymentMade &&
+                        scenario.contract?.paymentExpectedBy != null &&
+                        scenario.contract.paymentExpectedBy < Date.now() &&
+                        !scenario.escrowFundingTimeLimitExpired);
+                    if (wasBuyerPaymentTimeout) {
+                      return role === "buyer"
+                        ? "This trade has been cancelled. Your reputation has been affected."
+                        : "You have decided to refund this trade to your refund wallet";
+                    }
+                    if (scenario.escrowFundingTimeLimitExpired) {
+                      return role === "seller"
+                        ? "This trade has been cancelled because you have not funded the escrow on time. Your reputation has been affected."
+                        : "This trade has been cancelled because the seller did not fund the escrow on time. The seller's reputation has been affected.";
+                    }
+                    // Mediator auto-cancel due to escrow funding timeout — the seller is
+                    // the responsible party (mediator itself has no reputation).
+                    const responsibleParty =
+                      scenario.canceledBy === "mediator" &&
+                      scenario.escrowFundingTimeLimitExpired
+                        ? "seller"
+                        : scenario.canceledBy;
+                    if (
+                      responsibleParty === "buyer" ||
+                      responsibleParty === "seller"
+                    ) {
+                      return responsibleParty === role
+                        ? "This trade has been cancelled. Your reputation has been affected."
+                        : `This trade has been cancelled. The ${responsibleParty}'s reputation has been affected.`;
+                    }
+                    return "This trade has been cancelled.";
+                  })();
+                  // Refund-decision message is informational, not an error — render yellow.
+                  const isRefundDecision =
+                    message === "You have decided to refund this trade to your refund wallet";
+                  return (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        background: isRefundDecision ? "var(--warning-soft)" : "var(--error-bg)",
+                        border: isRefundDecision
+                          ? "1px solid rgba(154,112,0,.15)"
+                          : "1px solid rgba(223,50,31,.2)",
+                        borderRadius: 8,
+                        padding: "12px 14px",
+                        marginBottom: 12,
+                        fontSize: ".83rem",
+                        color: isRefundDecision ? "var(--warning)" : "var(--error)",
+                        fontWeight: 600,
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      <IconAlert />
+                      <span>{message}</span>
+                    </div>
+                  );
+                })()}
 
                 {/* Payout pending — buyer: sats arriving */}
                 {status === "payoutPending" && role === "buyer" && (

@@ -252,6 +252,11 @@ body{font-family:var(--font);background:var(--primary-bg);color:var(--black)}
 .cur-select-menu li.is-hl,
 .cur-select-menu li:hover{background:var(--primary-mild);color:var(--primary-dark)}
 .cur-select-menu li[aria-selected="true"]{font-weight:800}
+.cur-select-menu .cur-select-divider{
+  height:1px;margin:4px 6px;padding:0;background:var(--border);
+  border-radius:0;cursor:default;pointer-events:none;
+}
+.cur-select-menu .cur-select-divider:hover{background:var(--border)}
 .topbar-right{display:flex;align-items:center;gap:10px;justify-self:end}
 .avatar-peachid{display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 10px;border-radius:999px;transition:background .14s}
 .avatar-peachid:hover{background:var(--black-5)}

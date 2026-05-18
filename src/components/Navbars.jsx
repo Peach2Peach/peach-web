@@ -124,15 +124,27 @@ export function SideNav({ active: activeProp, mobileOpen, onClose, onNavigate, m
 }
 
 // ─── CURRENCY DROPDOWN ────────────────────────────────────────────────────────
+const FAVORITE_CURRENCIES = ["CHF", "EUR", "GBP", "USD"];
+
 export function CurrencyDropdown({ value, options, onChange, className = "" }) {
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
   const wrapRef = useRef(null);
   const listRef = useRef(null);
 
+  const favs = FAVORITE_CURRENCIES.filter(c => options.includes(c));
+  const showDivider = favs.length > 0 && options.length > favs.length;
+  const rows = showDivider ? [...favs, "__sep__", ...options] : options;
+  const sepIdx = showDivider ? favs.length : -1;
+  const step = (h, dir) => {
+    let n = h + dir;
+    if (n === sepIdx) n += dir;
+    return Math.max(0, Math.min(rows.length - 1, n));
+  };
+
   useEffect(() => {
     if (!open) return;
-    const idx = Math.max(0, options.indexOf(value));
+    const idx = Math.max(0, rows.indexOf(value));
     setHighlight(idx);
     requestAnimationFrame(() => {
       const li = listRef.current?.querySelector(`[data-idx="${idx}"]`);
@@ -145,14 +157,14 @@ export function CurrencyDropdown({ value, options, onChange, className = "" }) {
     const onClick = (e) => { if (!wrapRef.current?.contains(e.target)) setOpen(false); };
     const onKey = (e) => {
       if (e.key === "Escape") { setOpen(false); }
-      else if (e.key === "ArrowDown") { e.preventDefault(); setHighlight(h => Math.min(options.length - 1, h + 1)); }
-      else if (e.key === "ArrowUp") { e.preventDefault(); setHighlight(h => Math.max(0, h - 1)); }
-      else if (e.key === "Enter") { e.preventDefault(); const next = options[highlight]; if (next != null) { onChange(next); setOpen(false); } }
+      else if (e.key === "ArrowDown") { e.preventDefault(); setHighlight(h => step(h, +1)); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); setHighlight(h => step(h, -1)); }
+      else if (e.key === "Enter") { e.preventDefault(); const next = rows[highlight]; if (next != null && next !== "__sep__") { onChange(next); setOpen(false); } }
     };
     document.addEventListener("mousedown", onClick);
     document.addEventListener("keydown", onKey);
     return () => { document.removeEventListener("mousedown", onClick); document.removeEventListener("keydown", onKey); };
-  }, [open, highlight, options, onChange]);
+  }, [open, highlight, rows, onChange]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!open || !listRef.current) return;
@@ -174,9 +186,11 @@ export function CurrencyDropdown({ value, options, onChange, className = "" }) {
       </button>
       {open && (
         <ul ref={listRef} className="cur-select-menu" role="listbox" tabIndex={-1}>
-          {options.map((c, i) => (
+          {rows.map((c, i) => c === "__sep__" ? (
+            <li key="sep" className="cur-select-divider" aria-hidden="true" />
+          ) : (
             <li
-              key={c}
+              key={`${c}-${i}`}
               data-idx={i}
               role="option"
               aria-selected={c === value}
