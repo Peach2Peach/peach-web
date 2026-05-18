@@ -25,10 +25,54 @@ import {
   CopyBtn, PrimaryBtn, OutlineBtn, FieldError, makeBlurHandler,
 } from "./components.jsx";
 import PeachRating from "../../components/PeachRating.jsx";
+import Avatar from "../../components/Avatar.jsx";
 import { toPeaches, getSigningPeachId } from "../../utils/format.js";
 import InfoPopup, { InfoDot } from "../../components/InfoPopup.jsx";
 
 // ── ProfileSubScreen ─────────────────────────────────────────────────────────
+
+const PROFILE_CSS = `
+  .mp-stack{display:flex;flex-direction:column;gap:20px}
+
+  .mp-header{display:flex;align-items:center;gap:16px;background:var(--surface);
+    border:1px solid var(--black-10);border-radius:16px;padding:20px}
+  .mp-id-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .mp-id{font-size:.82rem;font-weight:800;letter-spacing:.06em;background:var(--black-5);
+    border:1.5px solid var(--black-10);border-radius:999px;padding:5px 12px;color:var(--black);
+    font-family:monospace}
+  .mp-since{font-size:.76rem;color:var(--black-65);margin-top:4px}
+  .mp-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}
+  .mp-badges:empty{display:none}
+  .mp-badge{font-size:.7rem;font-weight:700;color:var(--primary);border:1.5px solid var(--primary);
+    border-radius:999px;padding:2px 10px}
+
+  .mp-card{background:var(--surface);border:1px solid var(--black-10);border-radius:16px;padding:18px 20px}
+  .mp-card-title{font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em;
+    color:var(--primary);margin-bottom:12px}
+
+  .mp-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .mp-stats.is-3{grid-template-columns:repeat(3,1fr)}
+  .mp-stat{background:var(--black-5);border-radius:10px;padding:12px;text-align:center}
+  .mp-stat-val{font-size:1.15rem;font-weight:800;color:var(--black);line-height:1.2}
+  .mp-stat-lbl{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+    color:var(--black-65);margin-top:3px}
+
+  .mp-meta-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px 24px}
+  .mp-meta-row .lbl{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--black-65);margin-bottom:3px}
+  .mp-meta-row .val{font-size:.85rem;font-weight:700;color:var(--black);word-break:break-all}
+
+  .mp-limits{display:flex;flex-direction:column;gap:14px}
+  .mp-bar-track{height:4px;background:var(--black-10);border-radius:999px;margin-bottom:5px;overflow:hidden}
+  .mp-bar-fill{height:100%;background:var(--primary);border-radius:999px}
+  .mp-bar-lbl{font-size:.78rem;color:var(--black-65)}
+
+  @media(max-width:767px){
+    .mp-header{flex-wrap:wrap}
+    .mp-stats{grid-template-columns:repeat(2,1fr)}
+    .mp-meta-grid{grid-template-columns:1fr}
+  }
+`;
 
 export function ProfileSubScreen({ onBack }) {
   const { get, auth, isLoggedIn } = useApi();
@@ -38,7 +82,11 @@ export function ProfileSubScreen({ onBack }) {
   const pubkey  = auth?.peachId ?? "—";
   const badges  = isLoggedIn ? (liveProfile?.medals ?? liveProfile?.badges ?? []) : [];
   const rating  = isLoggedIn ? toPeaches(liveProfile?.rating ?? 0) : 0;
+  const ratingCount = isLoggedIn ? (liveProfile?.ratingCount ?? 0) : 0;
   const trades  = isLoggedIn ? (liveProfile?.trades ?? 0) : 0;
+  const openedTrades = isLoggedIn ? (liveProfile?.openedTrades ?? 0) : 0;
+  const canceledTrades = isLoggedIn ? (liveProfile?.canceledTrades ?? 0) : 0;
+  const bitcoinLevel = isLoggedIn ? (liveProfile?.bitcoinLevel ?? "—") : "—";
   const linkedIdsCount = isLoggedIn ? (liveProfile?.linkedIds?.length ?? 0) : 0;
 
   // ── Disputes — API returns number or object ──
@@ -55,6 +103,9 @@ export function ProfileSubScreen({ onBack }) {
     ? (creationDate
         ? `${creationDate.toLocaleDateString("en-GB")} (${Math.floor((Date.now() - creationDate) / 86400000)} days ago)`
         : "—")
+    : "—";
+  const memberSince = creationDate
+    ? creationDate.toLocaleDateString("en-US", { month: "long", year: "numeric" })
     : "—";
 
   // ── Trading limits (fetch from API) ──
@@ -76,76 +127,122 @@ export function ProfileSubScreen({ onBack }) {
 
   return (
     <SubScreenWrapper title="My Profile" onBack={onBack}>
-      {/* PeachID + rating */}
-      <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:16 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-          <span style={{ fontSize:".75rem", fontWeight:800, letterSpacing:".06em", background:"var(--black-5)", border:"1.5px solid var(--black-10)", borderRadius:999, padding:"4px 10px", color:"var(--black)" }}>
-            {peachId}
-          </span>
-          <CopyBtn text={peachId}/>
+      <style>{PROFILE_CSS}</style>
+      <div className="mp-stack">
+
+        {/* Header */}
+        <div className="mp-header">
+          <Avatar peachId={auth?.peachId} size={64} />
+          <div style={{ flex:1, minWidth:0 }}>
+            <div className="mp-id-row">
+              <span className="mp-id">{peachId}</span>
+              <CopyBtn text={peachId}/>
+              <PeachRating rep={rating} size={14} trades={trades}/>
+              <span style={{ fontSize:".78rem", color:"var(--black-65)" }}>({ratingCount} ratings)</span>
+            </div>
+            <div className="mp-since">Member since {memberSince}</div>
+            <div className="mp-badges">
+              {badges.map(b => <span key={b} className="mp-badge">{b}</span>)}
+            </div>
+          </div>
         </div>
-        <PeachRating rep={rating} size={15} trades={trades}/>
-      </div>
 
-      {/* Badges */}
-      <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:24 }}>
-        {badges.map(b => (
-          <span key={b} style={{ fontSize:".72rem", fontWeight:600, color:"var(--primary)", border:"1.5px solid var(--primary)", borderRadius:999, padding:"3px 10px" }}>{b}</span>
-        ))}
-      </div>
-
-      {/* Volume bars */}
-      <div style={{ marginBottom:24, display:"flex", flexDirection:"column", gap:14 }}>
-        {volumes.map(v => {
-          const pct = Math.min(100, v.max > 0 ? (v.current / v.max) * 100 : 0);
-          return (
-            <div key={v.label}>
-              <div style={{ height:4, background:"var(--black-10)", borderRadius:999, marginBottom:5, overflow:"hidden" }}>
-                <div style={{ height:"100%", width:`${pct}%`, minWidth: pct > 0 ? 8 : 0, background:"var(--primary)", borderRadius:999 }}/>
+        {/* Trading Stats */}
+        <div className="mp-card">
+          <div className="mp-card-title">Trading Stats</div>
+          <div className="mp-stats is-3">
+            <div className="mp-stat">
+              <div className="mp-stat-val">{trades}</div>
+              <div className="mp-stat-lbl">Trades</div>
+            </div>
+            <div className="mp-stat">
+              <div className="mp-stat-val">{canceledTrades}</div>
+              <div className="mp-stat-lbl">Canceled</div>
+            </div>
+            <div className="mp-stat">
+              <div className="mp-stat-val" style={{ color: (disputeObj.opened ?? 0) > 0 ? "var(--error)" : "var(--success)" }}>
+                {disputeObj.opened ?? 0}
               </div>
-              <div style={{ fontSize:".78rem", color:"var(--black-65)" }}>
-                {v.label}{" "}
-                <span style={{ fontWeight:800, color: v.current > 0 ? "var(--primary)" : "var(--black)" }}>{v.current.toLocaleString()}</span>
-                {" / "}
-                <span style={{ color:"var(--primary)" }}>{v.max.toLocaleString()} {v.currency}</span>
+              <div className="mp-stat-lbl">Disputes</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Disputes */}
+        <div className="mp-card">
+          <div className="mp-card-title">Disputes</div>
+          <div className="mp-stats">
+            <div className="mp-stat">
+              <div className="mp-stat-val" style={{ color:"var(--primary)" }}>{disputeObj.opened ?? 0}</div>
+              <div className="mp-stat-lbl">Opened</div>
+            </div>
+            <div className="mp-stat">
+              <div className="mp-stat-val" style={{ color:"var(--success)" }}>{disputeObj.won ?? 0}</div>
+              <div className="mp-stat-lbl">Won</div>
+            </div>
+            <div className="mp-stat">
+              <div className="mp-stat-val" style={{ color:"var(--error)" }}>{disputeObj.lost ?? 0}</div>
+              <div className="mp-stat-lbl">Lost</div>
+            </div>
+            <div className="mp-stat">
+              <div className="mp-stat-val" style={{ color:"var(--black-65)" }}>{disputeObj.resolved ?? 0}</div>
+              <div className="mp-stat-lbl">Resolved</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Trading Limits */}
+        <div className="mp-card">
+          <div className="mp-card-title">Trading Limits</div>
+          <div className="mp-limits">
+            {volumes.map(v => {
+              const pct = Math.min(100, v.max > 0 ? (v.current / v.max) * 100 : 0);
+              return (
+                <div key={v.label}>
+                  <div className="mp-bar-track">
+                    <div className="mp-bar-fill" style={{ width:`${pct}%`, minWidth: pct > 0 ? 8 : 0 }}/>
+                  </div>
+                  <div className="mp-bar-lbl">
+                    {v.label}{" "}
+                    <span style={{ fontWeight:800, color: v.current > 0 ? "var(--primary)" : "var(--black)" }}>{v.current.toLocaleString()}</span>
+                    {" / "}
+                    <span style={{ color:"var(--primary)" }}>{v.max.toLocaleString()} {v.currency}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Account */}
+        <div className="mp-card">
+          <div className="mp-card-title">Account</div>
+          <div className="mp-meta-grid">
+            <div className="mp-meta-row">
+              <div className="lbl">Account created</div>
+              <div className="val">{createdStr}</div>
+            </div>
+            <div className="mp-meta-row">
+              <div className="lbl">Bitcoin level</div>
+              <div className="val">{bitcoinLevel}</div>
+            </div>
+            <div className="mp-meta-row">
+              <div className="lbl">Linked IDs</div>
+              <div className="val">{linkedIdsCount}</div>
+            </div>
+            <div className="mp-meta-row" style={{ gridColumn:"1 / -1" }}>
+              <div className="lbl">Public key</div>
+              <div className="val" style={{ display:"flex", alignItems:"flex-start", gap:8, fontWeight:400 }}>
+                <span style={{ fontFamily:"monospace", fontSize:".78rem", lineHeight:1.6, wordBreak:"break-all" }}>
+                  <span style={{ color:"var(--primary)" }}>{pubkey.slice(0,8)}</span>
+                  <span style={{ color:"var(--black)" }}>{pubkey.slice(8)}</span>
+                </span>
+                <CopyBtn text={pubkey}/>
               </div>
             </div>
-          );
-        })}
-      </div>
-
-      {/* Pubkey */}
-      <div style={{ marginBottom:20 }}>
-        <div style={{ fontSize:".72rem", color:"var(--black-65)", marginBottom:4 }}>account pubkey:</div>
-        <div style={{ display:"flex", alignItems:"flex-start", gap:8 }}>
-          <div style={{ fontSize:".75rem", fontFamily:"monospace", wordBreak:"break-all", lineHeight:1.6 }}>
-            <span style={{ color:"var(--primary)" }}>{pubkey.slice(0,8)}</span>
-            <span style={{ color:"var(--black)" }}>{pubkey.slice(8)}</span>
-          </div>
-          <CopyBtn text={pubkey}/>
-        </div>
-      </div>
-
-      {/* Meta rows */}
-      <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-        <div>
-          <div style={{ fontSize:".72rem", color:"var(--black-65)" }}>linked IDs:</div>
-          <div style={{ fontSize:".88rem", fontWeight:700, color:"var(--black)" }}>{linkedIdsCount}</div>
-        </div>
-        <div>
-          <div style={{ fontSize:".72rem", color:"var(--black-65)" }}>account created:</div>
-          <div style={{ fontSize:".88rem", fontWeight:700, color:"var(--black)" }}>{createdStr}</div>
-        </div>
-        <div>
-          <div style={{ fontSize:".72rem", color:"var(--black-65)" }}>disputes:</div>
-          <div style={{ fontSize:".88rem", fontWeight:700, color:"var(--black)" }}>
-            {disputeObj.opened ?? 0} opened &nbsp; {disputeObj.won ?? 0} won &nbsp; {disputeObj.lost ?? 0} lost &nbsp; {disputeObj.resolved ?? 0} resolved
           </div>
         </div>
-        <div>
-          <div style={{ fontSize:".72rem", color:"var(--black-65)" }}>number of trades:</div>
-          <div style={{ fontSize:".88rem", fontWeight:700, color:"var(--black)" }}>{trades}</div>
-        </div>
+
       </div>
     </SubScreenWrapper>
   );

@@ -1336,7 +1336,7 @@ export default function PeachMarket() {
               <div className="popup-user-badges">
                 {offer.badges.includes("supertrader") && <span className="badge badge-super">🏆 Super</span>}
                 {offer.badges.includes("fast") && <span className="badge badge-fast">⚡ Fast</span>}
-                {offer.badges.includes("ambassador") && <span className="badge badge-ambassador">⭐ Ambassador</span>}
+                {offer.badges.includes("ambassador") && <span className="badge badge-ambassador">⭐ Early adopter</span>}
                 <RepeatTraderBadge userId={offer.userId} />
               </div>
             </div>

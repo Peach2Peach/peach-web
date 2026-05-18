@@ -680,18 +680,6 @@ export default function PeachHome() {
                     </div>
                   </div>
                   <div className="profile-row">
-                    <span className="profile-row-label">Preferred methods</span>
-                    <div className="profile-methods">
-                      {user.preferredMethods.map(m => <span key={m} className="pref-chip">{m}</span>)}
-                    </div>
-                  </div>
-                  <div className="profile-row">
-                    <span className="profile-row-label">Preferred currencies</span>
-                    <div className="profile-methods">
-                      {user.preferredCurrencies.map(c => <span key={c} className="pref-chip">{c}</span>)}
-                    </div>
-                  </div>
-                  <div className="profile-row">
                     <span className="profile-row-label">Badges</span>
                     <div className="profile-badges">
                       {user.badges.includes("superTrader") && <span className="badge badge-super">🏆 Supertrader</span>}
