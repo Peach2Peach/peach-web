@@ -746,6 +746,7 @@ export function CollapsibleAddressSection({
   address,
   loading = false,
   error = null,
+  emptyLabel = null,
   mempoolLinkLabel,
   onFirstExpand,
 }) {
@@ -835,6 +836,17 @@ export function CollapsibleAddressSection({
             {!loading && error && (
               <div style={{ fontSize: ".72rem", color: "var(--error)" }}>
                 {error}
+              </div>
+            )}
+            {!loading && !error && !address && emptyLabel && (
+              <div
+                style={{
+                  fontSize: ".78rem",
+                  fontWeight: 600,
+                  color: "var(--black-65)",
+                }}
+              >
+                {emptyLabel}
               </div>
             )}
             {!loading && !error && address && (

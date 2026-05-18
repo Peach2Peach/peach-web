@@ -23,6 +23,8 @@ import {
   toPeaches,
 } from "../../utils/format.js";
 import { deriveEscrowPubKey, deriveReturnAddress } from "../../utils/escrow.js";
+import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
+import { extractCustomRefundAddressFromProfile } from "../../utils/customRefundAddressSync.js";
 import { fetchSavedCustomPayoutAddress } from "../../utils/customPayoutAddressSync.js";
 import { deriveDisplayStatus } from "../../data/statusConfig.js";
 import Avatar from "../../components/Avatar.jsx";
@@ -2875,6 +2877,7 @@ export default function TradeExecution() {
                         address={refundAddress}
                         loading={refundLoading}
                         error={refundError}
+                        emptyLabel="Peach wallet"
                         mempoolLinkLabel="View address on mempool.space"
                         onFirstExpand={async () => {
                           if (
@@ -2883,14 +2886,36 @@ export default function TradeExecution() {
                             !contract?.id
                           )
                             return;
-                          const offerId = String(contract.id).split("-")[0];
                           setRefundLoading(true);
                           setRefundError(null);
                           try {
-                            const res = await get(
-                              `/offer/${offerId}/details`,
+                            // The per-offer `returnAddress` is not retrievable
+                            // from any API surface once the offer has been
+                            // matched into a contract: /offer/:id/details
+                            // strips it, /v069/sellOffer/:id 401s on own
+                            // offers, /v069/user/:id/offers omits matched
+                            // offers entirely, and the contract response
+                            // doesn't carry it. The reliable proxy is the
+                            // user's saved custom refund wallet on
+                            // /v069/selfUser (the same setting offer-creation
+                            // uses to default the choice). Present → custom
+                            // destination; absent → Peach wallet default.
+                            if (!auth?.pgpPrivKey || !auth?.baseUrl) {
+                              setRefundAddress("");
+                              return;
+                            }
+                            const v069Base = auth.baseUrl.replace(/\/v1$/, "/v069");
+                            const res = await fetchWithSessionCheck(
+                              `${v069Base}/selfUser`,
+                              { headers: { Authorization: `Bearer ${auth.token}` } },
                             );
-                            setRefundAddress(res?.returnAddress ?? "");
+                            const data = await res.json().catch(() => null);
+                            const profile = data?.user ?? data;
+                            const saved = await extractCustomRefundAddressFromProfile(
+                              profile,
+                              auth.pgpPrivKey,
+                            );
+                            setRefundAddress(saved?.address || "");
                           } catch (e) {
                             setRefundError(
                               "Could not load refund address.",

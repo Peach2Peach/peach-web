@@ -13,6 +13,7 @@ import Avatar from "../components/Avatar.jsx";
 import { RefreshIndicator } from "../components/RefreshIndicator.jsx";
 import { AttentionStrip, AttentionPill } from "../components/AttentionIndicators.jsx";
 import { API_V1 } from "../utils/network.js";
+import { useCurrency } from "../components/AppLayout.jsx";
 
 const ATTENTION_DISMISS_KEY = "peach.attention.dismissed";
 
@@ -230,9 +231,11 @@ const css = `
     transition:border-color .14s
   }
   .ath-cur-select:focus{border-color:var(--primary)}
-  .ath-price-row{display:flex;align-items:baseline;gap:12px;margin-top:4px}
+  .ath-price-row{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin-top:4px}
   .ath-price-value{font-size:2rem;font-weight:800;color:var(--black);line-height:1;letter-spacing:-.02em}
-  .ath-price-label{font-size:.78rem;font-weight:500;color:var(--black-65);margin-top:4px}
+  .ath-kyc-block{display:flex;flex-direction:column;gap:2px;text-align:right}
+  .ath-kyc-label{font-size:.72rem;font-weight:500;color:var(--black-65);line-height:1.2}
+  .ath-kyc-value{font-size:1rem;font-weight:700;color:var(--black);line-height:1.2;letter-spacing:-.01em}
 
   /* ── ANIMATIONS ── */
   @keyframes fadeIn{from{opacity:0}to{opacity:1}}
@@ -306,6 +309,7 @@ export default function PeachHome() {
   // handleLogin for the logged-out CTA buttons.
   const { auth, isLoggedIn, handleLogin } = useAuth();
   const { get } = useApi();
+  const { allPrices } = useCurrency();
   const liveProfile = auth?.profile ?? null;
   // Build user profile — live data when logged in, empty defaults when logged out.
   // Some fields (preferredMethods, totalVolumeBtc, etc.) are not yet returned by
@@ -523,6 +527,7 @@ export default function PeachHome() {
   const athCurrSym = (c) => ATH_CUR_SYM[c] || c;
   const athAvailCurrencies = Object.keys(athPeaks?.[athPeriod] ?? {}).sort();
   const athPrice = athPeaks?.[athPeriod]?.[athCurrency] ?? null;
+  const kycPrice = allPrices?.[athCurrency] ?? null;
 
   return (
     <>
@@ -611,9 +616,16 @@ export default function PeachHome() {
                     ? `${athCurrSym(athCurrency)}${athCurrency === "CHF" ? " " : ""}${athPrice.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
                     : "\u2014"}
                 </span>
-              </div>
-              <div className="ath-price-label">
-                Highest trade price in the last {athPeriod === "24h" ? "24 hours" : athPeriod === "7d" ? "7 days" : "30 days"}
+                {kycPrice != null && (
+                  <div className="ath-kyc-block">
+                    <div className="ath-kyc-label">
+                      {athPeriod === "24h" ? "KYC market price:" : "KYC price today:"}
+                    </div>
+                    <div className="ath-kyc-value">
+                      {athCurrSym(athCurrency)}{athCurrency === "CHF" ? " " : ""}{Math.round(kycPrice).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
