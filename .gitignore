@@ -24,6 +24,7 @@ src/peach-api-config.js
 
 # Claude instructions (local only)
 CLAUDE.md
+.claude/
 
 #backlog and planning files
 peach-backlog.md
