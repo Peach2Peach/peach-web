@@ -858,3 +858,33 @@ export function MultiEscrowFunding({
     </>
   );
 }
+
+export function ReviewPills({ form, multiEnabled, multiCount }) {
+  const pills = [
+    { label: "⚡ Instant Trade", active: form.instantMatch },
+    { label: "No New Users", active: form.noNewUsers },
+    { label: "Min Rep 4.5", active: form.minReputation },
+    { label: "Fast Trader", active: form.instantMatchBadges.includes("fastTrader") },
+    { label: "Super Trader", active: form.instantMatchBadges.includes("superTrader") },
+    { label: form.experienceLevel === "newUsersOnly" ? "New Users Only"
+            : form.experienceLevel === "experiencedUsersOnly" ? "Experienced Only"
+            : "Experience Filter",
+      active: !!form.experienceLevel },
+    { label: `×${multiCount} Copies`, active: multiEnabled },
+  ];
+  return (
+    <div style={{marginTop:12,maxWidth:480,marginLeft:"auto",marginRight:"auto"}}>
+      <div style={{fontSize:".72rem",fontWeight:700,color:"var(--black-65)",
+        textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>
+        Advanced options
+      </div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+        {pills.map(({ label, active }) => (
+          <span key={label} className={`review-pill ${active ? "active" : "inactive"}`}>
+            {label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}

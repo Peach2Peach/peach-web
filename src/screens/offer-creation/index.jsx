@@ -18,12 +18,13 @@ import { IS_PHONE, buildMobileActionDeepLink } from "../../utils/mobileAction.js
 import { QRCodeSVG } from "qrcode.react";
 import { SAT, fmt, satsToFiatRaw as satsToFiat, fmtFiat as fmtEur, formatTradeId, truncateAddress } from "../../utils/format.js";
 import { extractCustomRefundAddressFromProfile } from "../../utils/customRefundAddressSync.js";
+import { fetchSavedCustomPayoutAddress } from "../../utils/customPayoutAddressSync.js";
 import { BITCOIN_NETWORK } from "../../utils/network.js";
 import { CSS } from "./styles.js";
 import {
   MIN_SATS, maxSatsAtLimit, currSym,
   getSteps, LivePreview, AmountSlider,
-  MultiOfferControl, MultiEscrowFunding,
+  MultiOfferControl, MultiEscrowFunding, ReviewPills,
 } from "./components.jsx";
 import {
   AddPMFlow, methodLabel, normalizeApiPaymentMethods,
@@ -101,6 +102,47 @@ function readPersistedPMSelection() {
     const parsed = raw ? JSON.parse(raw) : null;
     return Array.isArray(parsed) ? parsed.filter(x => typeof x === "string") : [];
   } catch { return []; }
+}
+
+// ─── Address display with copy + explorer link ─────────────────────────────
+function AddressWithActions({ addr, label }) {
+  const [copied, setCopied] = useState(false);
+  if (!addr) return "—";
+  const handleCopy = () => {
+    navigator.clipboard.writeText(addr).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+  return (
+    <span style={{display:"inline-flex",flexDirection:"column",alignItems:"flex-end",gap:3}}>
+      <span style={{display:"inline-flex",alignItems:"center",gap:8}}>
+        {label && (
+          <span style={{fontSize:".72rem",fontWeight:700,color:"var(--black-65)",
+            background:"var(--black-5)",border:"1px solid var(--black-10)",
+            borderRadius:6,padding:"2px 8px",whiteSpace:"nowrap"}}>
+            {label}
+          </span>
+        )}
+        <span style={{fontFamily:"monospace",fontSize:".76rem",color:"var(--black)",wordBreak:"break-all"}}>
+          {truncateAddress(addr)}
+        </span>
+      </span>
+      <span style={{display:"inline-flex",gap:8,alignItems:"center"}}>
+        <button type="button" onClick={handleCopy}
+          style={{background:"none",border:"none",cursor:"pointer",padding:0,
+            fontSize:".68rem",fontWeight:700,color:copied?"var(--success)":"var(--primary)",
+            fontFamily:"var(--font)",textDecoration:"underline",textUnderlineOffset:"2px"}}>
+          {copied?"copied":"copy"}
+        </button>
+        <a href={`https://mempool.space/address/${addr}`} target="_blank" rel="noopener noreferrer"
+          style={{fontSize:".68rem",fontWeight:700,color:"var(--primary)",
+            fontFamily:"var(--font)",textDecoration:"underline",textUnderlineOffset:"2px"}}>
+          see in explorer
+        </a>
+      </span>
+    </span>
+  );
 }
 
 // ─── Stat pills (market intel) ──────────────────────────────────────────────
@@ -244,12 +286,15 @@ export default function OfferCreation({ initialType="buy" }) {
   const initForm = (selectedMethodIds=[])=>({amtFixed:MIN_SATS,
     selectedMethodIds,premium:"0",instantMatch:false,noNewUsers:false,
     minReputation:false,instantMatchBadges:[],experienceLevel:"",
+    releaseMode:"peach",
     refundChoices:[{ mode:"peach", address:"" }]});
   const [form, setForm] = useState(()=>initForm(readPersistedPMSelection()));
   const [refundErrors, setRefundErrors] = useState({});
   const [refundExpanded, setRefundExpanded] = useState(false);
   const [advancedExpanded, setAdvancedExpanded] = useState(false);
   const [savedRefund, setSavedRefund] = useState(null); // { address, label } or null
+  const [savedPayoutAddress, setSavedPayoutAddress] = useState(null);
+  const [editingPremiumInline, setEditingPremiumInline] = useState(false);
   const userTouchedRefundRef = useRef(false);
 
   // Fetch the user's saved refund address from /v069/selfUser on mount.
@@ -278,6 +323,21 @@ export default function OfferCreation({ initialType="buy" }) {
     })();
     return () => { cancelled = true; };
   }, [auth?.token, auth?.pgpPrivKey, auth?.baseUrl, btcNetwork]);
+
+  useEffect(() => {
+    if (!auth?.token || !auth?.pgpPrivKey || !auth?.baseUrl || type === "sell") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const saved = await fetchSavedCustomPayoutAddress(auth);
+        if (cancelled || !saved?.address) return;
+        setSavedPayoutAddress(saved);
+      } catch (err) {
+        console.warn("[OfferCreation] Payout address fetch failed:", err.message);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [auth?.token, auth?.pgpPrivKey, auth?.baseUrl, type]);
 
   // Persist PM selection so it survives Buy↔Sell tab switches and screen
   // navigation within the same browser tab.
@@ -637,6 +697,9 @@ export default function OfferCreation({ initialType="buy" }) {
           return;
         }
 
+        if (sellOfferId && escrowAddress) { setStep(2); return; }
+        if (multiResults && multiResults.some(r => r.status !== "failed" && r.escrowAddress)) { setStep(2); return; }
+
         setPublishing(true);
         setPublishError(null);
         try{
@@ -989,7 +1052,16 @@ export default function OfferCreation({ initialType="buy" }) {
     else setPublishError(`${stillFailing} of ${updated.length} offers still failing`);
   }
 
-  function handleBack(){ setStep(s=>s-1); }
+  function handleBack(){
+    if (step === 1) {
+      setSellOfferId(null);
+      setEscrowAddress(null);
+      setFundingStatus(null);
+      setEscrowFunded(false);
+      setMultiResults(null);
+    }
+    setStep(s => s - 1);
+  }
 
   const sliderBg=`linear-gradient(to right,var(--primary) 0%,var(--primary) ${((prem+21)/42)*100}%,var(--black-10) ${((prem+21)/42)*100}%,var(--black-10) 100%)`;
 
@@ -1450,6 +1522,53 @@ export default function OfferCreation({ initialType="buy" }) {
                 </>)}
               </div>
 
+              {/* §5 Release to (buy only) */}
+              {!isSell && (
+                <div className="card-section">
+                  <div className="section-header">
+                    <div className="section-num filled">5</div>
+                    <span className="section-title">Release to</span>
+                  </div>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:6,marginBottom:8}}>
+                    {[
+                      ["peach","Peach Wallet"],
+                      ...(savedPayoutAddress?.address
+                        ? [["saved", savedPayoutAddress.label || "Custom address"]]
+                        : []),
+                    ].map(([val,label])=>{
+                      const sel = form.releaseMode===val;
+                      return (
+                        <button key={val} type="button"
+                          onClick={()=>setF("releaseMode",val)}
+                          style={{
+                            border:"1.5px solid var(--primary)",
+                            background: sel ? "var(--primary)" : "transparent",
+                            color: sel ? "var(--surface)" : "var(--primary)",
+                            padding:"8px 16px",borderRadius:999,fontWeight:700,
+                            fontSize:".78rem",fontFamily:"'Baloo 2', cursive",
+                            cursor:"pointer",transition:"background .15s, color .15s",
+                          }}>
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {form.releaseMode==="saved" && savedPayoutAddress?.address && (
+                    <div style={{marginBottom:8}}>
+                      <span style={{fontFamily:"monospace",fontSize:".74rem",color:"var(--black-65)",wordBreak:"break-all"}}>
+                        {savedPayoutAddress.address}
+                      </span>
+                    </div>
+                  )}
+                  <button type="button" style={{display:"block",background:"none",border:"none",
+                    cursor:"pointer",fontSize:".76rem",fontWeight:700,color:"var(--primary)",
+                    fontFamily:"var(--font)",padding:0,textDecoration:"underline",textUnderlineOffset:"2px"}}
+                    onClick={()=>navigate("/settings",{state:{openSection:"payout"}})}>
+                    {savedPayoutAddress?.address ? "Change in Settings →" : "Set up custom address in Settings →"}
+                  </button>
+                </div>
+              )}
+
               {/* §5 Refund (sell only) */}
               {isSell && (
                 <div className="card-section">
@@ -1641,19 +1760,30 @@ export default function OfferCreation({ initialType="buy" }) {
                       </span>
                     </span>],
                   ["Premium",
-                    <span style={{fontWeight:800,color:prem===0?"var(--black-65)":
-                      isSell?(prem>0?"var(--success)":"var(--error)"):(prem<0?"var(--success)":"var(--error)")}}>
-                      {prem>0?"+":""}{prem.toFixed(1)}%
+                    <span style={{display:"inline-flex",alignItems:"center",gap:8}}>
+                      <span style={{fontWeight:800,color:prem===0?"var(--black-65)":
+                        isSell?(prem>0?"var(--success)":"var(--error)"):(prem<0?"var(--success)":"var(--error)")}}>
+                        {prem>0?"+":""}{prem.toFixed(1)}%
+                      </span>
+                      <button type="button" className="review-edit-btn"
+                        onClick={()=>setEditingPremiumInline(v=>!v)}>
+                        {editingPremiumInline?"close":"edit"}
+                      </button>
                     </span>],
                   ["Current effective price", `${currSym(selectedCurrency)}${Math.round(effP).toLocaleString()}/BTC`],
                   ["Methods", offerMethods.join(", ")||"—"],
                   ["Currencies", offerCurrencies.join(", ")||"—"],
-                  ...(form.instantMatch?[["Instant Trade", "⚡ Enabled"]]:[]),
-                  ...(form.noNewUsers?[["No new users", "On"]]:[]),
-                  ...(form.minReputation?[["Min reputation", "4.5"]]:[]),
-                  ...(form.instantMatchBadges.length>0?[["Badge filter", form.instantMatchBadges.map(b=>b==="fastTrader"?"Fast trader":"Super trader").join(", ")]]:[]),
-                  ...(form.experienceLevel?[["Experience filter", form.experienceLevel==="newUsersOnly"?"New users only":"Experienced users only"]]:[]),
-                  ...(multiEnabled?[["Copies", `×${multiCount}`]]:[]),
+                  ...(!isSell?[["Release to",
+                    form.releaseMode==="saved" && savedPayoutAddress?.address
+                      ? <AddressWithActions addr={savedPayoutAddress.address} label={savedPayoutAddress.label}/>
+                      : "Peach Wallet"
+                  ]]:[]),
+                  ...(isSell?[["Refund to", (() => {
+                    const c = form.refundChoices[0];
+                    if (!c || c.mode === "peach") return "Peach Wallet";
+                    if (c.mode === "saved") return <AddressWithActions addr={savedRefund?.address} label={savedRefund?.label}/>;
+                    return <AddressWithActions addr={c.address}/>;
+                  })()]]:[]),
                 ].map(([k,v])=>(
                   <div key={k} className="review-row">
                     <span className="rk">{k}</span>
@@ -1661,6 +1791,66 @@ export default function OfferCreation({ initialType="buy" }) {
                   </div>
                 ))}
               </div>
+
+              {editingPremiumInline && (
+                <div className="review-inline-editor">
+                  <div className="prem-row">
+                    <div className="prem-slider-wrap">
+                      <input type="range" className="prem-slider" min={-21} max={21} step={0.1}
+                        value={prem} style={{background:sliderBg}}
+                        onChange={e=>setF("premium",parseFloat(e.target.value).toFixed(1))}/>
+                      <div className="slider-labels">
+                        <span>−21%</span><span>0%</span><span>+21%</span>
+                      </div>
+                    </div>
+                    <div className="prem-input-wrap">
+                      <input className="prem-input" type="number" step="0.1" min="-21" max="21"
+                        value={form.premium}
+                        onChange={e=>{
+                          const v=e.target.value;
+                          if(v===""||v==="-"){setF("premium",v);return;}
+                          const n=parseFloat(v);
+                          if(!isNaN(n))setF("premium",Math.max(-21,Math.min(21,n)).toFixed(1));
+                        }}/>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:12,marginTop:14,
+                    background:"var(--bg)",borderRadius:8,padding:"8px 12px",
+                    border:"1px solid var(--black-10)"}}>
+                    <div style={{flex:1,textAlign:"center"}}>
+                      <div style={{fontSize:".65rem",fontWeight:700,color:"var(--black-65)",
+                        textTransform:"uppercase",letterSpacing:".06em",marginBottom:2}}>Market</div>
+                      <div style={{fontSize:".88rem",fontWeight:800}}>{currSym(selectedCurrency)}{pricesLoaded ? btcPrice.toLocaleString() : "?"}</div>
+                    </div>
+                    <div style={{width:1,background:"var(--black-10)"}}/>
+                    <div style={{flex:1,textAlign:"center"}}>
+                      <div style={{fontSize:".65rem",fontWeight:700,color:"var(--black-65)",
+                        textTransform:"uppercase",letterSpacing:".06em",marginBottom:2}}>Effective</div>
+                      <div style={{fontSize:".88rem",fontWeight:800,
+                        color:prem===0?"var(--black)":
+                          isSell?(prem>0?"var(--success)":"var(--error)"):(prem<0?"var(--success)":"var(--error)")}}>
+                        {currSym(selectedCurrency)}{Math.round(effP).toLocaleString()}
+                      </div>
+                    </div>
+                    <div style={{width:1,background:"var(--black-10)"}}/>
+                    <div style={{flex:1,textAlign:"center"}}>
+                      <div style={{fontSize:".65rem",fontWeight:700,color:"var(--black-65)",
+                        textTransform:"uppercase",letterSpacing:".06em",marginBottom:2}}>
+                        {isSell?"You receive":"You pay"}
+                      </div>
+                      <div style={{fontSize:".88rem",fontWeight:800}}>
+                        {currSym(selectedCurrency)}{fmtEur(satsToFiat(form.amtFixed,effP))}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{textAlign:"center",marginTop:12}}>
+                    <button type="button" className="btn-next" style={{padding:"8px 24px",fontSize:".82rem"}}
+                      onClick={()=>setEditingPremiumInline(false)}>Done</button>
+                  </div>
+                </div>
+              )}
+
+              <ReviewPills form={form} multiEnabled={multiEnabled} multiCount={multiCount}/>
 
               {/* ── PUBLISH PROGRESS BAR (multi-offer) ── */}
               {multiPublishProgress && (

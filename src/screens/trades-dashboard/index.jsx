@@ -53,7 +53,7 @@ import MatchesPopup, {
 import { normalizeOffer, normalizeContract, hasInstantTradeEnabled } from "../../utils/tradesNormalize.js";
 import RequestedOfferPopup from "../../components/RequestedOfferPopup.jsx";
 import { RefreshIndicator } from "../../components/RefreshIndicator.jsx";
-import { InfoDot, TradingLimitsInfoPopup } from "../../components/InfoPopup.jsx";
+import InfoPopup, { InfoDot, TradingLimitsInfoPopup } from "../../components/InfoPopup.jsx";
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const CSS = `
@@ -1280,6 +1280,7 @@ export default function TradesDashboard() {
   // Mobile refund pending action id — set from /offer/:id/details
   // `mobileActionRefundWasTriggered` (now an integer DB id, not boolean).
   const [odRefundActionId, setOdRefundActionId] = useState(null);
+  const [mempoolHelpOpen, setMempoolHelpOpen] = useState(false);
 
   function openOfferDetail(offer) {
     setOdEditingPremium(false);
@@ -2816,6 +2817,7 @@ export default function TradesDashboard() {
                             }}
                           >
                             Your bitcoin transaction is pending... You can go do something else, we'll automatically publish your offer as soon as it's confirmed!
+                            <InfoDot ariaLabel="What is the mempool?" onClick={() => setMempoolHelpOpen(true)} />
                           </div>
                           <div
                             style={{
@@ -4046,6 +4048,12 @@ export default function TradesDashboard() {
       <Toast message={toast} tone={toastTone} />
 
       {limitsHelpOpen && <TradingLimitsInfoPopup onClose={() => setLimitsHelpOpen(false)} />}
+      {mempoolHelpOpen && (
+        <InfoPopup title="the mempool" onClose={() => setMempoolHelpOpen(false)}>
+          <p className="ip-text">Bitcoin transactions first go to the 'mempool' before processing.</p>
+          <p className="ip-text">Transactions with higher fees are processed first.</p>
+        </InfoPopup>
+      )}
     </>
   );
 }

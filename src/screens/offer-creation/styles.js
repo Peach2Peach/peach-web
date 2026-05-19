@@ -287,6 +287,21 @@ export const CSS = `
   .rk{font-size:.78rem;font-weight:600;color:var(--black-65)}
   .rv{font-size:.86rem;font-weight:800;color:var(--black);text-align:right;max-width:60%}
 
+  .review-pill{display:inline-flex;align-items:center;gap:4px;
+    padding:5px 12px;border-radius:999px;font-size:.72rem;font-weight:700;
+    font-family:var(--font);transition:all .15s;user-select:none}
+  .review-pill.active{background:var(--primary-mild);color:var(--primary-dark);
+    border:1.5px solid var(--primary)}
+  .review-pill.inactive{background:var(--black-5);color:var(--black-25);
+    border:1.5px solid var(--black-10)}
+  .review-edit-btn{background:none;border:none;cursor:pointer;padding:2px 6px;
+    font-size:.72rem;color:var(--black-65);transition:color .12s;font-family:var(--font);
+    font-weight:700;text-decoration:underline;text-underline-offset:2px}
+  .review-edit-btn:hover{color:var(--primary)}
+  .review-inline-editor{background:var(--surface);border:1px solid var(--black-10);
+    border-radius:14px;padding:16px 20px;max-width:480px;margin:12px auto 0;
+    animation:stepFwd .2s ease both}
+
   /* Escrow */
   .escrow-addr{font-family:monospace;font-size:.76rem;background:var(--black-5);
     border:1px solid var(--black-10);border-radius:10px;padding:11px 13px;
