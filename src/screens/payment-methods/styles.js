@@ -10,7 +10,7 @@ export const CSS = `
   .page-header{display:flex;align-items:flex-start;gap:16px;margin-bottom:28px;flex-wrap:wrap}
   .page-title{font-size:1.5rem;font-weight:800;letter-spacing:-.02em}
   .page-subtitle{font-size:.85rem;color:var(--black-65);margin-top:2px}
-  .header-right{margin-left:auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .header-right{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 
   .btn-cta{background:var(--grad);color:white;border:none;border-radius:999px;
     font-family:var(--font);font-size:.85rem;font-weight:800;
