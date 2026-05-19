@@ -580,7 +580,7 @@ export default function PeachMarket() {
       <style>{CSS}</style>
 
         {/* ── POPUP ── */}
-        {popupOfferId && isLoggedIn && (() => {
+        {popupOfferId && (() => {
           const offer = marketOffers.find(o => String(o.id) === String(popupOfferId));
           if (!offer) return null;
           return (
@@ -775,7 +775,7 @@ export default function PeachMarket() {
                         undoAnim===offer.id?"undo-row":"",
                         highlightedIds.has(offer.id)?"new-offer-row":""
                       ].filter(Boolean).join(" ")}
-                      style={{cursor: "pointer"}} onClick={() => { if (isLoggedIn) setPopupOfferId(offer.id); else navigate("/"); }}>
+                      style={{cursor: "pointer"}} onClick={() => setPopupOfferId(offer.id)}>
                       <td><RepCell offer={offer}/></td>
                       <td><AmountCell offer={offer} btcPrice={btcPrice} currency={selectedCurrency}/></td>
                       <td><PriceCell offer={offer} btcPrice={btcPrice} currency={selectedCurrency} isSellTab={isSellTab}/></td>
@@ -858,7 +858,7 @@ export default function PeachMarket() {
               </div>
             ) : displayOffers.map(offer => (
             <div key={offer.id} className={`offer-card${offer.isOwn?" own-card":""}${effectiveRequested.has(offer.id)&&!offer.auto&&!offer.isOwn?" requested-card":""}${undoAnim===offer.id?" undo-card":""}${highlightedIds.has(offer.id)?" new-offer-card":""}`}
-              style={{cursor: "pointer"}} onClick={() => { if (isLoggedIn) setPopupOfferId(offer.id); else navigate("/"); }}>
+              style={{cursor: "pointer"}} onClick={() => setPopupOfferId(offer.id)}>
                 {/* Row 1: PeachID + avatar · rep/badges (left) | offer ID + action (right) */}
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
                   <span className="user-peach-id">{offer.peachId}</span>

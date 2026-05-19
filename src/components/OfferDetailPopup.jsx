@@ -81,6 +81,7 @@ export default function OfferDetailPopup({
   const navigate = useNavigate();
   const location = useLocation();
   const { get, post, patch, auth } = useApi();
+  const isLoggedIn = !!auth;
   const { btcPrice, selectedCurrency } = useCurrency();
   const { pms: pmsRaw, error: pmFetchError } = useUserPMs(auth);
   const pmError = !!pmFetchError;
@@ -523,7 +524,7 @@ export default function OfferDetailPopup({
 
   // Avatar / peachId profile link — disabled when we're already on a /user/ route.
   const onProfileRoute = location.pathname.startsWith("/user/");
-  const canVisitProfile = offer.userId && !isOwn && !onProfileRoute;
+  const canVisitProfile = isLoggedIn && offer.userId && !isOwn && !onProfileRoute;
   const handleVisitProfile = (e) => {
     if (!canVisitProfile) return;
     e.stopPropagation();
@@ -711,8 +712,18 @@ export default function OfferDetailPopup({
             )}
           </div>
 
-          {/* ── TRADE REQUEST variant: PM selector ── */}
-          {!isOwn && (
+          {/* ── TRADE REQUEST variant: PM selector (or sign-in CTA) ── */}
+          {!isOwn && !isLoggedIn && (
+            <div style={{textAlign:"center",padding:"18px 0 4px"}}>
+              <div style={{fontWeight:700,fontSize:".88rem",color:"var(--black)"}}>
+                Sign in to trade!
+              </div>
+              <div style={{fontSize:".78rem",color:"var(--black-65)",lineHeight:1.5,marginTop:4}}>
+                Create an account or log in to match with this offer.
+              </div>
+            </div>
+          )}
+          {!isOwn && isLoggedIn && (
             <>
               <div className="popup-section-label">
                 Select your payment method
@@ -822,7 +833,13 @@ export default function OfferDetailPopup({
         {/* Footer actions */}
         <div className="popup-footer">
           {/* ── Trade request (not own) ── */}
-          {!isOwn && (
+          {!isOwn && !isLoggedIn && (
+            <button className="popup-btn popup-btn-request"
+              onClick={() => { onClose(); navigate("/"); }}>
+              Sign in to trade
+            </button>
+          )}
+          {!isOwn && isLoggedIn && (
             pendingRequest && pendingRequest.offer.id === offer.id ? (
               <div className="popup-pending-row">
                 <div className="popup-pending-top">
