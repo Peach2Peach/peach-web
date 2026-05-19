@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useSyncExternalStore } from "react";
 import { STATUS_CONFIG, PENDING_STATUSES } from "../data/statusConfig.js";
 import { fetchWithSessionCheck } from "../utils/sessionGuard.js";
 import { API_V1 } from "../utils/network.js";
@@ -154,6 +154,49 @@ function saveBaseline() {
   } catch { /* quota or other — silently skip */ }
 }
 
+// ── Pending-escrow tracking (per-PeachID, persisted in localStorage) ────────
+const LS_ESCROW_PENDING_PREFIX = "peach_escrow_pending";
+const keyEscrowPending = (id) => id ? `${LS_ESCROW_PENDING_PREFIX}:${id}` : null;
+
+function loadEscrowPending(peachId) {
+  const k = keyEscrowPending(peachId);
+  if (!k) return [];
+  try { return JSON.parse(localStorage.getItem(k)) || []; } catch { return []; }
+}
+function saveEscrowPending(peachId, list) {
+  const k = keyEscrowPending(peachId);
+  if (!k) return;
+  try { localStorage.setItem(k, JSON.stringify(list)); } catch { /* quota */ }
+}
+
+export function addPendingEscrow(offerId, amount) {
+  const pid = _peachId();
+  if (!pid || offerId == null) return;
+  const list = loadEscrowPending(pid);
+  if (list.some(e => String(e.offerId) === String(offerId))) return;
+  list.push({ offerId: String(offerId), amount: Number(amount) || 0 });
+  saveEscrowPending(pid, list);
+}
+
+export function removePendingEscrow(offerId) {
+  const pid = _peachId();
+  if (!pid || offerId == null) return;
+  const list = loadEscrowPending(pid);
+  const filtered = list.filter(e => String(e.offerId) !== String(offerId));
+  if (filtered.length !== list.length) saveEscrowPending(pid, filtered);
+}
+
+export function addEscrowFundedNotification(offerId) {
+  const dedupId = `escrow-funded-${offerId}`;
+  if (_state.notifications.some(n => n.id === dedupId)) return;
+  _addEvents([_makeNotif(
+    dedupId, "statusChange",
+    "Escrow funded",
+    "The escrow has been funded and your offer is published.",
+    null, String(offerId)
+  )]);
+}
+
 // ── Singleton polling state ──────────────────────────────────────────────────
 let _interval      = null;
 let _listeners     = new Set();
@@ -208,13 +251,25 @@ function _hydrateForUser(peachId) {
 }
 
 function _notify() {
-  _listeners.forEach(fn => fn({ ..._state }));
+  _listeners.forEach(fn => fn());
 }
+
+function _subscribe(cb) {
+  _listeners.add(cb);
+  if (_listeners.size === 1) _startPolling();
+  return () => {
+    _listeners.delete(cb);
+    if (_listeners.size === 0) _stopPolling();
+  };
+}
+
+function _getSnapshot() { return _state; }
 
 function _addEvents(newEvents) {
   if (newEvents.length === 0) return;
-  _state.notifications = [...newEvents, ..._state.notifications].slice(0, MAX_NOTIFS);
-  _state.unreadCount = _state.notifications.filter(n => !_state.readIds.has(n.id)).length;
+  const notifications = [...newEvents, ..._state.notifications].slice(0, MAX_NOTIFS);
+  const unreadCount = notifications.filter(n => !_state.readIds.has(n.id)).length;
+  _state = { ..._state, notifications, unreadCount };
   saveNotifs(_state.notifications);
   saveReadIds(_state.readIds, _state.notifications);
   _updateTitle();
@@ -289,15 +344,17 @@ async function _poll(auth, base) {
               .then(r => ({ n, accepted: r.accepted }))
           )
         );
+        const readIds = new Set(_state.readIds);
         let dismissedAny = false;
         for (const { n, accepted } of checks) {
-          if (accepted === true && !_state.readIds.has(n.id)) {
-            _state.readIds.add(n.id);
+          if (accepted === true && !readIds.has(n.id)) {
+            readIds.add(n.id);
             dismissedAny = true;
           }
         }
         if (dismissedAny) {
-          _state.unreadCount = _state.notifications.filter(n => !_state.readIds.has(n.id)).length;
+          const unreadCount = _state.notifications.filter(n => !readIds.has(n.id)).length;
+          _state = { ..._state, readIds, unreadCount };
           saveReadIds(_state.readIds, _state.notifications);
           _updateTitle();
           _notify();
@@ -627,6 +684,37 @@ async function _poll(auth, base) {
       }
     }
 
+    // ── Check pending escrow funding ──
+    const pendingEscrows = loadEscrowPending(peachId);
+    if (pendingEscrows.length > 0) {
+      const checks = await Promise.all(
+        pendingEscrows.map(({ offerId, amount }) =>
+          fetchWithSessionCheck(`${base}/offer/${offerId}/escrow`, { headers: hdrs })
+            .then(r => r.ok ? r.json() : null)
+            .then(data => ({ offerId, amount, status: data?.funding?.status ?? null }))
+            .catch(() => ({ offerId, amount, status: null }))
+        )
+      );
+      for (const { offerId, amount, status } of checks) {
+        if (status === "FUNDED") {
+          const dedupId = `escrow-funded-${offerId}`;
+          const isNew = !_state.notifications.some(n => n.id === dedupId);
+          if (isNew) {
+            events.push(_makeNotif(
+              dedupId, "statusChange",
+              "Escrow funded",
+              "The escrow has been funded and your offer is published.",
+              null, String(offerId)
+            ));
+            window.dispatchEvent(new CustomEvent("peach:offer-published", {
+              detail: { offerId: String(offerId), amount },
+            }));
+          }
+          removePendingEscrow(offerId);
+        }
+      }
+    }
+
     _addEvents(events);
     saveBaseline();
   } catch {
@@ -653,8 +741,9 @@ function _stopPolling() {
 
 // ── Public actions ───────────────────────────────────────────────────────────
 function _markAllRead() {
-  for (const n of _state.notifications) _state.readIds.add(n.id);
-  _state.unreadCount = 0;
+  const readIds = new Set(_state.readIds);
+  for (const n of _state.notifications) readIds.add(n.id);
+  _state = { ..._state, readIds, unreadCount: 0 };
   saveReadIds(_state.readIds, _state.notifications);
   _updateTitle();
   _notify();
@@ -662,8 +751,10 @@ function _markAllRead() {
 
 function _markRead(notifId) {
   if (_state.readIds.has(notifId)) return;
-  _state.readIds.add(notifId);
-  _state.unreadCount = _state.notifications.filter(n => !_state.readIds.has(n.id)).length;
+  const readIds = new Set(_state.readIds);
+  readIds.add(notifId);
+  const unreadCount = _state.notifications.filter(n => !readIds.has(n.id)).length;
+  _state = { ..._state, readIds, unreadCount };
   saveReadIds(_state.readIds, _state.notifications);
   _updateTitle();
   _notify();
@@ -693,16 +784,7 @@ export function useNotifications() {
   // Hydrate synchronously so the very first render has the user's notifications
   // (idempotent — early-returns if already hydrated for this peachId).
   if (window.__PEACH_AUTH__?.peachId) _hydrateForUser(window.__PEACH_AUTH__.peachId);
-  const [state, setState] = useState(_state);
-
-  useEffect(() => {
-    _listeners.add(setState);
-    if (_listeners.size === 1) _startPolling();
-    return () => {
-      _listeners.delete(setState);
-      if (_listeners.size === 0) _stopPolling();
-    };
-  }, []);
+  const state = useSyncExternalStore(_subscribe, _getSnapshot);
 
   return {
     notifications: state.notifications,

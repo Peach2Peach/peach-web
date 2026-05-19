@@ -10,6 +10,7 @@ import { useApi, clearCache } from "../../hooks/useApi.js";
 import { useCurrency } from "../../components/AppLayout.jsx";
 import { useMarketStats } from "../../hooks/useMarketStats.js";
 import { useUserPMs, invalidateUserPMs } from "../../hooks/useUserPMs.js";
+import { addPendingEscrow, removePendingEscrow, addEscrowFundedNotification } from "../../hooks/useNotifications.js";
 import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 import { isApiError, hashPaymentFields, encryptForPublicKey, encryptPGPMessage, signPGPMessage } from "../../utils/pgp.js";
 import { deriveEscrowPubKey, deriveReturnAddress, isReturnAddressFromXpub } from "../../utils/escrow.js";
@@ -389,7 +390,7 @@ export default function OfferCreation({ initialType="buy" }) {
   // once the backend validates the amount. We must not leave the user on the
   // "Offer is live!" screen when the amount is wrong.
   useEffect(() => {
-    if (step !== 2 || !sellOfferId || !auth) return;
+    if (step !== 2 || !sellOfferId || !auth || escrowFunded) return;
     let cancelled = false;
     let redirected = false;
     const triggerRedirect = (amounts) => {
@@ -410,11 +411,8 @@ export default function OfferCreation({ initialType="buy" }) {
           get('/offer/' + sellOfferId + '/details'),
         ]);
         if (cancelled) return;
-        // Check details first — it's the authoritative source for wrong-amount.
         if (detailsRes.ok) {
           const details = await detailsRes.json();
-          // Pick up the pending-action id (server replaced the boolean
-          // `mobileActionFundEscrowWasTriggered` with the integer DB id).
           const maId = details?.mobileActionFundEscrowWasTriggered;
           if (typeof maId === "number") setFundMobileActionId(maId);
           if (
@@ -432,7 +430,12 @@ export default function OfferCreation({ initialType="buy" }) {
           setFundingStatus("MEMPOOL");
         } else if (s === "FUNDED") {
           setFundingStatus("FUNDED");
-          setTimeout(() => { if (!cancelled) setEscrowFunded(true); }, 1500);
+          setEscrowFunded(true);
+          removePendingEscrow(sellOfferId);
+          addEscrowFundedNotification(sellOfferId);
+          window.dispatchEvent(new CustomEvent("peach:offer-published", {
+            detail: { offerId: String(sellOfferId), amount: form.amtFixed },
+          }));
         } else if (s === "WRONG_FUNDING_AMOUNT") {
           triggerRedirect(data?.funding?.amounts);
         }
@@ -440,10 +443,10 @@ export default function OfferCreation({ initialType="buy" }) {
         console.warn("[OfferCreation] Escrow poll error:", err.message);
       }
     }
-    check(); // immediate first check
+    check();
     const iv = setInterval(check, 10000);
     return () => { cancelled = true; clearInterval(iv); };
-  }, [step, sellOfferId, auth, navigate]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [step, sellOfferId, auth, navigate, escrowFunded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Invalidate trades + market caches once an offer is published. Without this,
   // the user's just-created offer would be missing on trades-dashboard and
@@ -483,6 +486,8 @@ export default function OfferCreation({ initialType="buy" }) {
           } else if (s === "FUNDED" && next[idx].fundingStatus !== "FUNDED") {
             next[idx] = { ...next[idx], fundingStatus: "FUNDED", status: "funded" };
             changed = true;
+            removePendingEscrow(r.offerId);
+            addEscrowFundedNotification(r.offerId);
           } else if (s === "WRONG_FUNDING_AMOUNT" && next[idx].fundingStatus !== "WRONG_FUNDING_AMOUNT") {
             next[idx] = { ...next[idx], fundingStatus: "WRONG_FUNDING_AMOUNT" };
             changed = true;
@@ -495,6 +500,17 @@ export default function OfferCreation({ initialType="buy" }) {
     const iv = setInterval(checkAll, 10000);
     return () => { cancelled = true; clearInterval(iv); };
   }, [step, multiResults, auth]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Dispatch popup event when all multi-offers are funded
+  useEffect(() => {
+    if (!multiResults || multiResults.length < 2) return;
+    const valid = multiResults.filter(r => r.status !== "failed" && r.escrowAddress);
+    if (valid.length === 0 || !valid.every(r => r.fundingStatus === "FUNDED")) return;
+    const first = valid[0];
+    window.dispatchEvent(new CustomEvent("peach:offer-published", {
+      detail: { offerId: String(first.offerId), amount: form.amtFixed },
+    }));
+  }, [multiResults]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function setF(k,v){ setForm(f=>({...f,[k]:v})); }
 
@@ -545,6 +561,12 @@ export default function OfferCreation({ initialType="buy" }) {
     setRefundExpanded(false);
     userTouchedRefundRef.current = false;
   }
+
+  useEffect(() => {
+    const handler = () => { if (step === 2 && escrowFunded) reset(); };
+    window.addEventListener("peach:offer-published-dismissed", handler);
+    return () => window.removeEventListener("peach:offer-published-dismissed", handler);
+  }, [step, escrowFunded]);
   function switchType(t){ setType(t); reset(); }
 
   function buildInstantTradeCriteria(){
@@ -792,6 +814,7 @@ export default function OfferCreation({ initialType="buy" }) {
                 if(!escrowRes.ok) throw new Error(escrowData?.error || escrowData?.message || `Escrow creation failed ${escrowRes.status}`);
 
                 results.push({ offerId: String(newOfferId), escrowAddress: escrowData.escrow, status: "escrow_ready", fundingStatus: null, error: null });
+                addPendingEscrow(newOfferId, form.amtFixed);
               } catch(e) {
                 results.push({ offerId: null, escrowAddress: null, status: "failed", fundingStatus: null, error: e.message });
               }
@@ -830,6 +853,7 @@ export default function OfferCreation({ initialType="buy" }) {
 
             setSellOfferId(newOfferId);
             setEscrowAddress(escrowData.escrow);
+            addPendingEscrow(newOfferId, form.amtFixed);
             setStep(2);
           }
         }catch(err){
@@ -2191,33 +2215,10 @@ export default function OfferCreation({ initialType="buy" }) {
                 </>
               ):(
                 <div style={{display:"flex",flexDirection:"column",alignItems:"center",
-                  gap:20,paddingTop:32,textAlign:"center",animation:"stepFwd .4s ease both"}}>
+                  gap:16,paddingTop:48,textAlign:"center",animation:"stepFwd .4s ease both"}}>
                   <div className="success-icon">✓</div>
-                  <div style={{fontSize:"1.4rem",fontWeight:800,color:"var(--success)"}}>
-                    Offer is live!
-                  </div>
-                  <p style={{fontSize:".88rem",color:"var(--black-65)",lineHeight:1.65,maxWidth:340}}>
-                    Your sell offer for <strong style={{color:"var(--black)"}}>
-                      {fmt(form.amtFixed)} sats
-                    </strong> is now visible in the market. We'll notify you when a buyer sends a trade request.
-                  </p>
-                  <div style={{display:"flex",gap:12}}>
-                    <button onClick={() => {
-                      const ids = sellOfferId ? [String(sellOfferId)] : [];
-                      navigate("/market", {
-                        state: { highlightOfferIds: ids, highlightDirection: "sell" },
-                      });
-                    }} style={{padding:"10px 28px",borderRadius:999,
-                      border:"1.5px solid var(--black-10)",background:"transparent",color:"var(--black-65)",
-                      cursor:"pointer",fontFamily:"var(--font)",fontSize:".88rem",fontWeight:700}}>
-                      View in market
-                    </button>
-                    <button onClick={reset} style={{padding:"10px 28px",borderRadius:999,
-                      background:"var(--grad)",color:"white",border:"none",cursor:"pointer",
-                      fontFamily:"var(--font)",fontSize:".88rem",fontWeight:800,
-                      boxShadow:"0 2px 12px rgba(245,101,34,.3)"}}>
-                      Create another offer
-                    </button>
+                  <div style={{fontSize:"1.2rem",fontWeight:800,color:"var(--success)"}}>
+                    Offer published
                   </div>
                 </div>
               )}

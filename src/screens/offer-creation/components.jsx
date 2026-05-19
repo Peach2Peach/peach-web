@@ -508,82 +508,11 @@ export function MultiEscrowFunding({
   // ── ALL FUNDED SUCCESS ──
   if (allFunded) {
     return (
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: 20,
-          paddingTop: 32,
-          textAlign: "center",
-          animation: "stepFwd .4s ease both",
-        }}
-      >
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",
+        gap:16,paddingTop:48,textAlign:"center",animation:"stepFwd .4s ease both"}}>
         <div className="success-icon">✓</div>
-        <div
-          style={{
-            fontSize: "1.4rem",
-            fontWeight: 800,
-            color: "var(--success)",
-          }}
-        >
-          All {validResults.length} offers are live!
-        </div>
-        <p
-          style={{
-            fontSize: ".88rem",
-            color: "var(--black-65)",
-            lineHeight: 1.65,
-            maxWidth: 340,
-          }}
-        >
-          Your {validResults.length} sell offers for{" "}
-          <strong style={{ color: "var(--black)" }}>
-            {fmt(amtFixed)} sats
-          </strong>{" "}
-          each are now visible in the market.
-        </p>
-        <div style={{ display: "flex", gap: 12 }}>
-          <button
-            onClick={() => {
-              const ids = validResults
-                .filter(r => r.offerId)
-                .map(r => String(r.offerId));
-              navigate("/market", {
-                state: { highlightOfferIds: ids, highlightDirection: "sell" },
-              });
-            }}
-            style={{
-              padding: "10px 28px",
-              borderRadius: 999,
-              border: "1.5px solid var(--black-10)",
-              background: "transparent",
-              color: "var(--black-65)",
-              cursor: "pointer",
-              fontFamily: "var(--font)",
-              fontSize: ".88rem",
-              fontWeight: 700,
-            }}
-          >
-            View in market
-          </button>
-          <button
-            onClick={reset}
-            style={{
-              padding: "10px 28px",
-              borderRadius: 999,
-              background: "var(--grad)",
-              color: "white",
-              border: "none",
-              cursor: "pointer",
-              fontFamily: "var(--font)",
-              fontSize: ".88rem",
-              fontWeight: 800,
-              boxShadow: "0 2px 12px rgba(245,101,34,.3)",
-            }}
-          >
-            Create another offer
-          </button>
+        <div style={{fontSize:"1.2rem",fontWeight:800,color:"var(--success)"}}>
+          All {validResults.length} offers published
         </div>
       </div>
     );

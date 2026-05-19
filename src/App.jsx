@@ -2,6 +2,7 @@ import { Component, useState, useEffect, lazy, Suspense } from 'react'
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import SessionExpiredModal from './components/SessionExpiredModal.jsx'
 import TamperDetectedModal from './components/TamperDetectedModal.jsx'
+import OfferPublishedPopup from './components/OfferPublishedPopup.jsx'
 import { clearCache } from './hooks/useApi.js'
 import { invalidateUserPMs } from './hooks/useUserPMs.js'
 import { resetSessionExpiredFlag, isTokenExpired } from './utils/sessionGuard.js'
@@ -70,6 +71,7 @@ function ProtectedRoute({ children }) {
 export default function App() {
   const [sessionExpired, setSessionExpired] = useState(false);
   const [tamperedFields, setTamperedFields] = useState(null);
+  const [publishedOffer, setPublishedOffer] = useState(null);
 
   useEffect(() => {
     const handleExpired = () => setSessionExpired(true);
@@ -89,6 +91,12 @@ export default function App() {
     };
     window.addEventListener('peach:tamper-detected', handleTamper);
     return () => window.removeEventListener('peach:tamper-detected', handleTamper);
+  }, []);
+
+  useEffect(() => {
+    const handler = (e) => setPublishedOffer(e?.detail ?? null);
+    window.addEventListener('peach:offer-published', handler);
+    return () => window.removeEventListener('peach:offer-published', handler);
   }, []);
 
   function handleReauth() {
@@ -128,6 +136,12 @@ export default function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </AppLayout>
+        {publishedOffer && (
+          <OfferPublishedPopup
+            offerId={publishedOffer.offerId}
+            onClose={() => setPublishedOffer(null)}
+          />
+        )}
       </HashRouter>
       {sessionExpired && <SessionExpiredModal onReauth={handleReauth} />}
       {tamperedFields && (
