@@ -1135,9 +1135,32 @@ export default function MatchesPopup({
                         style={{
                           display: "inline-flex",
                           alignItems: "center",
-                          gap: 8,
+                          gap: 6,
                         }}
                       >
+                        <span
+                          onClick={() => {
+                            navigator.clipboard
+                              ?.writeText(escrowAddress)
+                              .catch(() => {});
+                            setCopiedEscrow(true);
+                            setTimeout(() => setCopiedEscrow(false), 1500);
+                          }}
+                          title="Copy address"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            cursor: "pointer",
+                            color: copiedEscrow
+                              ? "var(--success)"
+                              : "var(--black-50)",
+                          }}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="7" y="7" width="11" height="11" rx="2"/>
+                            <path d="M3 13V3h10"/>
+                          </svg>
+                        </span>
                         <span
                           onClick={() => {
                             navigator.clipboard
@@ -1170,12 +1193,17 @@ export default function MatchesPopup({
                           style={{
                             display: "inline-flex",
                             alignItems: "center",
+                            gap: 4,
                             color: "var(--primary)",
+                            fontSize: ".7rem",
+                            fontWeight: 600,
+                            textDecoration: "none",
                           }}
                         >
+                          view in explorer
                           <svg
-                            width="12"
-                            height="12"
+                            width="11"
+                            height="11"
                             viewBox="0 0 11 11"
                             fill="none"
                             stroke="currentColor"
