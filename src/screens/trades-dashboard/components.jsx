@@ -82,8 +82,8 @@ export function FilterDropdown({ label, options, selected, onChange }) {
 // Uses real API TradeStatus values
 export const PILL_CONFIG = {
   // Pending / no action
-  searchingForPeer:    { bg:"var(--primary-bg)", color:"var(--primary-dark)", label:"Waiting for request",   passive:true  },
-  waitingForTradeRequest:{ bg:"var(--primary-bg)", color:"var(--primary-dark)", label:"Waiting for request", passive:true  },
+  searchingForPeer:    { bg:"var(--primary-bg)", color:"var(--primary-dark)", label:"Waiting for trade request",   passive:true  },
+  waitingForTradeRequest:{ bg:"var(--primary-bg)", color:"var(--primary-dark)", label:"Waiting for trade request", passive:true  },
   offerHidden:         { bg:"var(--primary-bg)", color:"var(--primary-dark)", label:"Offer hidden",          passive:true  },
   // Action required
   hasMatchesAvailable: { bg:"var(--primary)",    color:"white",              label:"View requests",         passive:false },

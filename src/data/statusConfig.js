@@ -13,8 +13,8 @@
 
 export const STATUS_CONFIG = {
   // ── Pending (offer stage) ──
-  searchingForPeer:    { label: "Waiting for request",   bg: "var(--black-5)", color: "var(--black-65)", action: false },
-  waitingForTradeRequest:{ label: "Waiting for request", bg: "var(--black-5)", color: "var(--black-65)", action: false },
+  searchingForPeer:    { label: "Waiting for trade request",   bg: "var(--black-5)", color: "var(--black-65)", action: false },
+  waitingForTradeRequest:{ label: "Waiting for trade request", bg: "var(--black-5)", color: "var(--black-65)", action: false },
   offerHidden:         { label: "Offer Hidden",          bg: "var(--black-5)", color: "var(--black-65)", action: false },
   offerHiddenWithMatchesAvailable: { label: "Hidden (Requests)", bg: "var(--primary-mild)", color: "var(--primary-dark)", action: true },
   hasMatchesAvailable: { label: "Select request",        bg: "var(--primary-mild)", color: "var(--primary-dark)", action: true  },
