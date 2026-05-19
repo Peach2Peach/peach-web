@@ -78,6 +78,16 @@ const INFO_COPY = {
       </>
     ),
   },
+  marketStats: {
+    title: "How you compare",
+    body: (
+      <>
+        <p className="ip-text"><strong>Competing</strong> — The number of other offers that share at least one of your selected payment methods.</p>
+        <p className="ip-text"><strong>Avg premium</strong> — The average premium of recently completed trades using your selected payment methods.</p>
+        <p className="ip-text"><strong>Below / Above yours</strong> — How many competing offers have a more attractive premium than yours.</p>
+      </>
+    ),
+  },
 };
 
 
@@ -91,6 +101,36 @@ function readPersistedPMSelection() {
     const parsed = raw ? JSON.parse(raw) : null;
     return Array.isArray(parsed) ? parsed.filter(x => typeof x === "string") : [];
   } catch { return []; }
+}
+
+// ─── Stat pills (market intel) ──────────────────────────────────────────────
+function MarketStatPills({ marketStats, isSell, onInfo }) {
+  if (marketStats.loading || !marketStats.hasData) return null;
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:8,marginTop:12}}>
+      <div className="stat-pills" style={{marginTop:0}}>
+        <div className="stat-pill">
+          <span className="stat-pill-label">Competing</span>
+          <span className="stat-pill-value">
+            {marketStats.total} {isSell ? "sell" : "buy"} {marketStats.total === 1 ? "offer" : "offers"}
+          </span>
+        </div>
+        <div className="stat-pill">
+          <span className="stat-pill-label">Avg premium</span>
+          <span className="stat-pill-value">
+            {marketStats.avgPremium == null ? "–" : `${marketStats.avgPremium.toFixed(2)}%`}
+          </span>
+        </div>
+        <div className="stat-pill">
+          <span className="stat-pill-label">{isSell ? "Below yours" : "Above yours"}</span>
+          <span className="stat-pill-value">
+            {marketStats.beyondCount} {marketStats.beyondCount === 1 ? "offer" : "offers"}
+          </span>
+        </div>
+      </div>
+      {onInfo && <InfoDot ariaLabel="About market stats" onClick={onInfo} />}
+    </div>
+  );
 }
 
 // ─── MAIN ───────────────────────────────────────────────────────────────────
@@ -1178,20 +1218,8 @@ export default function OfferCreation({ initialType="buy" }) {
                   </div>
                 )}
 
-                {/* Market stats — competing offers + avg premium of completed trades */}
-                {savedMethods.length > 0 && marketStats.hasData && !marketStats.loading && (
-                  <div className="market-stats">
-                    <div className="market-stats-row">
-                      competing {isSell ? "sell" : "buy"} offers: {marketStats.total}
-                    </div>
-                    <div className="market-stats-row">
-                      premium of completed trades:{" "}
-                      {marketStats.avgPremium == null
-                        ? "–"
-                        : `${marketStats.avgPremium.toFixed(2)}%`}
-                    </div>
-                  </div>
-                )}
+                {/* Market stat pills */}
+                {savedMethods.length > 0 && <MarketStatPills marketStats={marketStats} isSell={isSell} onInfo={() => setOpenInfo("marketStats")} />}
               </div>
 
               {/* §3 Premium */}
@@ -1276,12 +1304,6 @@ export default function OfferCreation({ initialType="buy" }) {
                   )}
                 </div>
 
-                {/* Offers below/above this premium */}
-                {!marketStats.loading && marketStats.hasData && (
-                  <div className="market-stats-row market-stats-center" style={{marginTop:10}}>
-                    {marketStats.beyondCount} competing offers {isSell ? "below" : "above"} this premium
-                  </div>
-                )}
               </div>
 
               {/* §4 Advanced options */}
@@ -2030,22 +2052,7 @@ export default function OfferCreation({ initialType="buy" }) {
           <LivePreview type={type} form={form}
             offerMethods={offerMethods} offerCurrencies={offerCurrencies}/>
 
-          {!marketStats.loading && marketStats.hasData && (
-            <div className="market-stats">
-              <div className="market-stats-row">
-                competing {isSell ? "sell" : "buy"} offers: {marketStats.total}
-              </div>
-              <div className="market-stats-row">
-                premium of completed trades:{" "}
-                {marketStats.avgPremium == null
-                  ? "–"
-                  : `${marketStats.avgPremium.toFixed(2)}%`}
-              </div>
-              <div className="market-stats-row">
-                {marketStats.beyondCount} offers {isSell ? "below" : "above"} this premium
-              </div>
-            </div>
-          )}
+          <MarketStatPills marketStats={marketStats} isSell={isSell} onInfo={() => setOpenInfo("marketStats")} />
         </div>
       </div>
 

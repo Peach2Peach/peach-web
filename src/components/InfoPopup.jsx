@@ -32,7 +32,7 @@ const INFO_CSS = `
   .ip-btn:hover{filter:brightness(0.92)}
 
   .ip-dot{display:inline-flex;align-items:center;justify-content:center;
-    width:18px;height:18px;border-radius:50%;border:1.5px solid ${INFO_BLUE};
+    width:18px;height:18px;flex-shrink:0;border-radius:50%;border:1.5px solid ${INFO_BLUE};
     background:transparent;color:${INFO_BLUE};cursor:pointer;padding:0;
     margin-left:6px;vertical-align:middle;font-family:var(--font);
     font-weight:800;font-size:.72rem;line-height:1;

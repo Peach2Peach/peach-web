@@ -453,13 +453,20 @@ export const CSS = `
     }
   }
 
-  /* ── Market stats (competing offers + completed-trade premium) ── */
-  .market-stats{
-    display:flex;flex-direction:column;gap:2px;margin-top:12px;
+  /* ── Stat pills (market-stats row) ── */
+  .stat-pills{
+    display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;
   }
-  .market-stats-row{
-    font-size:.82rem;font-weight:700;color:var(--primary);
-    letter-spacing:.01em;line-height:1.4;
+  .stat-pill{
+    display:flex;flex-direction:column;gap:2px;
+    background:var(--primary-mild);border-radius:10px;padding:8px 14px;min-width:0;
   }
-  .market-stats-center{text-align:center}
+  .stat-pill-label{
+    font-size:.65rem;font-weight:700;text-transform:uppercase;
+    letter-spacing:.06em;color:var(--black-65);line-height:1.2;white-space:nowrap;
+  }
+  .stat-pill-value{
+    font-size:.86rem;font-weight:800;color:var(--primary-dark);
+    line-height:1.3;white-space:nowrap;
+  }
 `;
