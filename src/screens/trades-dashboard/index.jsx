@@ -15,6 +15,7 @@ import MobileSigningModal from "../../components/MobileSigningModal.jsx";
 import Toast from "../../components/Toast.jsx";
 import { useUnread } from "../../hooks/useUnread.js";
 import txInMempoolImg from "../../assets/tx-in-mempool.png";
+import bitcoinLockedImg from "../../assets/bitcoin-locked-in-escrow.png";
 import {
   isApiError,
   generateSymmetricKey,
@@ -2477,6 +2478,19 @@ export default function TradesDashboard() {
                     ✕
                   </button>
                 </div>
+
+                {!isBuy && fundingStage === "funded" && (
+                  <div style={{ textAlign: "center", padding: "18px 0 8px" }}>
+                    <div style={{ fontWeight: 700, fontSize: ".85rem", color: "var(--black-65)", marginBottom: 8 }}>
+                      Bitcoin locked in escrow
+                    </div>
+                    <img
+                      src={bitcoinLockedImg}
+                      alt="Bitcoin locked in escrow"
+                      style={{ height: 160, objectFit: "contain" }}
+                    />
+                  </div>
+                )}
 
                 {/* Body — offer summary */}
                 <div className="offer-detail-body">
