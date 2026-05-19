@@ -48,12 +48,12 @@ The included `Dockerfile` produces an nginx image serving the static build at po
 ```bash
 # Build (regtest example)
 docker build \
-  --build-arg VITE_API_URL=https://api-regtest.peachbitcoin.com \
-  --build-arg VITE_BITCOIN_NETWORK=REGTEST \
-  -t peach-web:regtest .
+  --build-arg VITE_API_URL=https://api.peachbitcoin.com \
+  --build-arg VITE_BITCOIN_NETWORK=BITCOIN \
+  -t peach-web .
 
 # Run
-docker run --rm -p 8080:80 peach-web:regtest
+docker run --rm -p 8080:80 peach-web
 # → http://localhost:8080
 ```
 
