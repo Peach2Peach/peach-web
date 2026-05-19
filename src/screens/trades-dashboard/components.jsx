@@ -166,7 +166,11 @@ export function TradeCard({ trade, onSelect, layout = "grid" }) {
 
   function fiatStr() {
     if (hasSatsRange) return `≈ €${satsToFiat(trade.amount[0])}–€${satsToFiat(trade.amount[1])}`;
-    if (trade.fiatAmount) return `€${trade.fiatAmount}`;
+    if (trade.fiatAmount && trade.fiatAmount !== "—") {
+      const n = Number(trade.fiatAmount);
+      const sym = CURRENCY_SYMBOLS[trade.currency] ?? trade.currency + " ";
+      return `${sym}${isNaN(n) ? trade.fiatAmount : n.toFixed(2)}`;
+    }
     return `≈ €${satsToFiat(trade.amount)}`;
   }
 
@@ -371,7 +375,8 @@ export function HistoryTable({ rows, onTradeSelect, selectedCurrency, tab, onRef
     // Fall back to the offer's stored fiatAmount + currency
     if (r.fiatAmount && r.fiatAmount !== "—") {
       const sym = CURRENCY_SYMBOLS[r.currency] ?? r.currency + " ";
-      return `${sym}${r.fiatAmount}`;
+      const n = Number(r.fiatAmount);
+      return `${sym}${isNaN(n) ? r.fiatAmount : n.toFixed(2)}`;
     }
     return "—";
   }
