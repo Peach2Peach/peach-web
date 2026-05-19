@@ -13,21 +13,17 @@ import {
   syncCustomRefundAddressToServer,
   extractCustomRefundAddressFromProfile,
 } from "../../utils/customRefundAddressSync.js";
-import {
-  syncCustomPayoutAddressToServer,
-  extractCustomPayoutAddressFromProfile,
-  fetchSavedCustomPayoutAddress,
-} from "../../utils/customPayoutAddressSync.js";
-import { validateBtcAddress, validateBIP322Signature, validateFeeRate } from "../../peach-validators.js";
+import PayoutAddressWizard from "../../components/PayoutAddressWizard.jsx";
+import { validateBtcAddress, validateFeeRate } from "../../peach-validators.js";
 import { BITCOIN_NETWORK } from "../../utils/network.js";
 import {
-  IconCopy, IconTrash, IconCamera, IconExternalLink, IconShield,
+  IconCopy, IconTrash, IconExternalLink, IconShield,
   Toggle, SettingsRow, SettingsSection, SubScreenWrapper,
   CopyBtn, PrimaryBtn, OutlineBtn, FieldError, makeBlurHandler,
 } from "./components.jsx";
 import PeachRating from "../../components/PeachRating.jsx";
 import Avatar from "../../components/Avatar.jsx";
-import { toPeaches, getSigningPeachId } from "../../utils/format.js";
+import { toPeaches } from "../../utils/format.js";
 import InfoPopup, { InfoDot, BadgesInfoPopup, TradingLimitsInfoPopup } from "../../components/InfoPopup.jsx";
 
 // ── ProfileSubScreen ─────────────────────────────────────────────────────────
@@ -854,211 +850,10 @@ export function RefundAddressSubScreen({ onBack }) {
 
 export function PayoutWalletSubScreen({ onBack }) {
   const { auth } = useApi();
-  const btcNetwork = BITCOIN_NETWORK;
-  const [step, setStep] = useState(1);
-  const [label, setLabel] = useState("");
-  const [address, setAddress] = useState("");
-  const [addressSet, setAddressSet] = useState(false);
-  const [signature, setSignature] = useState("");
-  const [errors, setErrors] = useState({});
-  const [submitting, setSubmitting] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
-  const handleBlur = makeBlurHandler(setErrors);
-  const peachId = getSigningPeachId(auth?.peachId);
-  const signMessage = `I confirm that only I, ${peachId}, control the address ${address}`;
-
-  // Load existing encrypted payout address from /v069/selfUser on mount.
-  useEffect(() => {
-    if (!auth?.token || !auth?.pgpPrivKey) return;
-    let cancelled = false;
-    (async () => {
-      const saved = await fetchSavedCustomPayoutAddress(auth);
-      if (cancelled || !saved) return;
-      if (saved.label)            setLabel(saved.label);
-      if (saved.address)          setAddress(saved.address);
-      if (saved.bip322Signature)  setSignature(saved.bip322Signature);
-      if (saved.address && validateBtcAddress(saved.address, btcNetwork).valid) {
-        setAddressSet(true);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [auth?.token, auth?.pgpPrivKey, auth?.baseUrl, btcNetwork]);
-
-  function handleAddressBlur() {
-    if (!address.trim()) { setErrors(p => ({ ...p, address: null })); setAddressSet(false); return; }
-    const valid = handleBlur("address", address, validateBtcAddress, btcNetwork);
-    setAddressSet(valid);
-  }
-
-  async function handleRemove() {
-    setErrors(p => ({ ...p, address: null, sig: null }));
-    setSubmitting(true);
-    try {
-      if (auth) {
-        const ok = await syncCustomPayoutAddressToServer(
-          { address: null, label: null, confirmationPhrase: null, bip322Signature: null },
-          auth,
-        );
-        if (!ok) {
-          setErrors(p => ({ ...p, address: "Server error — try again" }));
-          setSubmitting(false);
-          return;
-        }
-      }
-      setLabel("");
-      setAddress("");
-      setSignature("");
-      setAddressSet(false);
-    } catch {
-      setErrors(p => ({ ...p, address: "Network error — check your connection" }));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function handleConfirm() {
-    const sigCheck = validateBIP322Signature(signature);
-    if (!sigCheck.valid) { setErrors(p => ({ ...p, sig: sigCheck.error })); return; }
-
-    setSubmitting(true);
-    setErrors(p => ({ ...p, sig: null }));
-
-    try {
-      if (auth) {
-        const ok = await syncCustomPayoutAddressToServer(
-          {
-            address,
-            label: label || null,
-            confirmationPhrase: signMessage,
-            bip322Signature: signature,
-          },
-          auth,
-        );
-        if (!ok) {
-          setErrors(p => ({ ...p, sig: "Server error — try again" }));
-          setSubmitting(false);
-          return;
-        }
-      } else {
-        await new Promise(r => setTimeout(r, 800));
-      }
-      setSubmitting(false);
-      setShowSuccess(true);
-    } catch (e) {
-      setSubmitting(false);
-      setErrors(p => ({ ...p, sig: "Network error — check your connection" }));
-    }
-  }
-
-  // ── Success popup overlay ──
-  if (showSuccess) {
-    return (
-      <SubScreenWrapper title="Custom Payout Address" onBack={onBack}>
-        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"60px 20px", textAlign:"center" }}>
-          <div style={{ width:64, height:64, borderRadius:"50%", background:"var(--success-bg)", display:"flex", alignItems:"center", justifyContent:"center", marginBottom:20 }}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12"/>
-            </svg>
-          </div>
-          <div style={{ fontSize:"1.1rem", fontWeight:800, color:"var(--black)", marginBottom:8 }}>Signature valid</div>
-          <div style={{ fontSize:".88rem", color:"var(--black-65)", lineHeight:1.5 }}>Custom payout address added.</div>
-          <div style={{ marginTop:32, width:"100%" }}>
-            <PrimaryBtn label="DONE" onClick={onBack}/>
-          </div>
-        </div>
-      </SubScreenWrapper>
-    );
-  }
-
-  if (step === 2) {
-    const sigValid = signature.trim() && validateBIP322Signature(signature).valid && !errors.sig;
-    return (
-      <SubScreenWrapper title="Sign Your Address" onBack={() => setStep(1)}>
-        <p style={{ fontSize:".82rem", color:"var(--black-65)", marginBottom:20, lineHeight:1.6 }}>
-          Prove you control this address by signing the message below with its private key, then paste the signature. Use your wallet's "Sign Message" feature.
-        </p>
-
-        <div style={{ marginBottom:16 }}>
-          <div style={{ fontSize:".75rem", fontWeight:700, color:"var(--black)", marginBottom:6 }}>your address</div>
-          <div style={{ padding:"12px 14px", borderRadius:10, border:"1.5px solid var(--black-10)", background:"var(--black-5)", fontSize:".78rem", fontFamily:"monospace", wordBreak:"break-all", lineHeight:1.5, display:"flex", alignItems:"flex-start", gap:8 }}>
-            <span style={{ flex:1 }}>{address}</span>
-            <CopyBtn text={address}/>
-          </div>
-        </div>
-
-        <div style={{ marginBottom:16 }}>
-          <div style={{ fontSize:".75rem", fontWeight:700, color:"var(--black)", marginBottom:6 }}>message</div>
-          <div style={{ padding:"12px 14px", borderRadius:10, border:"1.5px solid var(--black-10)", background:"var(--black-5)", fontSize:".76rem", fontFamily:"monospace", wordBreak:"break-all", lineHeight:1.5, display:"flex", alignItems:"flex-start", gap:8 }}>
-            <span style={{ flex:1 }}>{signMessage}</span>
-            <CopyBtn text={signMessage}/>
-          </div>
-        </div>
-
-        <div style={{ marginBottom:12 }}>
-          <div style={{ fontSize:".75rem", fontWeight:700, color:"var(--black)", marginBottom:6 }}>signature</div>
-          <div style={{ position:"relative" }}>
-            <input value={signature} onChange={e => { setSignature(e.target.value); setErrors(p => ({ ...p, sig: null })); }} onBlur={() => { if (signature.trim()) handleBlur("sig", signature, validateBIP322Signature); }} placeholder="signature"
-              style={{ width:"100%", padding:"10px 40px 10px 14px", borderRadius:10, border: errors.sig ? "1.5px solid var(--error)" : "1.5px solid var(--black-25)", background:"var(--surface)", fontFamily:"'Baloo 2',cursive", fontSize:".85rem", color:"var(--black)", outline:"none" }}/>
-            <div style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)" }}>
-              <button onClick={async () => { try { const t = await navigator.clipboard.readText(); setSignature(t); setErrors(p => ({ ...p, sig: null })); } catch {} }}
-                style={{ border:"none", background:"transparent", cursor:"pointer", color:"var(--primary)", padding:4 }}>
-                <IconCopy size={16}/>
-              </button>
-            </div>
-          </div>
-          <FieldError error={errors.sig}/>
-        </div>
-
-        <div style={{ background:"var(--primary-mild)", border:"1.5px solid var(--primary)", borderRadius:10, padding:"12px 14px", marginBottom:24 }}>
-          <p style={{ fontSize:".76rem", color:"var(--black-65)", lineHeight:1.5, margin:0 }}>
-            <span style={{ fontWeight:800, color:"var(--primary)" }}>Note:</span> BIP322 signature verification is required. This is verified server-side when saving your payout address.
-          </p>
-        </div>
-
-        <PrimaryBtn label={submitting ? "VERIFYING…" : "CONFIRM"} onClick={handleConfirm} disabled={!sigValid || submitting}/>
-      </SubScreenWrapper>
-    );
-  }
-
   return (
-    <SubScreenWrapper title="Custom Payout Address" onBack={onBack}>
-      <p style={{ fontSize:".82rem", color:"var(--black-65)", marginBottom:20, lineHeight:1.6 }}>
-        Set an external Bitcoin wallet to automatically receive your sats after each completed trade. You must prove ownership of the address with a BIP322 signature.
-      </p>
-
-      <div style={{ fontSize:".75rem", fontWeight:700, color:"var(--black)", marginBottom:8 }}>set custom payout address</div>
-
-      <input value={label} onChange={e => setLabel(e.target.value)} placeholder="address label"
-        style={{ width:"100%", padding:"10px 14px", borderRadius:10, marginBottom:10, border:"1.5px solid var(--black-25)", background:"var(--surface)", fontFamily:"'Baloo 2',cursive", fontSize:".85rem", color:"var(--black)", outline:"none" }}/>
-
-      <div style={{ position:"relative", marginBottom: addressSet ? 8 : (errors.address ? 0 : 24) }}>
-        <input value={address} onChange={e => { setAddress(e.target.value); setAddressSet(false); setErrors(p => ({ ...p, address: null })); }} onBlur={handleAddressBlur}
-          placeholder={btcNetwork === "regtest" ? "bcrt1q …" : "bc1q …"}
-          style={{ width:"100%", padding:"10px 72px 10px 14px", borderRadius:10, border: errors.address ? "2px solid var(--error)" : addressSet ? "2px solid var(--primary)" : "1.5px solid var(--black-25)", background:"var(--surface)", fontFamily:"monospace", fontSize:".85rem", color:"var(--black)", outline:"none" }}/>
-        <div style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)", display:"flex", gap:4 }}>
-          <button onClick={async () => { try { const t = await navigator.clipboard.readText(); setAddress(t); setErrors(p => ({ ...p, address: null })); const r = validateBtcAddress(t, btcNetwork); if(r.valid) setAddressSet(true); else { setAddressSet(false); setErrors(p => ({ ...p, address: r.error })); } } catch {} }}
-            style={{ border:"none", background:"transparent", cursor:"pointer", color:"var(--primary)", padding:4 }}>
-            <IconCopy size={16}/>
-          </button>
-          <button style={{ border:"none", background:"transparent", cursor:"pointer", color:"var(--primary)", padding:4 }}>
-            <IconCamera size={16}/>
-          </button>
-        </div>
-      </div>
-      {errors.address && <div style={{ marginBottom:16 }}><FieldError error={errors.address}/></div>}
-
-      {addressSet && (
-        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8, marginBottom:20 }}>
-          <span style={{ fontSize:".8rem", fontWeight:800, color:"var(--success)", letterSpacing:".04em" }}>ADDRESS VALID ✓</span>
-          <button onClick={handleRemove} disabled={submitting} style={{ display:"flex", alignItems:"center", gap:5, border:"none", background:"transparent", cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.5 : 1, color:"var(--black)", fontFamily:"'Baloo 2',cursive", fontSize:".78rem", fontWeight:700, textDecoration:"underline", textTransform:"uppercase", letterSpacing:".04em" }}>
-            {submitting ? "REMOVING…" : <>REMOVE WALLET <IconTrash size={14}/></>}
-          </button>
-        </div>
-      )}
-
-
-      <PrimaryBtn label="NEXT" onClick={() => setStep(2)} disabled={!addressSet || !!errors.address || submitting}/>
-    </SubScreenWrapper>
+    <div className="settings-scroll">
+      <PayoutAddressWizard auth={auth} onClose={onBack} onDone={() => {}}/>
+    </div>
   );
 }
 

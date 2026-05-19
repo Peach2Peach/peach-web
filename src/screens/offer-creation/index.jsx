@@ -19,6 +19,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { SAT, fmt, satsToFiatRaw as satsToFiat, fmtFiat as fmtEur, formatTradeId, truncateAddress } from "../../utils/format.js";
 import { extractCustomRefundAddressFromProfile } from "../../utils/customRefundAddressSync.js";
 import { fetchSavedCustomPayoutAddress } from "../../utils/customPayoutAddressSync.js";
+import PayoutAddressWizard from "../../components/PayoutAddressWizard.jsx";
 import { BITCOIN_NETWORK } from "../../utils/network.js";
 import { CSS } from "./styles.js";
 import {
@@ -295,6 +296,7 @@ export default function OfferCreation({ initialType="buy" }) {
   const [savedRefund, setSavedRefund] = useState(null); // { address, label } or null
   const [savedPayoutAddress, setSavedPayoutAddress] = useState(null);
   const [editingPremiumInline, setEditingPremiumInline] = useState(false);
+  const [showPayoutModal, setShowPayoutModal] = useState(false);
   const userTouchedRefundRef = useRef(false);
 
   // Fetch the user's saved refund address from /v069/selfUser on mount.
@@ -1122,6 +1124,22 @@ export default function OfferCreation({ initialType="buy" }) {
           onSave={handleSavePM} onClose={()=>setEditingPM(null)}
           error={catalogueError} onRetry={fetchCatalogue}/>
       )}
+      {showPayoutModal&&(
+        <PayoutAddressWizard
+          auth={auth}
+          asModal
+          onClose={()=>setShowPayoutModal(false)}
+          onDone={(saved)=>{
+            if(saved){
+              setSavedPayoutAddress(saved);
+              setForm(f=>({...f, releaseMode:"saved"}));
+            } else {
+              setSavedPayoutAddress(null);
+              setForm(f=>({...f, releaseMode:"peach"}));
+            }
+          }}
+        />
+      )}
       {openInfo&&(() => {
         const key = openInfo === "amount" ? (isSell ? "amountSell" : "amountBuy") : openInfo;
         const copy = INFO_COPY[key];
@@ -1563,8 +1581,8 @@ export default function OfferCreation({ initialType="buy" }) {
                   <button type="button" style={{display:"block",background:"none",border:"none",
                     cursor:"pointer",fontSize:".76rem",fontWeight:700,color:"var(--primary)",
                     fontFamily:"var(--font)",padding:0,textDecoration:"underline",textUnderlineOffset:"2px"}}
-                    onClick={()=>navigate("/settings",{state:{openSection:"payout"}})}>
-                    {savedPayoutAddress?.address ? "Change in Settings →" : "Set up custom address in Settings →"}
+                    onClick={()=>setShowPayoutModal(true)}>
+                    {savedPayoutAddress?.address ? "Change custom address →" : "Set up custom address →"}
                   </button>
                 </div>
               )}
