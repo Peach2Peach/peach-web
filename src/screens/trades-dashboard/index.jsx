@@ -1282,12 +1282,17 @@ export default function TradesDashboard() {
   // `mobileActionRefundWasTriggered` (now an integer DB id, not boolean).
   const [odRefundActionId, setOdRefundActionId] = useState(null);
   const [mempoolHelpOpen, setMempoolHelpOpen] = useState(false);
+  // True while the first /offer/:id/details fetch is in flight for an own sell
+  // offer. Gates the funding-dependent UI so the popup doesn't paint a guessed
+  // state from null and then re-paint into the real one (the open-flicker).
+  const [odDetailsLoading, setOdDetailsLoading] = useState(false);
 
   function openOfferDetail(offer) {
     setOdEditingPremium(false);
     setOdEditError(null);
     setOdWithdrawConfirm(false);
     setOdWithdrawError(null);
+    setOdDetailsLoading(offer?.direction === "sell"); // only sell offers fetch /details
     setOfferDetailPopup(offer);
   }
   function closeOfferDetail() {
@@ -1305,6 +1310,7 @@ export default function TradesDashboard() {
     setOdFundMobileActionId(null);
     setOdFundMobileError(null);
     setOdRefundActionId(null);
+    setOdDetailsLoading(false);
   }
 
   // ── Offer details fetch (sell offers only — endpoint is sell-exclusive by design) ──
@@ -1318,15 +1324,20 @@ export default function TradesDashboard() {
   useEffect(() => {
     if (!detailSource?.id) {
       setOfferDetails(null);
+      setOdDetailsLoading(false);
       return;
     }
     // Endpoint is sell-exclusive per backend — buy offers return 401 by design.
     if (detailSource.direction !== "sell") {
       setOfferDetails(null);
+      setOdDetailsLoading(false);
       return;
     }
     const offerId = detailSource.id;
     let cancelled = false;
+    // Only the first settle clears the loading flag — the 10s poll below must
+    // never re-show the loading placeholder on an already-open popup.
+    let firstDone = false;
     async function check() {
       try {
         const res = await get(`/offer/${offerId}/details`);
@@ -1356,6 +1367,11 @@ export default function TradesDashboard() {
         }
       } catch {
         if (!cancelled) setOfferDetails(null);
+      } finally {
+        if (!cancelled && !firstDone) {
+          firstDone = true;
+          setOdDetailsLoading(false);
+        }
       }
     }
     check();
@@ -2393,6 +2409,12 @@ export default function TradesDashboard() {
             derivedStatus = String(
               statusCfg.label ?? o.tradeStatus ?? "",
             ).toUpperCase();
+          } else if (o.tradeStatus === "fundingAmountDifferent") {
+            // Wrong amount funded: the tx may even be confirmed, but the seller
+            // must still choose continue-or-refund. Take precedence over "funded"
+            // so the choice panel shows instead of the funded "cancel & refund".
+            fundingStage = "wrongAmount";
+            derivedStatus = "WRONG AMOUNT FUNDED";
           } else if (fundingApiStatus === "CONFIRMED" || fundingConfs > 0) {
             fundingStage = "funded";
             derivedStatus = `FUNDED · ${fundingConfs} CONF`;
@@ -2479,7 +2501,7 @@ export default function TradesDashboard() {
                   </button>
                 </div>
 
-                {!isBuy && fundingStage === "funded" && (
+                {!isBuy && !odDetailsLoading && fundingStage === "funded" && (
                   <div style={{ textAlign: "center", padding: "18px 0 8px" }}>
                     <div style={{ fontWeight: 700, fontSize: ".85rem", color: "var(--black-65)", marginBottom: 8 }}>
                       Bitcoin locked in escrow
@@ -2792,7 +2814,8 @@ export default function TradesDashboard() {
                     </div>
                   )}
                   {/* Trade request count — from /offer/:id/details (only after funding confirmed) */}
-                  {fundingStage === "funded" &&
+                  {!odDetailsLoading &&
+                    fundingStage === "funded" &&
                     Array.isArray(offerDetails?.matches) && (
                       <div className="offer-detail-row">
                         <span className="offer-detail-label">Requests</span>
@@ -2804,7 +2827,7 @@ export default function TradesDashboard() {
                   <div className="offer-detail-row">
                     <span className="offer-detail-label">Status</span>
                     <span className="offer-detail-value">
-                      {derivedStatus}
+                      {odDetailsLoading ? "Loading…" : derivedStatus}
                     </span>
                   </div>
                   <div className="offer-detail-row">
@@ -2828,8 +2851,21 @@ export default function TradesDashboard() {
                   </div>
                 </div>
 
+                {/* Loading placeholder — shown for an own sell offer while the first
+                    /details fetch is in flight, in place of the funding section. */}
+                {!isBuy &&
+                  (o.tradeStatus === "fundEscrow" || o.tradeStatus === "fundingAmountDifferent") &&
+                  odDetailsLoading && (
+                  <div style={{ padding: "12px 20px 0", borderTop: "1px solid var(--black-10)" }}>
+                    <div style={{ fontSize: ".76rem", color: "var(--black-40)", fontWeight: 600, padding: "8px 0" }}>
+                      Loading offer status…
+                    </div>
+                  </div>
+                )}
+
                 {/* Escrow address + QR — sell offers awaiting funding (needs / mempool) */}
                 {!isBuy &&
+                  !odDetailsLoading &&
                   (fundingStage === "needs" || fundingStage === "mempool") && (
                   <div
                     style={{
@@ -3399,6 +3435,7 @@ export default function TradesDashboard() {
 
                 {/* Funded sell offer: Cancel button replaces the address section */}
                 {!isBuy &&
+                  !odDetailsLoading &&
                   fundingStage === "funded" &&
                   !odEditingPremium &&
                   !odWithdrawConfirm &&
@@ -3427,7 +3464,8 @@ export default function TradesDashboard() {
                 {/* Footer — actions. Suppressed when the funded-sell inline button
                     is showing and no edit/confirm/refund is in flight (the footer
                     would be empty in that state and produce extra whitespace). */}
-                {(odEditingPremium ||
+                {!odDetailsLoading &&
+                  (odEditingPremium ||
                   odWithdrawConfirm ||
                   !(!isBuy && fundingStage === "funded" && !odRefundActionId)) && (
                 <div className="offer-detail-footer">
@@ -3437,6 +3475,7 @@ export default function TradesDashboard() {
                     !odWithdrawConfirm &&
                     o.direction === "sell" &&
                     fundingStage === "funded" &&
+                    o.tradeStatus !== "fundingAmountDifferent" &&
                     odRefundActionId && (
                       <MobilePendingButton
                         label="✓ Refund request sent — check your phone"

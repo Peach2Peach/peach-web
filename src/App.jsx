@@ -3,6 +3,7 @@ import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import SessionExpiredModal from './components/SessionExpiredModal.jsx'
 import TamperDetectedModal from './components/TamperDetectedModal.jsx'
 import OfferPublishedPopup from './components/OfferPublishedPopup.jsx'
+import WrongFundingAmountPopup from './components/WrongFundingAmountPopup.jsx'
 import { clearCache } from './hooks/useApi.js'
 import { invalidateUserPMs } from './hooks/useUserPMs.js'
 import { resetSessionExpiredFlag, isTokenExpired } from './utils/sessionGuard.js'
@@ -74,6 +75,7 @@ export default function App() {
   const [sessionExpired, setSessionExpired] = useState(false);
   const [tamperedFields, setTamperedFields] = useState(null);
   const [publishedOffer, setPublishedOffer] = useState(null);
+  const [fundingAlert, setFundingAlert] = useState(null);
 
   useEffect(() => {
     const handleExpired = () => setSessionExpired(true);
@@ -99,6 +101,14 @@ export default function App() {
     const handler = (e) => setPublishedOffer(e?.detail ?? null);
     window.addEventListener('peach:offer-published', handler);
     return () => window.removeEventListener('peach:offer-published', handler);
+  }, []);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (e?.detail?.offerId) setFundingAlert(e.detail);
+    };
+    window.addEventListener('peach:funding-amount-different', handler);
+    return () => window.removeEventListener('peach:funding-amount-different', handler);
   }, []);
 
   function handleReauth() {
@@ -144,6 +154,15 @@ export default function App() {
           <OfferPublishedPopup
             offerId={publishedOffer.offerId}
             onClose={() => setPublishedOffer(null)}
+          />
+        )}
+        {fundingAlert && (
+          <WrongFundingAmountPopup
+            offerId={fundingAlert.offerId}
+            variant={fundingAlert.variant}
+            expectedSats={fundingAlert.expectedSats}
+            fundedSats={fundingAlert.fundedSats}
+            onClose={() => setFundingAlert(null)}
           />
         )}
       </HashRouter>

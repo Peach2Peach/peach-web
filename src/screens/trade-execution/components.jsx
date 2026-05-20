@@ -2017,7 +2017,7 @@ export function WrongAmountFundedCard({
     <div
       style={{
         background: "var(--warning-soft)",
-        border: "1px solid rgba(154,112,0,.15)",
+        border: "1px solid color-mix(in srgb, var(--warning) 22%, transparent)",
         borderRadius: 12,
         padding: "20px 18px",
       }}
@@ -2036,7 +2036,7 @@ export function WrongAmountFundedCard({
             width: 36,
             height: 36,
             borderRadius: "50%",
-            background: "rgba(154,112,0,.1)",
+            background: "color-mix(in srgb, var(--warning) 14%, transparent)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -2062,8 +2062,8 @@ export function WrongAmountFundedCard({
         }}
       >
         {isFundingDifferent
-          ? "You funded the escrow with a different amount than expected. You can continue the trade with the actual amount, or request a refund."
-          : "You funded your contract incorrectly, as it must be funded with exactly 1 transaction with the specified amount. You will be refunded."}
+          ? "You funded the escrow with a different amount than the trade was made for. Decide whether to continue the trade with the funded amount, or refund the escrow to yourself."
+          : "You funded the escrow with an amount that can't be used for this trade. The escrow will be refunded to you."}
       </div>
 
       {/* Amount comparison — only for fundingAmountDifferent */}
@@ -2073,7 +2073,7 @@ export function WrongAmountFundedCard({
             display: "flex",
             flexDirection: "column",
             gap: 8,
-            background: "rgba(154,112,0,.06)",
+            background: "color-mix(in srgb, var(--warning) 8%, transparent)",
             borderRadius: 8,
             padding: "12px 14px",
             marginBottom: 16,
@@ -2094,11 +2094,11 @@ export function WrongAmountFundedCard({
                 minWidth: 70,
               }}
             >
-              Expected
+              Made for
             </span>
             <SatsAmount sats={expectedSats} size="sm" />
           </div>
-          <div style={{ height: 1, background: "rgba(154,112,0,.1)" }} />
+          <div style={{ height: 1, background: "color-mix(in srgb, var(--warning) 14%, transparent)" }} />
           <div
             style={{
               display: "flex",
@@ -2162,7 +2162,7 @@ export function WrongAmountFundedCard({
                 style={{
                   flex: 1,
                   border: "1.5px solid var(--black-10)",
-                  background: "white",
+                  background: "var(--surface)",
                   borderRadius: 999,
                   fontFamily: "Baloo 2, cursive",
                   fontWeight: 700,
