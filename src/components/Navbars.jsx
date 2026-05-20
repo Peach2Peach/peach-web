@@ -49,6 +49,7 @@ const IconTrades     = () => <svg width="20" height="20" viewBox="0 0 20 20" fil
 const IconCreate     = () => <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="10" cy="10" r="8"/><line x1="10" y1="6.5" x2="10" y2="13.5"/><line x1="6.5" y1="10" x2="13.5" y2="10"/></svg>;
 const IconSettings   = () => <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="10" cy="10" r="2.5"/><path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.2 4.2l1.4 1.4M14.4 14.4l1.4 1.4M4.2 15.8l1.4-1.4M14.4 5.6l1.4-1.4"/></svg>;
 const IconCreditCard = () => <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="18" height="13" rx="2"/><line x1="1" y1="9" x2="19" y2="9"/><line x1="5" y1="14" x2="8" y2="14"/></svg>;
+const IconWallet     = () => <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2 6v9a2 2 0 0 0 2 2h13a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1H4a2 2 0 0 1-2-2z"/><path d="M2 6a2 2 0 0 1 2-2h11"/><circle cx="14.5" cy="12.5" r="1" fill="currentColor"/></svg>;
 export const IconBurger = () => <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="2" y1="4.5" x2="16" y2="4.5"/><line x1="2" y1="9" x2="16" y2="9"/><line x1="2" y1="13.5" x2="16" y2="13.5"/></svg>;
 const IconBell = () => <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M15 7a5 5 0 00-10 0c0 5-2 7-2 7h14s-2-2-2-7"/><path d="M8.5 17a1.5 1.5 0 003 0"/></svg>;
 const IconMoon = () => <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M16.5 12.5A7 7 0 017.5 3.5a7 7 0 109 9z"/></svg>;
@@ -57,6 +58,7 @@ const IconSun  = () => <svg width="18" height="18" viewBox="0 0 20 20" fill="non
 // ─── NAVIGATION ───────────────────────────────────────────────────────────────
 export const NAV_ITEMS = [
   { id:"home",             label:"Home",     icon:()=><PeachIcon size={20}/> },
+  { id:"wallet",           label:"Wallet",   icon:()=><IconWallet/> },
   { id:"market",           label:"Market",   icon:()=><IconMarket/> },
   { id:"trades",           label:"Trades",   icon:()=><IconTrades/> },
   { id:"create",           label:"Create",   icon:()=><IconCreate/> },
@@ -66,6 +68,7 @@ export const NAV_ITEMS = [
 
 export const NAV_ROUTES = {
   home:              "/home",
+  wallet:            "/wallet",
   market:            "/market",
   trades:            "/trades",
   create:            "/offer/new",
@@ -77,6 +80,7 @@ export const NAV_ROUTES = {
 // correspond to a nav item (e.g. /, /trade/:id, /user/:id).
 function routeToNavId(pathname) {
   if (pathname === "/home") return "home";
+  if (pathname === "/wallet") return "wallet";
   if (pathname === "/market") return "market";
   if (pathname === "/trades") return "trades";
   if (pathname.startsWith("/offer/new")) return "create";

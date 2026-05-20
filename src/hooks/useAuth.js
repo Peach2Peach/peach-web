@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { clearCache } from "./useApi.js";
 import { invalidateUserPMs } from "./useUserPMs.js";
+import { clearWalletCache } from "./useWallet.js";
 import { resetSessionExpiredFlag } from "../utils/sessionGuard.js";
 
 // Module-level subscribers so every useAuth() consumer re-renders when the
@@ -67,6 +68,7 @@ export function useAuth() {
   const handleLogout = () => {
     clearCache();
     invalidateUserPMs();
+    clearWalletCache();
     resetSessionExpiredFlag();
     window.__PEACH_AUTH__ = null;
     setIsLoggedIn(false);

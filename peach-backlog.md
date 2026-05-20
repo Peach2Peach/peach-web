@@ -36,7 +36,6 @@ Completed items archived in `peach-completed.md`.
 
 | Feature | Blocker | Status |
 |---------|---------|--------|
-| Wallet visualization | Needs UI design | xpub available in `window.__PEACH_AUTH__.xpub` via QR auth. Uses `@scure/bip32` (already in deps). |
 | Network Fees preference sync | Backend team (nice-to-have) | Would benefit from loading saved preference on mount via `GET /user/me`. |
 | `sellOffer?ownOffers=true` fix | Backend team — endpoint ignores `ownOffers` param for sell offers | Simplifies fetch in 4 screens. See `trades-dashboard-dual-fetch-report.md`. |
 | `contracts/summary` status fix | Backend team | Summary always returns `tradeCanceled` for cancelled contracts, even when seller still has escrow. Web derives status client-side as workaround. |

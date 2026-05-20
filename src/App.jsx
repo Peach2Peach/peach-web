@@ -16,6 +16,8 @@ import TradeExecution from './screens/trade-execution/index.jsx'
 import SettingsScreen from './screens/settings/index.jsx'
 import PeachPaymentMethods from './screens/payment-methods/index.jsx'
 import OtherUserPage from './screens/other-user/index.jsx'
+import PeachWallet from './screens/wallet/index.jsx'
+import { clearWalletCache } from './hooks/useWallet.js'
 import { IS_REGTEST } from './utils/network.js'
 
 // ── Developer tools ──
@@ -103,6 +105,7 @@ export default function App() {
     window.__PEACH_AUTH__ = null;
     clearCache();
     invalidateUserPMs();
+    clearWalletCache();
     resetSessionExpiredFlag();
     try { localStorage.setItem("peach_logged_in", "false"); } catch {}
     try { sessionStorage.removeItem("peach_auth"); } catch {}
@@ -123,6 +126,7 @@ export default function App() {
             <Route path="/trade/:id" element={<ProtectedRoute><TradeExecution /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><SettingsScreen /></ProtectedRoute>} />
             <Route path="/payment-methods" element={<ProtectedRoute><PeachPaymentMethods /></ProtectedRoute>} />
+            <Route path="/wallet" element={<ProtectedRoute><PeachWallet /></ProtectedRoute>} />
             <Route path="/user/:userId" element={<ProtectedRoute><OtherUserPage /></ProtectedRoute>} />
             {Bip322SignerScreen && (
               <Route path="/dev-tools/bip322" element={

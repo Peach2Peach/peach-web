@@ -28,10 +28,40 @@ export default {
 
     const url = new URL(request.url);
 
+    // Route: /esplora/{mainnet|testnet|regtest}/... → Peach Esplora host/...
+    //        (Authorization header is stripped — Esplora is unauthenticated
+    //         and Peach's JWT must not leak to a Bitcoin node.)
     // Route: /regtest/... → api-regtest.peachbitcoin.com/...
     // Route: everything else → api.peachbitcoin.com/v1/...
+    //
+    // NOTE: mainnet Esplora host below is inferred from the testnet/regtest
+    // naming pattern and has not been confirmed against the mobile app's
+    // production config. If wrong, change it here and redeploy the worker.
+    const ESPLORA_HOSTS = {
+      mainnet: "https://electrum-mainnet.peachbitcoin.com",
+      testnet: "https://electrum-testnet.peachbitcoin.com",
+      regtest: "https://electrum-regtest.peachbitcoin.com",
+    };
+
     let targetUrl;
-    if (url.pathname.startsWith("/regtest/")) {
+    let isEsplora = false;
+    const esploraMatch = url.pathname.match(
+      /^\/esplora\/(mainnet|testnet|regtest)(\/.*)$/,
+    );
+    if (url.pathname.startsWith("/esplora/")) {
+      if (!esploraMatch) {
+        return new Response("Bad esplora route", {
+          status: 400,
+          headers: {
+            "Access-Control-Allow-Origin": corsOrigin,
+            "Content-Type": "text/plain",
+          },
+        });
+      }
+      isEsplora = true;
+      targetUrl =
+        ESPLORA_HOSTS[esploraMatch[1]] + esploraMatch[2] + url.search;
+    } else if (url.pathname.startsWith("/regtest/")) {
       const regtestPath = url.pathname.replace(/^\/regtest/, "");
       targetUrl =
         "https://api-regtest.peachbitcoin.com" + regtestPath + url.search;
@@ -42,8 +72,10 @@ export default {
     const fwdHeaders = {
       "Content-Type": request.headers.get("Content-Type") || "application/json",
     };
-    const authHeader = request.headers.get("Authorization");
-    if (authHeader) fwdHeaders["Authorization"] = authHeader;
+    if (!isEsplora) {
+      const authHeader = request.headers.get("Authorization");
+      if (authHeader) fwdHeaders["Authorization"] = authHeader;
+    }
 
     const response = await fetch(targetUrl, {
       method: request.method,

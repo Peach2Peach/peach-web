@@ -13,6 +13,7 @@ Archive of all completed features, fixes, and resolved blockers. Moved here from
 - **Transaction Batching** — toggle calls `PATCH /user/batching` (`settings/index.jsx`)
 - **Refund Address** — CONFIRM calls `PATCH /user` (refundAddress) (`settings/index.jsx`)
 - **Custom Payout Wallet** — CONFIRM calls `PATCH /user` (payoutAddress) (`settings/index.jsx`)
+- **Watch-only Wallet screen** — New `/wallet` route with BIP84 gap-limit scan of `auth.xpub` (`src/utils/wallet.js`, `src/hooks/useWallet.js`), Esplora HTTP REST client (`src/utils/esplora.js`) proxied via Cloudflare worker `/esplora/<net>/*` path (mainnet host **unconfirmed** — `electrum-mainnet.peachbitcoin.com` is an inferred guess). Shows confirmed + pending balance with fiat, fresh receive address with QR + copy, used-address list, and global tx timeline. Refresh + visibility-driven auto-refresh, 60s sessionStorage cache cleared on logout/reauth. Privacy banner pending copy. (`src/screens/wallet/*`)
 - **Trades Dashboard fetch optimization** — Two-tier refresh: `fetchCore()` (15s) does 4 parallel calls (`/offers/summary`, `/contracts/summary`, `/v069/buyOffer?ownOffers=true`, `/v069/user/{id}/offers`); `fetchEnrichments()` (60s) handles browse endpoints, sent requests, matches, PMs, tradingLimit. Eliminated redundant `/offers/summary` call, replaced broken `sellOffer?ownOffers=true` with `/user/{id}/offers`, added 5-min profile cache. (`trades-dashboard/index.jsx`)
 
 ---
