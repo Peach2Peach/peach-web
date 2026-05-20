@@ -121,6 +121,8 @@ export default function RequestedOfferPopup({
   if (!offer) return null;
 
   const isSell = offer.type === "ask"; // sell offer (someone selling BTC)
+  // Viewer's perspective: requesting someone's sell offer means you're buying (inverse of offer.type).
+  const viewerIsBuy = offer.type === "ask";
   const offerTypePath = isSell ? "sellOffer" : "buyOffer";
   const isAccepted = !!acceptedContractId;
 
@@ -500,8 +502,8 @@ export default function RequestedOfferPopup({
             <div className="rop-summary">
               <div className="rop-row">
                 <span className="rop-label">Type</span>
-                <span className="rop-value" style={{color: isSell ? "var(--error)" : "var(--success)"}}>
-                  {isSell ? "Sell" : "Buy"}
+                <span className="rop-value" style={{color: viewerIsBuy ? "var(--success)" : "var(--error)"}}>
+                  {viewerIsBuy ? "Buy" : "Sell"}
                 </span>
               </div>
               <div className="rop-row">
@@ -520,9 +522,9 @@ export default function RequestedOfferPopup({
                   <span className="rop-value" style={{
                     color: offer.premium === 0
                       ? "var(--black)"
-                      : isSell
-                        ? (offer.premium > 0 ? "var(--success)" : "var(--error)")
-                        : (offer.premium < 0 ? "var(--success)" : "var(--error)"),
+                      : viewerIsBuy
+                        ? (offer.premium < 0 ? "var(--success)" : "var(--error)")  // buying: lower = good
+                        : (offer.premium > 0 ? "var(--success)" : "var(--error)"), // selling: higher = good
                   }}>
                     {offer.premium > 0 ? "+" : ""}{offer.premium.toFixed(2)}%
                   </span>

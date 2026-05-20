@@ -2010,6 +2010,8 @@ export function WrongAmountFundedCard({
   // On phone with a numeric id we render an "Open Peach App" deep-link.
   refundActionId,
   onPendingClick,
+  // Error from a failed refund/continue request — shown under the buttons.
+  refundError,
 }) {
   const isFundingDifferent = status === "fundingAmountDifferent";
 
@@ -2233,6 +2235,29 @@ export function WrongAmountFundedCard({
               Refund Escrow
             </button>
           )}
+        </div>
+      )}
+
+      {/* Error from a failed refund/continue request — rendered under the
+          buttons, next to the action that triggered it. */}
+      {refundError && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 8,
+            background: "var(--error-bg)",
+            border: "1px solid rgba(223,50,31,.2)",
+            borderRadius: 8,
+            padding: "10px 12px",
+            marginTop: 12,
+            fontSize: ".82rem",
+            color: "var(--error)",
+            fontWeight: 600,
+            lineHeight: 1.5,
+          }}
+        >
+          <span>{refundError}</span>
         </div>
       )}
     </div>
@@ -3437,51 +3462,12 @@ export function BatchInfoModal({
   payoutAddress,
   onAccelerate,
 }) {
-  const [now, setNow] = useState(() => Date.now());
-  const [endsAt, setEndsAt] = useState(null);
   const [copied, setCopied] = useState(false);
-
-  // Re-anchor the countdown end-time whenever batchInfo.timeRemaining changes
-  // (the 5s contract poll refreshes batchInfo). -2 from the API means "TBA".
-  useEffect(() => {
-    if (!open || !batchInfo) {
-      setEndsAt(null);
-      return;
-    }
-    if (
-      typeof batchInfo.timeRemaining !== "number" ||
-      batchInfo.timeRemaining < 0
-    ) {
-      setEndsAt(null);
-      return;
-    }
-    setEndsAt(Date.now() + batchInfo.timeRemaining * 1000);
-  }, [open, batchInfo?.timeRemaining]);
-
-  useEffect(() => {
-    if (!open) return;
-    const iv = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(iv);
-  }, [open]);
 
   if (!open) return null;
 
   const completed = !!batchInfo?.completed;
   const txId = batchInfo?.txId ?? null;
-  const participants = batchInfo?.participants ?? 0;
-  const maxParticipants = batchInfo?.maxParticipants ?? 0;
-  const fillPct =
-    maxParticipants > 0
-      ? Math.min(100, Math.round((participants / maxParticipants) * 100))
-      : 0;
-
-  let etaLabel = "TBA";
-  if (endsAt) {
-    const left = Math.max(0, endsAt - now);
-    const mins = Math.floor(left / 60000);
-    const secs = Math.floor((left % 60000) / 1000);
-    etaLabel = `${mins}m ${String(secs).padStart(2, "0")}s`;
-  }
 
   const truncAddr = payoutAddress
     ? `${payoutAddress.slice(0, 10)}…${payoutAddress.slice(-6)}`
@@ -3522,23 +3508,7 @@ export function BatchInfoModal({
           <>
             <div className="bi-headline">Save up to 23% in network fees</div>
             <div className="bi-sub">
-              The bucket isn't full yet; waiting for more participants.
-            </div>
-
-            <div className="bi-fill-row">
-              <div className="bi-fill-label">
-                <span>
-                  <strong>{participants}</strong> of{" "}
-                  <strong>{maxParticipants}</strong> slots filled
-                </span>
-                <span className="bi-eta">ETA: {etaLabel}</span>
-              </div>
-              <div className="bi-fill-track">
-                <div
-                  className="bi-fill-bar"
-                  style={{ width: `${fillPct}%` }}
-                />
-              </div>
+              Your transaction will be grouped in our batching system.
             </div>
 
             {truncAddr && (

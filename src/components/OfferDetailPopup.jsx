@@ -509,9 +509,11 @@ export default function OfferDetailPopup({
   const sym = currSym(selectedCurrency);
   const rate = Math.round(btcPrice * (1 + offer.premium / 100));
   const fiat = (offer.amount / 100_000_000) * btcPrice * (1 + offer.premium / 100);
+  // Color from the viewer's perspective, matching the list row's premiumCls(premium, isSellTab):
+  // ask/buy-tab → positive = bad (red); bid/sell-tab → positive = good (green).
   const premCls = offer.premium === 0 ? "prem-zero" : offer.type === "ask"
-    ? (offer.premium > 0 ? "prem-good" : "prem-bad")
-    : (offer.premium < 0 ? "prem-good" : "prem-bad");
+    ? (offer.premium > 0 ? "prem-bad" : "prem-good")
+    : (offer.premium < 0 ? "prem-bad" : "prem-good");
 
   const validByPM = userPMs.map(pm => ({
     pm,

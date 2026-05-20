@@ -42,6 +42,7 @@ export default function PeachMarket() {
   const [tab,            setTab]            = useState("buy");
   const [sortKey,        setSortKey]        = useState("premium");
   const [sortDir,        setSortDir]        = useState(1);
+  const [userSorted,     setUserSorted]     = useState(false);
   const [selCurrencies,    setSelCurrencies]    = useState([]);   // [] = all
   const [selMethods,       setSelMethods]       = useState([]);   // [] = all
   const [selPaymentTypes,  setSelPaymentTypes]  = useState([]);   // [] = all
@@ -112,6 +113,15 @@ export default function PeachMarket() {
   const [toastTone,      setToastTone]      = useState("default"); // "default" | "error" | "orange" | "success"
 
   const isSellTab = tab === "sell";
+
+  // Default sort = most attractive premium for the tab's perspective:
+  // Buy tab (buyer) → lowest premium first; Sell tab (seller) → highest first.
+  // Stops applying once the user picks a sort manually.
+  useEffect(() => {
+    if (userSorted) return;
+    setSortKey("premium");
+    setSortDir(isSellTab ? -1 : 1);
+  }, [tab, userSorted]);
 
   function showToast(message, tone = "default", durationMs = 3500) {
     setToast(message);
@@ -291,6 +301,7 @@ export default function PeachMarket() {
     { label: "Reputation — low to high",  key: "rep",     dir: -1 },
   ];
   function pickSort(key, dir) {
+    setUserSorted(true);
     setSortKey(key);
     setSortDir(dir);
     setSortOpen(false);
@@ -529,6 +540,7 @@ export default function PeachMarket() {
     });
 
   function toggleSort(key) {
+    setUserSorted(true);
     if (sortKey === key) setSortDir(d => d * -1);
     else { setSortKey(key); setSortDir(1); }
   }

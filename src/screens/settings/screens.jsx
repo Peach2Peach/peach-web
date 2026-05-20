@@ -25,6 +25,7 @@ import PeachRating from "../../components/PeachRating.jsx";
 import Avatar from "../../components/Avatar.jsx";
 import { toPeaches } from "../../utils/format.js";
 import InfoPopup, { InfoDot, BadgesInfoPopup, TradingLimitsInfoPopup } from "../../components/InfoPopup.jsx";
+import ConfirmModal from "../../components/ConfirmModal.jsx";
 
 // ── ProfileSubScreen ─────────────────────────────────────────────────────────
 
@@ -568,6 +569,9 @@ export function TxBatchingSubScreen({ onBack }) {
     auth?.profile?.isBatchingEnabled ?? false
   );
   const [showInfo, setShowInfo] = useState(false);
+  // When the user turns batching off while payouts are queued, hold the toggle
+  // and surface an inline confirmation instead of a native browser dialog.
+  const [confirmAccelerate, setConfirmAccelerate] = useState(false);
 
   useEffect(() => {
     if (!auth) return;
@@ -585,8 +589,19 @@ export function TxBatchingSubScreen({ onBack }) {
     return () => { cancelled = true; };
   }, []);
 
+  async function applyBatching(value) {
+    const body = value
+      ? { enableBatching: true }
+      : { enableBatching: false, riskAcknowledged: true };
+    try {
+      await post('/user/batching', body);
+      if (window.__PEACH_AUTH__?.profile) {
+        window.__PEACH_AUTH__.profile.isBatchingEnabled = value;
+      }
+    } catch {}
+  }
+
   async function handleBatchingChange(value) {
-    const previous = batching;
     setBatching(value);
 
     if (!auth) return;
@@ -602,23 +617,13 @@ export function TxBatchingSubScreen({ onBack }) {
         }
       } catch {}
       if (hasPending) {
-        const ok = window.confirm(
-          "You have payouts queued in the batching program. " +
-          "Turning off batching will trigger an immediate payout at higher fees. Continue?"
-        );
-        if (!ok) { setBatching(previous); return; }
+        // Pause here; the inline ConfirmModal drives the next step.
+        setConfirmAccelerate(true);
+        return;
       }
     }
 
-    const body = value
-      ? { enableBatching: true }
-      : { enableBatching: false, riskAcknowledged: true };
-    try {
-      await post('/user/batching', body);
-      if (window.__PEACH_AUTH__?.profile) {
-        window.__PEACH_AUTH__.profile.isBatchingEnabled = value;
-      }
-    } catch {}
+    applyBatching(value);
   }
 
   return (
@@ -640,6 +645,22 @@ export function TxBatchingSubScreen({ onBack }) {
             Peach incurs additional consolidation costs, which the user covers. Calculated as 30-minute fee × 68. Since fees are dynamic, costs can become a significant part of the trade.
           </p>
         </InfoPopup>
+      )}
+      {confirmAccelerate && (
+        <ConfirmModal
+          title="Turn off batching"
+          body="You have payouts queued in the batching program. Turning off batching will trigger an immediate payout at higher fees. Continue?"
+          confirmLabel="Turn off batching"
+          tone="danger"
+          onConfirm={() => {
+            setConfirmAccelerate(false);
+            applyBatching(false);
+          }}
+          onCancel={() => {
+            setConfirmAccelerate(false);
+            setBatching(true);
+          }}
+        />
       )}
       {batching ? (
         <>

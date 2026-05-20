@@ -4,6 +4,7 @@ import SessionExpiredModal from './components/SessionExpiredModal.jsx'
 import TamperDetectedModal from './components/TamperDetectedModal.jsx'
 import OfferPublishedPopup from './components/OfferPublishedPopup.jsx'
 import WrongFundingAmountPopup from './components/WrongFundingAmountPopup.jsx'
+import WrongAmountRefundPopup from './components/WrongAmountRefundPopup.jsx'
 import { clearCache } from './hooks/useApi.js'
 import { invalidateUserPMs } from './hooks/useUserPMs.js'
 import { resetSessionExpiredFlag, isTokenExpired } from './utils/sessionGuard.js'
@@ -76,6 +77,7 @@ export default function App() {
   const [tamperedFields, setTamperedFields] = useState(null);
   const [publishedOffer, setPublishedOffer] = useState(null);
   const [fundingAlert, setFundingAlert] = useState(null);
+  const [contractWrongAmount, setContractWrongAmount] = useState(null);
 
   useEffect(() => {
     const handleExpired = () => setSessionExpired(true);
@@ -109,6 +111,14 @@ export default function App() {
     };
     window.addEventListener('peach:funding-amount-different', handler);
     return () => window.removeEventListener('peach:funding-amount-different', handler);
+  }, []);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (e?.detail?.contractId) setContractWrongAmount(e.detail);
+    };
+    window.addEventListener('peach:contract-wrong-amount', handler);
+    return () => window.removeEventListener('peach:contract-wrong-amount', handler);
   }, []);
 
   function handleReauth() {
@@ -163,6 +173,13 @@ export default function App() {
             expectedSats={fundingAlert.expectedSats}
             fundedSats={fundingAlert.fundedSats}
             onClose={() => setFundingAlert(null)}
+          />
+        )}
+        {contractWrongAmount && (
+          <WrongAmountRefundPopup
+            contractId={contractWrongAmount.contractId}
+            role={contractWrongAmount.role}
+            onClose={() => setContractWrongAmount(null)}
           />
         )}
       </HashRouter>

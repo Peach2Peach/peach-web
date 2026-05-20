@@ -173,6 +173,9 @@ const CSS = `
     color:var(--black-65);margin-bottom:10px;display:flex;align-items:center;gap:6px}
   .panel-section-title::before{content:'';display:inline-block;width:3px;height:12px;
     background:var(--primary);border-radius:2px}
+  /* Hide a section title when its only following content is an empty action panel */
+  .panel-section:not(:has(.panel-section-title ~ *:not(.action-panel:empty))) .panel-section-title{
+    display:none}
 
   /* ── Counterparty card ── */
   .counterparty-card{
@@ -318,19 +321,6 @@ const CSS = `
   }
   .bi-headline{font-size:1.1rem;font-weight:800;color:var(--success);margin-bottom:6px}
   .bi-sub{font-size:.85rem;color:var(--black-65);line-height:1.5;margin-bottom:18px}
-  .bi-fill-row{margin-bottom:14px}
-  .bi-fill-label{
-    display:flex;justify-content:space-between;align-items:baseline;gap:10px;
-    font-size:.82rem;color:var(--black-75);margin-bottom:6px;
-  }
-  .bi-eta{font-weight:700;color:var(--primary-dark);font-variant-numeric:tabular-nums;white-space:nowrap}
-  .bi-fill-track{
-    width:100%;height:8px;border-radius:999px;background:var(--black-5);overflow:hidden;
-  }
-  .bi-fill-bar{
-    height:100%;background:var(--success);border-radius:999px;
-    transition:width .4s ease;
-  }
   .bi-row{
     display:flex;justify-content:space-between;align-items:center;gap:10px;
     padding:10px 0;border-top:1px solid var(--black-10);
@@ -582,6 +572,19 @@ export default function TradeExecution() {
         break;
       }
     }
+  }, [routeId]);
+
+  // ── Reflect a refund pending-action triggered from the global wrong-amount
+  // popup. Covers the case where this screen is already mounted when the popup
+  // navigates here (same-route nav doesn't re-run the mount effect above). ──
+  useEffect(() => {
+    const handler = (e) => {
+      if (String(e?.detail?.contractId) === String(routeId)) {
+        setPendingTaskType("refund");
+      }
+    };
+    window.addEventListener("peach:refund-pending-created", handler);
+    return () => window.removeEventListener("peach:refund-pending-created", handler);
   }, [routeId]);
 
   // ── Seed pending task state from backend flags on contract load ──
@@ -1376,7 +1379,7 @@ export default function TradeExecution() {
       ) : (
         "on their way to your wallet"
       )}
-      . This may take a few minutes, especially if you use Group Hug.
+      . This may take a few minutes, especially if you use our batching system.
       Accelerate your payout in the{" "}
       <button
         type="button"
@@ -2133,6 +2136,7 @@ export default function TradeExecution() {
                         expectedSats={contract.amount}
                         actualSats={escrowFundedAmount}
                         loading={escrowLoading}
+                        refundError={actionError}
                         refundActionId={
                           contract.mobileActionRefundWasTriggered ??
                           (pendingTaskType === "refund" ? true : null)
@@ -2184,11 +2188,19 @@ export default function TradeExecution() {
                             );
                             if (!res.ok) {
                               const err = await res.json().catch(() => null);
-                              throw new Error(
-                                err?.error ||
-                                  err?.message ||
-                                  `HTTP ${res.status}`,
-                              );
+                              const msg =
+                                err?.error || err?.message || `HTTP ${res.status}`;
+                              // FORBIDDEN here means a refund pending action already
+                              // exists server-side (e.g. created via the global popup
+                              // or a prior click). Treat it as "already requested" and
+                              // flip the card to the pending state instead of erroring.
+                              if (res.status === 403 || msg === "FORBIDDEN") {
+                                savePendingTask(routeId, "refund");
+                                setPendingTaskType("refund");
+                                await refreshContractMobileActions();
+                                return;
+                              }
+                              throw new Error(msg);
                             }
                             savePendingTask(routeId, "refund");
                             setPendingTaskType("refund");
@@ -2449,8 +2461,15 @@ export default function TradeExecution() {
                     </div>
                   )}
 
-                  {/* Action error banner */}
-                  {actionError && (
+                  {/* Action error banner. For the wrong-amount statuses the error
+                      is shown inside WrongAmountFundedCard (under the button that
+                      created it), so suppress it here to avoid a duplicate. */}
+                  {actionError &&
+                    !(
+                      role === "seller" &&
+                      (status === "fundingAmountDifferent" ||
+                        status === "wrongAmountFundedOnContractRefundWaiting")
+                    ) && (
                     <div
                       style={{
                         display: "flex",

@@ -204,6 +204,24 @@ function saveWrongAmountShown(peachId, set) {
   try { localStorage.setItem(k, JSON.stringify([...set])); } catch { /* quota */ }
 }
 
+// ── Contract wrong-amount refund-pending popup tracking ────────────────────
+// Mirrors the offer-level dedup above, keyed by contract id, so the global
+// contract refund popup shows once per contract (not every 15s poll) and still
+// surfaces once on a fresh login into a contract already in refund-pending.
+const LS_CONTRACT_WRONGAMOUNT_PREFIX = "peach_contract_wrongamount_shown";
+const keyContractWrongShown = (id) => id ? `${LS_CONTRACT_WRONGAMOUNT_PREFIX}:${id}` : null;
+
+function loadContractWrongShown(peachId) {
+  const k = keyContractWrongShown(peachId);
+  if (!k) return new Set();
+  try { return new Set((JSON.parse(localStorage.getItem(k)) || []).map(String)); } catch { return new Set(); }
+}
+function saveContractWrongShown(peachId, set) {
+  const k = keyContractWrongShown(peachId);
+  if (!k) return;
+  try { localStorage.setItem(k, JSON.stringify([...set])); } catch { /* quota */ }
+}
+
 export function addEscrowFundedNotification(offerId) {
   const dedupId = `escrow-funded-${offerId}`;
   if (_state.notifications.some(n => n.id === dedupId)) return;
@@ -774,6 +792,29 @@ async function _poll(auth, base) {
         }
       }
       if (wrongShownDirty) saveWrongAmountShown(peachId, wrongShown);
+    }
+
+    // ── Contract funded with wrong amount, refund pending ──
+    // Surface a global popup once per contract for wrongAmountFundedOnContractRefundWaiting
+    // (escrow funded with an unusable amount → refund only). App.jsx mounts the popup.
+    // Runs independently of the contract diff so it also fires on a fresh login into
+    // a contract already sitting in this state.
+    {
+      const contractWrongShown = loadContractWrongShown(peachId);
+      let contractWrongDirty = false;
+      for (const c of contracts) {
+        if (c.tradeStatus !== "wrongAmountFundedOnContractRefundWaiting") continue;
+        const cid = String(c.id);
+        if (contractWrongShown.has(cid)) continue;
+        const rawType = (c.type ?? "").toLowerCase();
+        const isBuyer = rawType === "bid" || rawType === "buy" || (c.buyer?.id ?? c.buyerId) === peachId;
+        window.dispatchEvent(new CustomEvent("peach:contract-wrong-amount", {
+          detail: { contractId: cid, role: isBuyer ? "buyer" : "seller" },
+        }));
+        contractWrongShown.add(cid);
+        contractWrongDirty = true;
+      }
+      if (contractWrongDirty) saveContractWrongShown(peachId, contractWrongShown);
     }
 
     _addEvents(events);

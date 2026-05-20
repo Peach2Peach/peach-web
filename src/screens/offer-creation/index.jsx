@@ -9,7 +9,7 @@ import { useAuth } from "../../hooks/useAuth.js";
 import { useApi, clearCache } from "../../hooks/useApi.js";
 import { useCurrency } from "../../components/AppLayout.jsx";
 import { useMarketStats } from "../../hooks/useMarketStats.js";
-import { useUserPMs, invalidateUserPMs } from "../../hooks/useUserPMs.js";
+import { useUserPMs } from "../../hooks/useUserPMs.js";
 import { addPendingEscrow, removePendingEscrow, addEscrowFundedNotification } from "../../hooks/useNotifications.js";
 import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 import { isApiError, hashPaymentFields, encryptForPublicKey, encryptPGPMessage, signPGPMessage } from "../../utils/pgp.js";
@@ -227,7 +227,7 @@ export default function OfferCreation({ initialType="buy" }) {
   const btcNetwork = BITCOIN_NETWORK;
 
   // ── USER PMs (shared cache) ──
-  const { pms: pmsRaw, error: pmFetchError } = useUserPMs(auth);
+  const { pms: pmsRaw, error: pmFetchError, refetch } = useUserPMs(auth);
   useEffect(() => { setPmError(!!pmFetchError); }, [pmFetchError]);
   useEffect(() => {
     if (!pmsRaw) return;
@@ -600,7 +600,7 @@ export default function OfferCreation({ initialType="buy" }) {
       setShowAddModal(false);
     }
     if (auth && nextList) {
-      syncPMsToServer(nextList, auth).finally(() => invalidateUserPMs());
+      syncPMsToServer(nextList, auth).finally(() => refetch());
     }
   }
 

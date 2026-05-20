@@ -7,7 +7,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth.js";
 import { useApi } from "../../hooks/useApi.js";
-import { useUserPMs, invalidateUserPMs } from "../../hooks/useUserPMs.js";
+import { useUserPMs } from "../../hooks/useUserPMs.js";
 import { syncPMsToServer } from "../../utils/pmSync.js";
 import { CSS } from "./styles.js";
 import { IconPlus, IconEdit, IconTrash, DeleteModal } from "./components.jsx";
@@ -63,8 +63,8 @@ export default function PeachPaymentMethods() {
 
   // User PMs come from the shared useUserPMs hook. We mirror them into local
   // savedMethods so the save/delete handlers below can keep their optimistic
-  // updates and post-write `invalidateUserPMs()` re-syncs everyone.
-  const { pms: pmsRaw, loading: pmsLoading, error: pmFetchError } = useUserPMs(auth);
+  // updates and post-write `refetch()` reloads server truth for everyone.
+  const { pms: pmsRaw, loading: pmsLoading, error: pmFetchError, refetch } = useUserPMs(auth);
   useEffect(() => { setSavedLoading(pmsLoading); }, [pmsLoading]);
   useEffect(() => { setPmError(!!pmFetchError); }, [pmFetchError]);
   useEffect(() => {
@@ -128,9 +128,10 @@ export default function PeachPaymentMethods() {
     setShowAddFlow(false);
     setEditPM(null);
     if (auth && nextMethods) {
-      // Invalidate AFTER the server PUT completes so the cache refetch sees
-      // the new state, not the pre-write state.
-      syncPMsToServer(nextMethods, auth).finally(() => invalidateUserPMs());
+      // Refetch AFTER the server PUT completes so the cache reloads the new
+      // state, not the pre-write state. refetch() (not invalidate) so the list
+      // actually reloads instead of going empty until a page refresh.
+      syncPMsToServer(nextMethods, auth).finally(() => refetch());
     }
   }
 
@@ -144,7 +145,7 @@ export default function PeachPaymentMethods() {
       });
       setDeletePM(null);
       if (auth && nextMethods) {
-        syncPMsToServer(nextMethods, auth).finally(() => invalidateUserPMs());
+        syncPMsToServer(nextMethods, auth).finally(() => refetch());
       }
     }
   }

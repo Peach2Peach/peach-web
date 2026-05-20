@@ -21,6 +21,7 @@ const ATTENTION_DISMISS_KEY = "peach.attention.dismissed";
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const css = `
   /* ── WELCOME HEADER ── */
+  .welcome-block{display:flex;flex-direction:column;gap:8px}
   .welcome-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
   .welcome-text h1{font-size:1.35rem;font-weight:800;color:var(--black);line-height:1.2}
   .welcome-text p{font-size:.82rem;font-weight:500;color:var(--black-65);margin-top:2px}
@@ -126,7 +127,7 @@ const css = `
   @keyframes seeallSlideUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
   /* ── PROFILE STRIP (discrete, under welcome) ── */
-  .profile-strip{display:flex;flex-direction:column;gap:3px;margin:-4px 0 2px}
+  .profile-strip{display:flex;flex-direction:column;gap:3px}
   .profile-strip-l1{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .profile-strip-l2{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .profile-strip-id{font-size:.92rem;font-weight:800;color:var(--black);letter-spacing:.04em}
@@ -500,7 +501,8 @@ export default function PeachHome() {
       <div className="page-wrap" style={{ marginTop:"var(--topbar)", marginLeft: navWidth, flex:1 }}>
           <div className="content">
 
-            {/* ── WELCOME ROW ── */}
+            {/* ── WELCOME ROW + PROFILE STRIP ── */}
+            <div className="welcome-block">
             <div className="welcome-row">
               {isLoggedIn ? (
                 <>
@@ -535,9 +537,6 @@ export default function PeachHome() {
                 </>
               )}
             </div>
-
-            {/* Sentinel: when this leaves the viewport, the floating pill appears */}
-            <div ref={sentinelRef} aria-hidden="true" style={{height:1,width:"100%",margin:0,padding:0}} />
 
             {/* ── USER PROFILE (discrete strip, under welcome) ── */}
             {isLoggedIn && (
@@ -574,6 +573,10 @@ export default function PeachHome() {
                 </div>
               </div>
             )}
+            </div>
+
+            {/* Sentinel: when this leaves the viewport, the floating pill appears */}
+            <div ref={sentinelRef} aria-hidden="true" style={{height:1,width:"100%",margin:0,padding:0}} />
 
             {/* ── ATH WIDGET ── */}
             <div className="card">
