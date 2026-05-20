@@ -7,7 +7,7 @@ import { useApi, getCached } from "../hooks/useApi.js";
 import { useUrgentCount } from "../hooks/useUrgentCount.js";
 import { STATUS_CONFIG, FINISHED_STATUSES } from "../data/statusConfig.js";
 import { methodDisplayName } from "../data/paymentMethodMeta.js";
-import { fmt as formatSats, fmtPct, relTime, toPeaches } from "../utils/format.js";
+import { fmt as formatSats, fmtPct, toPeaches } from "../utils/format.js";
 import PeachRating from "../components/PeachRating.jsx";
 import Avatar from "../components/Avatar.jsx";
 import { RefreshIndicator } from "../components/RefreshIndicator.jsx";
@@ -125,26 +125,17 @@ const css = `
   @keyframes seeallFadeIn{from{opacity:0}to{opacity:1}}
   @keyframes seeallSlideUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
-  /* ── PROFILE CARD ── */
-  .profile-top{display:flex;align-items:center;gap:14px}
-  .profile-name{font-size:1rem;font-weight:800;color:var(--black);letter-spacing:.04em}
-  .profile-since{font-size:.72rem;font-weight:500;color:var(--black-65);margin-top:2px}
-  .profile-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-  .profile-stat{background:var(--black-5);border-radius:10px;padding:10px;text-align:center}
-  .profile-stat-val{font-size:1.2rem;font-weight:800;color:var(--black);line-height:1}
-  .profile-stat-lbl{font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--black-65);margin-top:3px}
-  .profile-blocked-card{display:flex;align-items:center;justify-content:space-between;background:var(--black-5);border-radius:10px;padding:12px 14px;margin-top:8px;cursor:pointer;transition:background .15s ease}
-  .profile-blocked-card:hover{background:var(--black-10)}
-  .profile-blocked-lbl{font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--black-65)}
-  .profile-blocked-val{font-size:1.2rem;font-weight:800;color:var(--black);line-height:1;margin-top:3px}
-  .profile-blocked-arrow{color:var(--primary);font-size:1.2rem;font-weight:700}
-  .profile-row{display:flex;flex-direction:column;gap:5px}
-  .profile-row-label{font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--black-25)}
-  .profile-badges{display:flex;gap:5px;flex-wrap:wrap}
-  .badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;
-    font-size:.65rem;font-weight:700;white-space:nowrap}
-  .badge-super{background:var(--grad);color:white}
-  .badge-fast{background:var(--primary-mild);color:var(--primary-dark)}
+  /* ── PROFILE STRIP (discrete, under welcome) ── */
+  .profile-strip{display:flex;flex-direction:column;gap:3px;margin:-4px 0 2px}
+  .profile-strip-l1{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .profile-strip-l2{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .profile-strip-id{font-size:.92rem;font-weight:800;color:var(--black);letter-spacing:.04em}
+  .profile-strip-sub{font-size:.82rem;font-weight:500;color:var(--black-65)}
+  .profile-strip-stat{display:inline-flex;align-items:center;gap:4px;font-size:.82rem;font-weight:600;color:var(--black-75)}
+  .profile-strip-sep{color:var(--black-25);font-size:.82rem}
+  .profile-strip-badges{display:inline-flex;gap:4px;font-size:.95rem;cursor:pointer}
+  .profile-strip-link{font-size:.82rem;font-weight:600;color:var(--black-65);cursor:pointer}
+  .profile-strip-link:hover{color:var(--primary)}
   .profile-methods{display:flex;gap:5px;flex-wrap:wrap}
   .pref-chip{padding:3px 9px;border-radius:999px;font-size:.72rem;font-weight:600;
     background:var(--black-5);color:var(--black-75);border:1px solid var(--black-10)}
@@ -204,22 +195,6 @@ const css = `
   .avatar-login-btn:hover{background:var(--black-5)}
   .avatar-login-label{font-size:.78rem;font-weight:700;color:var(--primary);white-space:nowrap}
 
-  /* ── AUTH OVERLAY (profile card) ── */
-  .auth-blur-wrap{position:relative;overflow:hidden;border-radius:16px}
-  .auth-blur-content{filter:blur(6px);pointer-events:none;user-select:none}
-  .auth-overlay{
-    position:absolute;inset:0;z-index:10;
-    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
-    background:rgba(255,249,246,.55);border-radius:16px;
-  }
-  .auth-overlay-text{font-size:.88rem;font-weight:600;color:var(--black-75);text-align:center}
-  .auth-overlay-btn{
-    padding:8px 22px;border-radius:999px;background:var(--grad);color:white;
-    font-family:var(--font);font-size:.82rem;font-weight:800;border:none;cursor:pointer;
-    transition:transform .1s;
-  }
-  .auth-overlay-btn:hover{transform:translateY(-1px)}
-
   /* ── ATH WIDGET ── */
   .ath-header{display:flex;align-items:center;gap:8px}
   .ath-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -274,7 +249,6 @@ const css = `
     .action-cards{grid-template-columns:1fr}
     .welcome-actions{display:none}
     .content{padding:18px 14px 48px;max-width:100%}
-    .profile-stats{grid-template-columns:repeat(3,1fr)}
     .card{width:100%!important;max-width:100%!important;min-width:0!important}
     .card.home-stack-card{max-width:450px!important}
     .cards-row{flex-direction:column!important;align-items:stretch!important}
@@ -507,13 +481,6 @@ export default function PeachHome() {
     return () => { cancelled = true; };
   }, [auth]);
 
-  // ── DERIVED DATA FROM CONTRACTS ──
-  const completedContracts = contractsData.filter(c => c.tradeStatus === "tradeCompleted");
-  const totalVolumeSats = completedContracts.reduce((s, c) => s + (c.amount ?? 0), 0);
-  const lastTradeDate = completedContracts.length
-    ? new Date(Math.max(...completedContracts.map(c => new Date(c.lastModified).getTime())))
-    : null;
-
   // ── DERIVED: top 5 from market breakdown (full lists go to See-all popup) ──
   const topPms        = marketBreakdown.pms.slice(0, 3);
   const topCurrencies = marketBreakdown.currencies.slice(0, 3);
@@ -537,13 +504,11 @@ export default function PeachHome() {
             <div className="welcome-row">
               {isLoggedIn ? (
                 <>
-                  <Avatar peachId={auth?.peachId} size={44} />
                   <div className="welcome-text">
                     <h1>
                       Welcome back 👋
                       <RefreshIndicator active={isRefetching} />
                     </h1>
-                    <p>{user.peachId} · {user.trades} trades completed</p>
                   </div>
                   {showStrip && (
                     <AttentionStrip
@@ -573,6 +538,42 @@ export default function PeachHome() {
 
             {/* Sentinel: when this leaves the viewport, the floating pill appears */}
             <div ref={sentinelRef} aria-hidden="true" style={{height:1,width:"100%",margin:0,padding:0}} />
+
+            {/* ── USER PROFILE (discrete strip, under welcome) ── */}
+            {isLoggedIn && (
+              <div className="profile-strip">
+                <div className="profile-strip-l1">
+                  <Avatar peachId={auth?.peachId} size={28} />
+                  <span className="profile-strip-id">{user.peachId}</span>
+                  <span className="profile-strip-sep">·</span>
+                  <span className="profile-strip-sub">Member since {user.memberSince}</span>
+                </div>
+                <div className="profile-strip-l2">
+                  <span className="profile-strip-stat"><PeachRating rep={user.rating} size={13} trades={user.trades}/></span>
+                  <span className="profile-strip-sep">·</span>
+                  <span className="profile-strip-stat" style={{color: user.disputesTotal > 0 ? "var(--error)" : "var(--success)"}}>
+                    {user.disputesTotal} {user.disputesTotal === 1 ? "dispute" : "disputes"}
+                  </span>
+                  {user.badges.length > 0 && (
+                    <>
+                      <span className="profile-strip-sep">·</span>
+                      <span className="profile-strip-badges" onClick={() => setBadgesHelpOpen(true)} title="View badges">
+                        {user.badges.includes("superTrader") && <span>🏆</span>}
+                        {user.badges.includes("fastTrader") && <span>⚡</span>}
+                        {user.badges.includes("ambassador") && <span>🎖️</span>}
+                      </span>
+                    </>
+                  )}
+                  <span className="profile-strip-sep">·</span>
+                  <span
+                    className="profile-strip-link"
+                    onClick={() => navigate("/settings", { state: { openSection: "block-users" } })}
+                  >
+                    {blockedUsers?.count ?? 0} blocked
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* ── ATH WIDGET ── */}
             <div className="card">
@@ -657,112 +658,8 @@ export default function PeachHome() {
               </div>
             )}
 
-            {/* ── PROFILE + PEACH STATS ROW ── */}
+            {/* ── MARKET BREAKDOWN + PEACH STATS ROW ── */}
             <div className="cards-row" style={{display:"flex",gap:18,alignItems:"flex-start",flexWrap:"wrap"}}>
-
-              {/* Profile Card — left (blurred when logged out) */}
-              {isLoggedIn ? (
-                <div className="card" style={{flexShrink:0,minWidth:260}}>
-                  <div className="card-header">
-                    <span className="card-title">My Profile</span>
-                    <span className="card-link" onClick={() => navigate("/settings", { state: { openProfile: true } })}>View →</span>
-                  </div>
-                  <div className="profile-top">
-                    <Avatar peachId={auth?.peachId} size={52} />
-                    <div>
-                      <div className="profile-name">{user.peachId}</div>
-                      <div className="profile-since">Member since {user.memberSince}</div>
-                    </div>
-                  </div>
-                  <div className="profile-row">
-                    <span className="profile-row-label">Badges</span>
-                    <div className="profile-badges">
-                      {user.badges.includes("superTrader") && <span className="badge badge-super" style={{cursor:"pointer"}} onClick={() => setBadgesHelpOpen(true)}>🏆 Supertrader</span>}
-                      {user.badges.includes("fastTrader") && <span className="badge badge-fast" style={{cursor:"pointer"}} onClick={() => setBadgesHelpOpen(true)}>⚡ Fast Trader</span>}
-                      {user.badges.includes("ambassador") && <span className="badge badge-fast" style={{cursor:"pointer"}} onClick={() => setBadgesHelpOpen(true)}>🎖️ Ambassador</span>}
-                      {user.badges.length === 0 && <span style={{fontSize:".78rem",color:"var(--black-65)"}}>No badges yet</span>}
-                    </div>
-                  </div>
-
-                  {/* Row 1: Rating · Disputes */}
-                  <div className="profile-stats" style={{gridTemplateColumns:"repeat(2,1fr)"}}>
-                    <div className="profile-stat">
-                      <div className="profile-stat-val"><PeachRating rep={user.rating} size={14} trades={user.trades}/></div>
-                      <div className="profile-stat-lbl">Rating</div>
-                    </div>
-                    <div className="profile-stat">
-                      <div className="profile-stat-val" style={{color: user.disputesTotal > 0 ? "var(--error)" : "var(--success)"}}>
-                        {user.disputesTotal}
-                      </div>
-                      <div className="profile-stat-lbl">Disputes</div>
-                    </div>
-                  </div>
-
-                  {/* Row 2: Trades · Total Volume · Last Trade */}
-                  <div className="profile-stats">
-                    <div className="profile-stat">
-                      <div className="profile-stat-val">{user.trades}</div>
-                      <div className="profile-stat-lbl">Trades</div>
-                    </div>
-                    <div className="profile-stat">
-                      <div className="profile-stat-val">{totalVolumeSats > 0 ? <SatsAmount sats={totalVolumeSats} fontSize=".95rem"/> : "—"}</div>
-                      <div className="profile-stat-lbl">Total Volume</div>
-                    </div>
-                    <div className="profile-stat">
-                      <div className="profile-stat-val">{lastTradeDate ? relTime(lastTradeDate) : "—"}</div>
-                      <div className="profile-stat-lbl">Last Trade</div>
-                    </div>
-                  </div>
-
-                  {/* Blocked Users card — deep-links to Settings → Block Users */}
-                  <div
-                    className="profile-blocked-card"
-                    onClick={() => navigate("/settings", { state: { openSection: "block-users" } })}
-                  >
-                    <div>
-                      <div className="profile-blocked-lbl">Blocked Users</div>
-                      <div className="profile-blocked-val">{blockedUsers?.count ?? 0}</div>
-                    </div>
-                    <span className="profile-blocked-arrow">→</span>
-                  </div>
-                </div>
-              ) : (
-                /* ── BLURRED PROFILE CARD (logged out) ── */
-                <div className="auth-blur-wrap" style={{flexShrink:0,minWidth:260}}>
-                  <div className="card auth-blur-content" style={{minWidth:260}}>
-                    <div className="card-header">
-                      <span className="card-title">My Profile</span>
-                      <span className="card-link">Edit →</span>
-                    </div>
-                    <div className="profile-top">
-                      <Avatar peachId="08476d23" size={52} />
-                      <div>
-                        <div className="profile-name">PEACH08476D23</div>
-                        <div className="profile-since">Member since March 2023</div>
-                      </div>
-                    </div>
-                    <div className="profile-stats">
-                      <div className="profile-stat">
-                        <div className="profile-stat-val">⭐ 4.7</div>
-                        <div className="profile-stat-lbl">Rating</div>
-                      </div>
-                      <div className="profile-stat">
-                        <div className="profile-stat-val">0</div>
-                        <div className="profile-stat-lbl">Disputes</div>
-                      </div>
-                      <div className="profile-stat">
-                        <div className="profile-stat-val">23</div>
-                        <div className="profile-stat-lbl">Trades</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="auth-overlay">
-                    <svg width="32" height="32" viewBox="0 0 32 32" fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round"><circle cx="16" cy="12" r="5"/><path d="M6 28c0-5.5 4.5-10 10-10s10 4.5 10 10"/></svg>
-                    <span className="auth-overlay-text">Please authenticate<br/>to view your profile</span>
-                    <button className="auth-overlay-btn" onClick={handleLogin}>Log in</button>
-                  </div>
-                </div>
-              )}
 
               {/* Right column: PM+Currencies side by side, then Peach Stats */}
               <div style={{display:"flex",flexDirection:"column",gap:18,flex:"1 1 0",minWidth:0}}>

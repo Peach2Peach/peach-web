@@ -2120,6 +2120,90 @@ export default function TradeExecution() {
                     </div>
                   )}
 
+                {/* Wrong amount funded — seller. Rendered at the top, above the
+                    trade partner card, like the other warning banners. Excludes
+                    wrongAmountFundedOnContract, the terminal "refund completed"
+                    state — no actions to show. */}
+                {role === "seller" &&
+                  (status === "fundingAmountDifferent" ||
+                    status === "wrongAmountFundedOnContractRefundWaiting") && (
+                    <div style={{ marginBottom: 12 }}>
+                      <WrongAmountFundedCard
+                        status={status}
+                        expectedSats={contract.amount}
+                        actualSats={escrowFundedAmount}
+                        loading={escrowLoading}
+                        refundActionId={
+                          contract.mobileActionRefundWasTriggered ??
+                          (pendingTaskType === "refund" ? true : null)
+                        }
+                        onPendingClick={() => {}}
+                        onContinueTrade={async () => {
+                          setActionError(null);
+                          try {
+                            const offerId = String(contract.id).split("-")[0];
+                            const res = await post(
+                              "/offer/" + offerId + "/escrow/confirm",
+                            );
+                            if (res.ok) {
+                              const fresh = await get("/contract/" + routeId);
+                              if (fresh.ok) {
+                                const c = await fresh.json();
+                                setLiveContract((prev) => {
+                                  if (!prev) return prev;
+                                  const nextStatus =
+                                    deriveDisplayStatus({
+                                      tradeStatus: c.tradeStatus,
+                                      direction: prev.contract?.direction,
+                                      escrowFundingTimeLimitExpired: c.escrowFundingTimeLimitExpired,
+                                    }) ?? prev.tradeStatus;
+                                  return { ...prev, tradeStatus: nextStatus };
+                                });
+                              }
+                              setToast("Trade continued with funded amount");
+                              setToastTone("success");
+                              setTimeout(() => { setToast(null); setToastTone("default"); }, 4000);
+                            } else {
+                              const err = await res.json().catch(() => ({}));
+                              setActionError(
+                                "Failed to confirm escrow: " +
+                                  (err.error || res.status),
+                              );
+                            }
+                          } catch (e) {
+                            setActionError(
+                              "Confirm escrow error: " + e.message,
+                            );
+                          }
+                        }}
+                        onRefundEscrow={async () => {
+                          setActionError(null);
+                          try {
+                            const res = await post(
+                              `/contract/${contract.id}/createRefundEscrowContractPendingAction`,
+                            );
+                            if (!res.ok) {
+                              const err = await res.json().catch(() => null);
+                              throw new Error(
+                                err?.error ||
+                                  err?.message ||
+                                  `HTTP ${res.status}`,
+                              );
+                            }
+                            savePendingTask(routeId, "refund");
+                            setPendingTaskType("refund");
+                            await refreshContractMobileActions();
+                          } catch (e) {
+                            setActionError(
+                              "Failed to request refund: " + e.message,
+                            );
+                          }
+                        }}
+                        onClose={() => navigate("/trades")}
+                      />
+                    </div>
+                  )}
+
                 {/* Funding-stage two-column wrapper. Outside funding stage the
                     wrappers use display:contents and disappear from layout. */}
                 <div className={isFundingStage ? "funding-two-col" : "funding-passthrough"}>
@@ -2200,9 +2284,13 @@ export default function TradeExecution() {
                 {/* ── Actions (always first, includes deadline + escrow funding) ── */}
                 <div className={isFundingStage ? "funding-right-col" : "funding-passthrough"}>
                 <div className="panel-section">
-                  {status !== "tradeCompleted" && status !== "rateUser" && (
-                    <div className="panel-section-title">Actions</div>
-                  )}
+                  {status !== "tradeCompleted" &&
+                    status !== "rateUser" &&
+                    !(
+                      role === "seller" &&
+                      (status === "fundingAmountDifferent" ||
+                        status === "wrongAmountFundedOnContractRefundWaiting")
+                    ) && <div className="panel-section-title">Actions</div>}
 
                   {/* Escrow funding card — inside actions for seller */}
                   {role === "seller" &&
@@ -2250,87 +2338,6 @@ export default function TradeExecution() {
                             setFundEscrowLoading(false);
                           }
                         }}
-                      />
-                    )}
-
-                  {/* Wrong amount funded — seller (excludes wrongAmountFundedOnContract,
-                    which is the terminal "refund completed" state — no actions to show). */}
-                  {role === "seller" &&
-                    (status === "fundingAmountDifferent" ||
-                      status ===
-                        "wrongAmountFundedOnContractRefundWaiting") && (
-                      <WrongAmountFundedCard
-                        status={status}
-                        expectedSats={contract.amount}
-                        actualSats={escrowFundedAmount}
-                        loading={escrowLoading}
-                        refundActionId={
-                          contract.mobileActionRefundWasTriggered ??
-                          (pendingTaskType === "refund" ? true : null)
-                        }
-                        onPendingClick={() => {}}
-                        onContinueTrade={async () => {
-                          setActionError(null);
-                          try {
-                            const offerId = String(contract.id).split("-")[0];
-                            const res = await post(
-                              "/offer/" + offerId + "/escrow/confirm",
-                            );
-                            if (res.ok) {
-                              const fresh = await get("/contract/" + routeId);
-                              if (fresh.ok) {
-                                const c = await fresh.json();
-                                setLiveContract((prev) => {
-                                  if (!prev) return prev;
-                                  const nextStatus =
-                                    deriveDisplayStatus({
-                                      tradeStatus: c.tradeStatus,
-                                      direction: prev.contract?.direction,
-                                      escrowFundingTimeLimitExpired: c.escrowFundingTimeLimitExpired,
-                                    }) ?? prev.tradeStatus;
-                                  return { ...prev, tradeStatus: nextStatus };
-                                });
-                              }
-                              setToast("Trade continued with funded amount");
-                              setToastTone("success");
-                              setTimeout(() => { setToast(null); setToastTone("default"); }, 4000);
-                            } else {
-                              const err = await res.json().catch(() => ({}));
-                              setActionError(
-                                "Failed to confirm escrow: " +
-                                  (err.error || res.status),
-                              );
-                            }
-                          } catch (e) {
-                            setActionError(
-                              "Confirm escrow error: " + e.message,
-                            );
-                          }
-                        }}
-                        onRefundEscrow={async () => {
-                          setActionError(null);
-                          try {
-                            const res = await post(
-                              `/contract/${contract.id}/createRefundEscrowContractPendingAction`,
-                            );
-                            if (!res.ok) {
-                              const err = await res.json().catch(() => null);
-                              throw new Error(
-                                err?.error ||
-                                  err?.message ||
-                                  `HTTP ${res.status}`,
-                              );
-                            }
-                            savePendingTask(routeId, "refund");
-                            setPendingTaskType("refund");
-                            await refreshContractMobileActions();
-                          } catch (e) {
-                            setActionError(
-                              "Failed to request refund: " + e.message,
-                            );
-                          }
-                        }}
-                        onClose={() => navigate("/trades")}
                       />
                     )}
 

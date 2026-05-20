@@ -419,6 +419,7 @@ export function MultiEscrowFunding({
   const [copiedKey, setCopiedKey] = useState(null); // "addr-0", "uri-2", etc.
   const [taskState, setTaskState] = useState({}); // offerId → 'sending' | 'sent' | 'failed'
   const [qrWithAmount, setQrWithAmount] = useState(true);
+  const { selectedCurrency } = useCurrency();
 
   const validResults = results.filter(
     (r) => r.status !== "failed" && r.escrowAddress,
@@ -537,6 +538,15 @@ export function MultiEscrowFunding({
       {/* ── PERSISTENT QR CODE ── */}
       {selected && (
         <div className="multi-escrow-qr">
+          <div style={{textAlign:"center",marginBottom:14}}>
+            <label className="field-label" style={{marginBottom:6,display:"block"}}>Amount to send</label>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:12}}>
+              <SatsAmount sats={amtFixed} fontSize="1.6rem"/>
+              <span style={{fontSize:".88rem",color:"var(--black-65)",fontWeight:600}}>
+                ≈ {currSym(selectedCurrency)}{fmtEur(satsToFiat(amtFixed,effP))}
+              </span>
+            </div>
+          </div>
           <div
             style={{
               padding: 12,

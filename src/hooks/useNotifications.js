@@ -22,7 +22,7 @@ const STATUS_NOTIF = {
   // acceptTradeRequest: owned by the totalTradeRequests counter diff — single source of truth for trade-request bells.
   fundEscrow:                   { title: "Trade accepted",          body: "Waiting for seller to fund escrow.",     type: "statusChange" },
   waitingForFunding:            { title: "Trade accepted",          body: "Waiting for seller to fund escrow.",     type: "statusChange" },
-  escrowWaitingForConfirmation: { title: "Escrow funded",           body: "Waiting for blockchain confirmation.",   type: "statusChange" },
+  escrowWaitingForConfirmation: { title: "Escrow funding",           body: "Waiting for blockchain confirmation.",   type: "statusChange" },
   paymentRequired:              { title: "Trade Initiated ! Payment required",        body: "Send payment to the seller.",            type: "statusChange" },
   confirmPaymentRequired:       { title: "Payment sent",            body: "you have marked the payment as sent. Waiting for seller to receive the money.",    type: "statusChange" },
   releaseEscrow:                { title: "Payment confirmed",       body: "Seller is releasing escrow.",            type: "statusChange" },

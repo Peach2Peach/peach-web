@@ -2214,7 +2214,7 @@ export function WrongAmountFundedCard({
               style={{
                 flex: 1,
                 border: "1.5px solid var(--black-10)",
-                background: "white",
+                background: "var(--surface)",
                 borderRadius: 999,
                 fontFamily: "Baloo 2, cursive",
                 fontWeight: 700,
@@ -2888,9 +2888,11 @@ export function ActionPanel({
               <p style={{ margin: "0 0 12px" }}>
                 Only confirm if you have actually received the fiat payment in your account. You'll be able to rate the buyer once the bitcoin has been released.
               </p>
-              <p style={{ margin: 0 }}>
-                <strong style={{ color: "var(--error)" }}>Revolut users:</strong> make sure the buyer has paid through Revtag or IBAN, and NOT through debit/credit card or Apple pay. They payments are reversible.
-              </p>
+              {scenario.contract?.method?.toLowerCase() === "revolut" && (
+                <p style={{ margin: 0 }}>
+                  <strong style={{ color: "var(--error)" }}>Revolut users:</strong> make sure the buyer has paid through Revtag or IBAN, and NOT through debit/credit card or Apple pay. They payments are reversible.
+                </p>
+              )}
             </>
           }
           confirmLabel="Yes, proceed"
