@@ -758,6 +758,9 @@ export default function OfferDetailPopup({
                     <div style={{fontSize:".76rem",color:"var(--black-65)",lineHeight:1.5}}>
                       None of your configured payment methods support {popupCurrency} for this offer.
                     </div>
+                    <button className="popup-pm-link" onClick={() => navigate("/payment-methods")}>
+                      Go to Payment Methods →
+                    </button>
                   </div>
                 </div>
               ) : (
