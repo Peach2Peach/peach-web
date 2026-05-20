@@ -34,11 +34,10 @@ export default {
     // Route: /regtest/... → api-regtest.peachbitcoin.com/...
     // Route: everything else → api.peachbitcoin.com/v1/...
     //
-    // NOTE: mainnet Esplora host below is inferred from the testnet/regtest
-    // naming pattern and has not been confirmed against the mobile app's
-    // production config. If wrong, change it here and redeploy the worker.
+    // Mainnet uses the bare `electrum.peachbitcoin.com` host (no -mainnet
+    // suffix); testnet/regtest carry the suffix.
     const ESPLORA_HOSTS = {
-      mainnet: "https://electrum-mainnet.peachbitcoin.com",
+      mainnet: "https://electrum.peachbitcoin.com",
       testnet: "https://electrum-testnet.peachbitcoin.com",
       regtest: "https://electrum-regtest.peachbitcoin.com",
     };

@@ -14,7 +14,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/esplora/mainnet': {
-        target: 'https://electrum-mainnet.peachbitcoin.com',
+        target: 'https://electrum.peachbitcoin.com',
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/esplora\/mainnet/, ''),
       },
