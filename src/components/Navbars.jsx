@@ -58,7 +58,6 @@ const IconSun  = () => <svg width="18" height="18" viewBox="0 0 20 20" fill="non
 // ─── NAVIGATION ───────────────────────────────────────────────────────────────
 export const NAV_ITEMS = [
   { id:"home",             label:"Home",     icon:()=><PeachIcon size={20}/> },
-  { id:"wallet",           label:"Wallet",   icon:()=><IconWallet/> },
   { id:"market",           label:"Market",   icon:()=><IconMarket/> },
   { id:"trades",           label:"Trades",   icon:()=><IconTrades/> },
   { id:"create",           label:"Create",   icon:()=><IconCreate/> },
@@ -68,7 +67,6 @@ export const NAV_ITEMS = [
 
 export const NAV_ROUTES = {
   home:              "/home",
-  wallet:            "/wallet",
   market:            "/market",
   trades:            "/trades",
   create:            "/offer/new",
@@ -80,7 +78,6 @@ export const NAV_ROUTES = {
 // correspond to a nav item (e.g. /, /trade/:id, /user/:id).
 function routeToNavId(pathname) {
   if (pathname === "/home") return "home";
-  if (pathname === "/wallet") return "wallet";
   if (pathname === "/market") return "market";
   if (pathname === "/trades") return "trades";
   if (pathname.startsWith("/offer/new")) return "create";
@@ -109,6 +106,19 @@ export function SideNav({ active: activeProp, mobileOpen, onClose, onNavigate, m
             <span className="sidenav-label">{label}</span>
           </button>
         ))}
+        {/* Wallet — built but hidden behind a "soon" placeholder. The /wallet
+            route still works by direct URL for testing; this button is inert. */}
+        <button
+          type="button"
+          className="sidenav-item sidenav-soon"
+          disabled
+          aria-disabled="true"
+          title="Watch-only — coming soon"
+        >
+          <span className="sidenav-icon"><IconWallet/></span>
+          <span className="sidenav-label">watch-only</span>
+          <span className="sidenav-soon-pill">soon</span>
+        </button>
         <button
           type="button"
           className="sidenav-theme-toggle"
