@@ -437,7 +437,15 @@ export const CSS = `
   }
   .btn-send-mobile:hover:not(:disabled){transform:translateY(-1px)}
   .btn-send-mobile:disabled{background:var(--black-10);color:var(--black-25);cursor:not-allowed}
-  .btn-send-mobile.sent{background:var(--success)}
+  /* Post-trigger "check your phone" state — standardised dashed-orange pulse,
+     matching the shared MobilePendingButton used everywhere else. */
+  @keyframes sentMobilePulse{0%,100%{opacity:1}50%{opacity:.55}}
+  .btn-send-mobile.sent{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    background:var(--primary-mild);color:var(--primary);
+    border:1.5px dashed var(--primary);
+    animation:sentMobilePulse 1.8s ease-in-out infinite;
+  }
 
   /* Publishing progress bar */
   .multi-publish-progress{margin-bottom:16px}

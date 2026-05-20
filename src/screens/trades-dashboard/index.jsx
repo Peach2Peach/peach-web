@@ -10,8 +10,8 @@ import { useApi, getCached, setCache, clearCache } from "../../hooks/useApi.js";
 import { useCurrency } from "../../components/AppLayout.jsx";
 import { useUserPMs } from "../../hooks/useUserPMs.js";
 import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
-import { IS_PHONE, buildMobileActionDeepLink } from "../../utils/mobileAction.js";
 import MobileSigningModal from "../../components/MobileSigningModal.jsx";
+import MobilePendingButton from "../../components/MobilePendingButton.jsx";
 import Toast from "../../components/Toast.jsx";
 import { useUnread } from "../../hooks/useUnread.js";
 import txInMempoolImg from "../../assets/tx-in-mempool.png";
@@ -2083,12 +2083,12 @@ export default function TradesDashboard() {
               position: "relative",
             }}
           >
-            <div style={{ position:"absolute", top:0, right:0 }}>
-              <InfoDot ariaLabel="About trading limits" onClick={() => setLimitsHelpOpen(true)} />
-            </div>
             {/* Daily */}
             <div className="limit-bar-top">
-              <span className="limit-bar-label">Daily Limit</span>
+              <span className="limit-bar-label">
+                Daily Limit
+                <InfoDot ariaLabel="About trading limits" onClick={() => setLimitsHelpOpen(true)} />
+              </span>
               <span className="limit-bar-val">
                 {chfToDisplay(LIMIT_USED).toLocaleString()} {selectedCurrency}{" "}
                 <span style={{ fontWeight: 400, color: "var(--black-65)" }}>
@@ -3204,40 +3204,12 @@ export default function TradesDashboard() {
 
                         {/* Fund via mobile app — alternative to scanning QR */}
                         <div>
-                          {IS_PHONE && typeof odFundMobileActionId === "number" ? (
-                            <a
-                              href={buildMobileActionDeepLink("fundEscrow", odFundMobileActionId)}
-                              style={{
-                                display: "block",
-                                width: "100%",
-                                padding: "10px 14px",
-                                borderRadius: 999,
-                                background: "var(--grad)",
-                                color: "white",
-                                textDecoration: "none",
-                                fontFamily: "var(--font)",
-                                fontSize: ".8rem",
-                                fontWeight: 800,
-                                textAlign: "center",
-                                boxShadow: "0 2px 12px rgba(245,101,34,.3)",
-                              }}
-                            >
-                              Open Peach App
-                            </a>
-                          ) : odFundMobileActionId ? (
-                            <div
-                              style={{
-                                padding: "10px 14px",
-                                borderRadius: 8,
-                                background: "var(--black-5)",
-                                color: "var(--black-65)",
-                                fontSize: ".78rem",
-                                fontWeight: 700,
-                                textAlign: "center",
-                              }}
-                            >
-                              ✓ Funding request sent — check your phone
-                            </div>
+                          {odFundMobileActionId ? (
+                            <MobilePendingButton
+                              label="✓ Funding request sent — check your phone"
+                              type="fundEscrow"
+                              actionId={odFundMobileActionId}
+                            />
                           ) : (
                             <>
                               <div
@@ -3465,40 +3437,13 @@ export default function TradesDashboard() {
                     !odWithdrawConfirm &&
                     o.direction === "sell" &&
                     fundingStage === "funded" &&
-                    odRefundActionId &&
-                    (IS_PHONE && typeof odRefundActionId === "number" ? (
-                      <a
-                        href={buildMobileActionDeepLink("refundEscrow", odRefundActionId)}
-                        style={{
-                          display: "block",
-                          padding: "10px 14px",
-                          borderRadius: 999,
-                          background: "var(--grad)",
-                          color: "white",
-                          textDecoration: "none",
-                          fontSize: ".78rem",
-                          fontWeight: 800,
-                          textAlign: "center",
-                          boxShadow: "0 2px 12px rgba(245,101,34,.3)",
-                        }}
-                      >
-                        Open Peach App
-                      </a>
-                    ) : (
-                      <div
-                        style={{
-                          padding: "10px 14px",
-                          borderRadius: 8,
-                          background: "var(--black-5)",
-                          color: "var(--black-65)",
-                          fontSize: ".78rem",
-                          fontWeight: 700,
-                          textAlign: "center",
-                        }}
-                      >
-                        ✓ Refund request sent — check your phone
-                      </div>
-                    ))}
+                    odRefundActionId && (
+                      <MobilePendingButton
+                        label="✓ Refund request sent — check your phone"
+                        type="refundEscrow"
+                        actionId={odRefundActionId}
+                      />
+                    )}
 
                   {/* Unfunded sell offer: single "Cancel offer" button, no confirmation
                     (nothing has been escrowed, so the action is non-destructive). */}
@@ -3531,38 +3476,12 @@ export default function TradesDashboard() {
                           )
                         : null;
                       if (odRefundActionId) {
-                        return IS_PHONE && typeof odRefundActionId === "number" ? (
-                          <a
-                            href={buildMobileActionDeepLink("refundEscrow", odRefundActionId)}
-                            style={{
-                              display: "block",
-                              padding: "10px 14px",
-                              borderRadius: 999,
-                              background: "var(--grad)",
-                              color: "white",
-                              textDecoration: "none",
-                              fontSize: ".78rem",
-                              fontWeight: 800,
-                              textAlign: "center",
-                              boxShadow: "0 2px 12px rgba(245,101,34,.3)",
-                            }}
-                          >
-                            Open Peach App
-                          </a>
-                        ) : (
-                          <div
-                            style={{
-                              padding: "10px 14px",
-                              borderRadius: 8,
-                              background: "var(--black-5)",
-                              color: "var(--black-65)",
-                              fontSize: ".78rem",
-                              fontWeight: 700,
-                              textAlign: "center",
-                            }}
-                          >
-                            ✓ Refund request sent — check your phone
-                          </div>
+                        return (
+                          <MobilePendingButton
+                            label="✓ Refund request sent — check your phone"
+                            type="refundEscrow"
+                            actionId={odRefundActionId}
+                          />
                         );
                       }
                       return (
@@ -3639,39 +3558,11 @@ export default function TradesDashboard() {
                         fundingStage === "funded")
                     ) &&
                     (odRefundActionId ? (
-                      IS_PHONE && typeof odRefundActionId === "number" ? (
-                        <a
-                          href={buildMobileActionDeepLink("refundEscrow", odRefundActionId)}
-                          style={{
-                            display: "block",
-                            padding: "10px 14px",
-                            borderRadius: 999,
-                            background: "var(--grad)",
-                            color: "white",
-                            textDecoration: "none",
-                            fontSize: ".78rem",
-                            fontWeight: 800,
-                            textAlign: "center",
-                            boxShadow: "0 2px 12px rgba(245,101,34,.3)",
-                          }}
-                        >
-                          Open Peach App
-                        </a>
-                      ) : (
-                        <div
-                          style={{
-                            padding: "10px 14px",
-                            borderRadius: 8,
-                            background: "var(--black-5)",
-                            color: "var(--black-65)",
-                            fontSize: ".78rem",
-                            fontWeight: 700,
-                            textAlign: "center",
-                          }}
-                        >
-                          ✓ Refund request sent — check your phone
-                        </div>
-                      )
+                      <MobilePendingButton
+                        label="✓ Refund request sent — check your phone"
+                        type="refundEscrow"
+                        actionId={odRefundActionId}
+                      />
                     ) : (
                       <div style={{ display: "flex", justifyContent: "center" }}>
                         <button

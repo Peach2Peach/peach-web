@@ -17,7 +17,7 @@ import {
 } from "../../data/paymentMethodMeta.js";
 import ConfirmModal from "../../components/ConfirmModal.jsx";
 import InfoPopup, { InfoDot } from "../../components/InfoPopup.jsx";
-import { IS_PHONE, buildMobileActionDeepLink } from "../../utils/mobileAction.js";
+import MobilePendingButton from "../../components/MobilePendingButton.jsx";
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 export const IconBack = () => (
@@ -1949,49 +1949,31 @@ export function EscrowFundingCard({
           >
             Or fund from your Peach mobile app
           </div>
-          {IS_PHONE && typeof fundActionId === "number" ? (
-            <a
-              href={buildMobileActionDeepLink("fundEscrowContract", fundActionId)}
-              style={{
-                display: "block",
-                width: "100%",
-                padding: "10px 14px",
-                borderRadius: 999,
-                background: "var(--grad)",
-                color: "white",
-                textDecoration: "none",
-                fontFamily: "Baloo 2, cursive",
-                fontSize: ".82rem",
-                fontWeight: 800,
-                textAlign: "center",
-                boxShadow: "0 2px 12px rgba(245,101,34,.3)",
-              }}
-            >
-              Open Peach App
-            </a>
+          {fundActionId ? (
+            <MobilePendingButton
+              label="Request sent — check your phone"
+              type="fundEscrowContract"
+              actionId={fundActionId}
+            />
           ) : (
             <button
               onClick={onFundViaMobile}
-              disabled={fundLoading || !!fundActionId}
+              disabled={fundLoading}
               style={{
                 width: "100%",
                 padding: "10px 14px",
                 borderRadius: 999,
                 border: "none",
-                background: fundActionId ? "var(--black-5)" : "var(--grad)",
-                color: fundActionId ? "var(--black-65)" : "white",
+                background: "var(--grad)",
+                color: "white",
                 fontFamily: "Baloo 2, cursive",
                 fontSize: ".82rem",
                 fontWeight: 800,
-                cursor: fundLoading || fundActionId ? "default" : "pointer",
+                cursor: fundLoading ? "default" : "pointer",
                 opacity: fundLoading ? 0.6 : 1,
               }}
             >
-              {fundLoading
-                ? "Sending request…"
-                : fundActionId
-                  ? "Request sent — check your phone"
-                  : "Fund via mobile app"}
+              {fundLoading ? "Sending request…" : "Fund via mobile app"}
             </button>
           )}
           {fundError && (
@@ -2165,45 +2147,12 @@ export function WrongAmountFundedCard({
         still needs to press Refund Escrow to trigger the mobile action, so
         we don't short-circuit that status here. */}
       {refundActionId ? (
-        IS_PHONE && typeof refundActionId === "number" ? (
-          <a
-            href={buildMobileActionDeepLink("refundEscrowContract", refundActionId)}
-            style={{
-              display: "block",
-              width: "100%",
-              padding: "11px 16px",
-              borderRadius: 999,
-              background: "var(--grad)",
-              color: "white",
-              textDecoration: "none",
-              fontFamily: "Baloo 2, cursive",
-              fontWeight: 800,
-              fontSize: ".85rem",
-              textAlign: "center",
-              boxShadow: "0 2px 12px rgba(245,101,34,.3)",
-            }}
-          >
-            Open Peach App
-          </a>
-        ) : (
-          <button
-            onClick={onPendingClick}
-            style={{
-              width: "100%",
-              padding: "11px 16px",
-              borderRadius: 999,
-              border: "2px dashed var(--primary)",
-              background: "rgba(245,101,34,.06)",
-              fontFamily: "Baloo 2, cursive",
-              fontWeight: 700,
-              fontSize: ".85rem",
-              color: "var(--primary)",
-              cursor: "pointer",
-            }}
-          >
-            Refund pending on mobile app…
-          </button>
-        )
+        <MobilePendingButton
+          label="Refund pending on mobile app…"
+          type="refundEscrowContract"
+          actionId={refundActionId}
+          onClick={onPendingClick}
+        />
       ) : (
         <div style={{ display: "flex", gap: 10 }}>
           {isFundingDifferent ? (
@@ -2910,49 +2859,18 @@ export function ActionPanel({
     </button>
   );
 
-  // PendingBtn renders an "Open Peach App" deep-link on phone when we have a
-  // numeric pending-action id; otherwise it falls back to the dashed "pending
-  // in mobile app" button (which mostly serves as a status indicator on desktop).
-  const PendingBtn = ({ label, type, actionId }) => {
-    if (IS_PHONE && typeof actionId === "number") {
-      return (
-        <a
-          href={buildMobileActionDeepLink(type, actionId)}
-          className="action-btn"
-          style={{
-            display: "block",
-            textAlign: "center",
-            textDecoration: "none",
-            background: "var(--grad)",
-            color: "white",
-            boxShadow: "0 2px 12px rgba(245,101,34,.3)",
-          }}
-        >
-          📱 Open Peach App
-        </a>
-      );
-    }
-    return (
-      <button
-        className="action-btn"
-        style={{
-          background: "var(--primary-mild)",
-          color: "var(--primary)",
-          border: "1.5px dashed var(--primary)",
-          cursor: "pointer",
-        }}
-        onClick={onPendingClick}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.filter = "brightness(0.95)";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.filter = "";
-        }}
-      >
-        📱 {label}
-      </button>
-    );
-  };
+  // PendingBtn renders the standardised "check your phone" pending state: an
+  // "Open Peach App" deep-link on phone when we have a numeric pending-action id,
+  // otherwise the dashed-orange pulsing indicator (clicking it re-opens the
+  // signing modal via onPendingClick).
+  const PendingBtn = ({ label, type, actionId }) => (
+    <MobilePendingButton
+      label={label}
+      type={type}
+      actionId={actionId}
+      onClick={onPendingClick}
+    />
+  );
 
   const BtnGrad = ({ label, onClick }) => (
     <button className="action-btn-grad" onClick={onClick}>

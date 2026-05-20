@@ -15,6 +15,7 @@ import {
   BTC_PRICE_FALLBACK,
 } from "../../utils/format.js";
 import { IS_PHONE, buildMobileActionDeepLink } from "../../utils/mobileAction.js";
+import { PhoneIcon } from "../../components/MobilePendingButton.jsx";
 import { InfoDot, BadgesInfoPopup } from "../../components/InfoPopup.jsx";
 import { getTopbarPeachId } from "../../components/Navbars.jsx";
 import Avatar from "../../components/Avatar.jsx";
@@ -747,15 +748,17 @@ export function MultiEscrowFunding({
       <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
         {IS_PHONE && !pendingTargets.length && !anySending ? (
           <a
-            className="btn-send-mobile sent"
+            className="btn-send-mobile"
             href={buildMobileActionDeepLink("fundEscrowMultiple")}
             style={{
               textDecoration: "none",
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
+              gap: 8,
             }}
           >
+            <PhoneIcon />
             Open Peach App
           </a>
         ) : (
@@ -764,13 +767,18 @@ export function MultiEscrowFunding({
             onClick={handleSendToMobile}
             disabled={anySending || !pendingTargets.length}
           >
-            {anySending
-              ? "Sending…"
-              : !pendingTargets.length
-                ? "✓ Sent to mobile"
-                : anyFailed
-                  ? "Retry failed"
-                  : "Send to mobile and fund all"}
+            {anySending ? (
+              "Sending…"
+            ) : !pendingTargets.length ? (
+              <>
+                <PhoneIcon />
+                ✓ Sent to mobile
+              </>
+            ) : anyFailed ? (
+              "Retry failed"
+            ) : (
+              "Send to mobile and fund all"
+            )}
           </button>
         )}
       </div>

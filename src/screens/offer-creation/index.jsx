@@ -15,7 +15,6 @@ import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 import { isApiError, hashPaymentFields, encryptForPublicKey, encryptPGPMessage, signPGPMessage } from "../../utils/pgp.js";
 import { deriveEscrowPubKey, deriveReturnAddress, isReturnAddressFromXpub } from "../../utils/escrow.js";
 import { validateBtcAddress } from "../../peach-validators.js";
-import { IS_PHONE, buildMobileActionDeepLink } from "../../utils/mobileAction.js";
 import { QRCodeSVG } from "qrcode.react";
 import { SAT, fmt, satsToFiatRaw as satsToFiat, fmtFiat as fmtEur, formatTradeId, truncateAddress } from "../../utils/format.js";
 import { extractCustomRefundAddressFromProfile } from "../../utils/customRefundAddressSync.js";
@@ -32,6 +31,7 @@ import {
   AddPMFlow, methodLabel, normalizeApiPaymentMethods,
 } from "../../components/AddPMFlow.jsx";
 import InfoPopup, { InfoDot } from "../../components/InfoPopup.jsx";
+import MobilePendingButton from "../../components/MobilePendingButton.jsx";
 import { syncPMsToServer } from "../../utils/pmSync.js";
 
 // ─── Help-popup copy (verbatim from mobile app) ─────────────────────────────
@@ -2142,21 +2142,15 @@ export default function OfferCreation({ initialType="buy" }) {
                         Or fund from your Peach mobile app
                       </div>
                       <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
-                        {IS_PHONE && typeof fundMobileActionId === "number" ? (
-                          <a
-                            href={buildMobileActionDeepLink("fundEscrow", fundMobileActionId)}
-                            style={{
-                              padding:"10px 24px",borderRadius:999,
-                              background:"var(--grad)",color:"white",textDecoration:"none",
-                              fontFamily:"var(--font)",fontSize:".82rem",fontWeight:800,
-                              boxShadow:"0 2px 12px rgba(245,101,34,.3)",
-                            }}
-                          >
-                            Open Peach App
-                          </a>
+                        {fundMobileActionId ? (
+                          <MobilePendingButton
+                            label="Request sent — check your phone"
+                            type="fundEscrow"
+                            actionId={fundMobileActionId}
+                          />
                         ) : (
                         <button
-                          disabled={fundMobileLoading || !!fundMobileActionId}
+                          disabled={fundMobileLoading}
                           onClick={async () => {
                             setFundMobileError(null);
                             setFundMobileLoading(true);
@@ -2184,14 +2178,13 @@ export default function OfferCreation({ initialType="buy" }) {
                           }}
                           style={{
                             padding:"10px 24px",borderRadius:999,border:"none",
-                            background: fundMobileActionId ? "var(--black-5)" : "var(--grad)",
-                            color: fundMobileActionId ? "var(--black-65)" : "white",
+                            background:"var(--grad)",color:"white",
                             fontFamily:"var(--font)",fontSize:".82rem",fontWeight:800,
-                            cursor:(fundMobileLoading||fundMobileActionId)?"default":"pointer",
+                            cursor:fundMobileLoading?"default":"pointer",
                             opacity: fundMobileLoading ? 0.6 : 1,
                           }}
                         >
-                          {fundMobileLoading ? "Sending request…" : fundMobileActionId ? "Request sent — check your phone" : "Fund via mobile app"}
+                          {fundMobileLoading ? "Sending request…" : "Fund via mobile app"}
                         </button>
                         )}
                         <button
