@@ -1,11 +1,12 @@
 // Thin Esplora HTTP REST client.
 //
-// All requests go through the path-prefixed proxy: /esplora/<net>/...
-//   dev:   Vite proxy → electrum-<net>.peachbitcoin.com
-//   prod:  Cloudflare worker → same
-// The worker strips Authorization, so the Peach JWT never reaches the
-// Bitcoin node. There is no batch endpoint in Esplora — concurrency is
-// handled at the caller level via mapWithConcurrency().
+// Requests hit the Peach Esplora hosts directly via absolute URLs — the same
+// way the v1 API is called (api-regtest sends Access-Control-Allow-Origin, and
+// the esplora hosts do too). No proxy: GitHub Pages and the Docker/nginx image
+// both serve static files only, so there is nothing to proxy through in prod.
+// The client never attaches an Authorization header, so calling the nodes
+// directly leaks nothing. There is no batch endpoint in Esplora — concurrency
+// is handled at the caller level via mapWithConcurrency().
 //
 // Esplora endpoints used:
 //   GET /address/{addr}              → {chain_stats, mempool_stats}
@@ -18,8 +19,15 @@
 
 import { getEsploraNet } from "./wallet.js";
 
+// Peach Esplora hosts per network. Mainnet has no suffix; testnet/regtest do.
+const ESPLORA_HOSTS = {
+  mainnet: "https://electrum.peachbitcoin.com",
+  testnet: "https://electrum-testnet.peachbitcoin.com",
+  regtest: "https://electrum-regtest.peachbitcoin.com",
+};
+
 export function getEsploraBaseUrl(xpub) {
-  return `/esplora/${getEsploraNet(xpub)}`;
+  return ESPLORA_HOSTS[getEsploraNet(xpub)];
 }
 
 class EsploraError extends Error {

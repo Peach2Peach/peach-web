@@ -470,14 +470,6 @@ body{font-family:var(--font);background:var(--primary-bg);color:var(--black)}
   font-size:.5rem;font-weight:800;min-width:14px;height:14px;border-radius:999px;
   display:flex;align-items:center;justify-content:center;padding:0 3px;
   border:2px solid var(--surface);line-height:1}
-/* Disabled "Wallet — soon" placeholder, pinned to the bottom of the rail. */
-.sidenav-soon{margin-top:auto;opacity:.55;cursor:default}
-.sidenav-soon:hover{background:transparent;color:var(--black-65)}
-.sidenav-soon-pill{font-size:.5rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;
-  color:var(--black-65);background:var(--black-10);border-radius:999px;padding:1px 6px;line-height:1.5}
-/* On mobile the theme toggle's own margin-top:auto would fight the soon
-   button's — cancel it so they sit together at the bottom, no gap. */
-.sidenav-soon + .sidenav-theme-toggle{margin-top:0}
 .sidenav-backdrop{display:none;position:fixed;inset:0;z-index:149;background:rgba(43,25,17,.4);animation:fadeIn .2s ease}
 .sidenav-backdrop.open{display:block}
 @media(max-width:767px){
