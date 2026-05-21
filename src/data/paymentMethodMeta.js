@@ -504,6 +504,12 @@ export function methodDisplayName(id) {
 }
 
 export function getMethodMeta(id) {
+  // Cash/meetup methods (id like "cash.be.antwerp.belgian-btc-embassy") get
+  // their own "cash" category. The trailing dot distinguishes meetups from
+  // unrelated ids that merely begin with "cash" (e.g. "cashDepositCanada").
+  if (typeof id === "string" && id.startsWith("cash.")) {
+    return { name: PM_NAMES[id] || humanizeId(id), category: "cash" };
+  }
   return {
     name: PM_NAMES[id] || humanizeId(id),
     category: PM_CATEGORIES[id] || "onlineWallet",

@@ -27,6 +27,8 @@ const IconBank     = () => <svg width="24" height="24" viewBox="0 0 24 24" fill=
 const IconWallet   = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></svg>;
 const IconGiftCard = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18"/><path d="M12 8c-2-3-6-3-6 0s4 0 6 0c2-3 6-3 6 0s-4 0-6 0"/></svg>;
 const IconFlag     = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>;
+const IconMeetup   = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
+const IconExtLink  = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>;
 
 // ── FieldError ───────────────────────────────────────────────────────────────
 
@@ -41,7 +43,24 @@ export const CATEGORY_META = {
   onlineWallet:  { label: "Online Wallet",        icon: IconWallet,   description: "Digital payment apps" },
   giftCard:      { label: "Online Gift Card",     icon: IconGiftCard, description: "Prepaid gift cards" },
   national:      { label: "National Option",      icon: IconFlag,     description: "Country-specific methods" },
+  cash:          { label: "Cash & Meetups",        icon: IconMeetup,   description: "In-person cash trades at Bitcoin meetups" },
 };
+
+// Cash/meetup methods carry ids like "cash.be.antwerp.belgian-btc-embassy".
+// The trailing dot distinguishes them from unrelated ids beginning with "cash".
+export const isCashId = (id) => typeof id === "string" && id.startsWith("cash.");
+
+// Resolve a human country name from an ISO-3166 alpha-2 code, falling back to
+// the (EUR-scoped) COUNTRY_NAMES map and finally the raw code.
+let _regionNames;
+try { _regionNames = new Intl.DisplayNames(["en"], { type: "region" }); } catch { _regionNames = null; }
+function countryName(code) {
+  try {
+    return (_regionNames && _regionNames.of(code)) || COUNTRY_NAMES[code] || code;
+  } catch {
+    return COUNTRY_NAMES[code] || code;
+  }
+}
 
 // Country → method list, mirroring mobile's NATIONALOPTIONS
 // (peach-app/src/views/addPaymentMethod/SelectPaymentMethod.tsx).
@@ -101,6 +120,7 @@ export { PHONE_PREFIX_MAP } from "../data/paymentMethodMeta.js";
 // Derive a short display label for a saved PM (used by both screens in PM lists)
 export function methodLabel(pm) {
   const d = pm.details || {};
+  if (isCashId(pm.methodId) && d.country) return countryName(d.country);
   if (d.iban)        return d.iban.replace(/\s/g,"").replace(/^(.{4})(.*)(.{4})$/, "$1 •••• $3");
   if (d.userName)    return d.userName;
   if (d.email)       return d.email.replace(/(.{2})(.*)(@.*)/, "$1•••$3");
@@ -114,13 +134,16 @@ export function methodLabel(pm) {
 
 const STEP_LABELS_FULL = ["Currency", "Category", "Country", "Method", "Details"];
 
-function ProgressBar({ step, showCountryStep }) {
+function ProgressBar({ step, showCountryStep, meetupMode }) {
   // Country step (index 2) is hidden when showCountryStep is false. We collapse
   // the visible labels accordingly and renumber for display so users see a
   // continuous 4- or 5-step bar.
+  const baseLabels = meetupMode
+    ? STEP_LABELS_FULL.map((l, i) => (i === 3 ? "Meetup" : l))
+    : STEP_LABELS_FULL;
   const visibleLabels = showCountryStep
-    ? STEP_LABELS_FULL
-    : STEP_LABELS_FULL.filter((_, i) => i !== 2);
+    ? baseLabels
+    : baseLabels.filter((_, i) => i !== 2);
   // Index of the current step within the visible list:
   //   - if country step is hidden, step 3 (Method) becomes visible index 2
   //     and step 4 (Details) becomes visible index 3.
@@ -145,7 +168,7 @@ function ProgressBar({ step, showCountryStep }) {
 
 // ── AddPMFlow ────────────────────────────────────────────────────────────────
 
-export function AddPMFlow({ methods, onSave, onClose, editData, error, onRetry }) {
+export function AddPMFlow({ methods, meetupEvents = [], onSave, onClose, editData, error, onRetry }) {
   const isEdit = !!editData;
   const [step, setStep] = useState(isEdit ? 4 : 0);
 
@@ -162,6 +185,8 @@ export function AddPMFlow({ methods, onSave, onClose, editData, error, onRetry }
   const [errors, setErrors] = useState({});
   const handleBlur = makeBlurHandler(setErrors);
   const [selRegion, setSelRegion] = useState("Europe");
+  // The meetup event chosen on the cash flow's method step (step 3).
+  const [pickedEvent, setPickedEvent] = useState(null);
 
   // Per-section active-alternative index for methods whose fields.mandatory has
   // tabbed sections (e.g. Revolut: username | phone | m-pesa, or Bulgaria NT:
@@ -209,9 +234,43 @@ export function AddPMFlow({ methods, onSave, onClose, editData, error, onRetry }
     ? [...new Set(Object.values(methods).filter(m => m.currencies.includes(selCurrency)).map(m => m.category))]
     : [];
 
-  const showCountryStep = selCategory === "national" && !!nationalGroupFor(selCurrency);
+  const isCash = selCategory === "cash";
+  const showCountryStep = isCash || (selCategory === "national" && !!nationalGroupFor(selCurrency));
   const countryGroup = nationalGroupFor(selCurrency);
-  const countryMap = showCountryStep ? NATIONAL_OPTIONS[countryGroup] : null;
+  const countryMap = !isCash && showCountryStep ? NATIONAL_OPTIONS[countryGroup] : null;
+
+  // ── Cash/meetup derivations ──────────────────────────────────────────────
+  // Source meetups from the events feed: only live events, whose currencies
+  // include the selected one, and that exist as an offerable cash method in the
+  // catalogue. Grouped by country for the country step.
+  const cashEvents = isCash
+    ? (meetupEvents || []).filter((e) =>
+        e && e.live && Array.isArray(e.currencies) &&
+        e.currencies.includes(selCurrency) && methods[`cash.${e.id}`]
+      )
+    : [];
+  const cashByCountry = (() => {
+    if (!isCash) return {};
+    const out = {};
+    for (const e of cashEvents) (out[e.country] ||= []).push(e);
+    return out;
+  })();
+  const meetupsForCountry = isCash && selCountry
+    ? (cashByCountry[selCountry] || []).slice().sort(
+        (a, b) => (Number(b.featured) - Number(a.featured)) ||
+                  (a.city || "").localeCompare(b.city || "")
+      )
+    : [];
+  // The selected meetup event: freshly picked one if it still matches, else
+  // resolved from the catalogue id (covers the edit path).
+  const selEvent = isCash
+    ? ((pickedEvent && `cash.${pickedEvent.id}` === selMethodId)
+        ? pickedEvent
+        : (meetupEvents || []).find((e) => `cash.${e.id}` === selMethodId) || null)
+    : null;
+  const eventCurrencies = Array.isArray(selEvent?.currencies) ? selEvent.currencies : [];
+  const cashNeedsCurrencyPick = eventCurrencies.length > 1;
+  const cashSaveOk = !!selEvent && (!cashNeedsCurrencyPick || selCurrencies.length > 0);
 
   const methodsForStep = (() => {
     const allowed = showCountryStep && selCountry && countryMap
@@ -270,8 +329,21 @@ export function AddPMFlow({ methods, onSave, onClose, editData, error, onRetry }
     setDetails({});
     setSelCurrencies([]);
     setErrors({});
-    const goCountry = cat === "national" && !!nationalGroupFor(selCurrency);
+    setPickedEvent(null);
+    const goCountry = cat === "cash" || (cat === "national" && !!nationalGroupFor(selCurrency));
     setStep(goCountry ? 2 : 3);
+  }
+
+  // Cash flow: pick a meetup on step 3 → straight to the info-only detail step.
+  function handleSelectMeetup(event) {
+    setPickedEvent(event);
+    setSelMethodId(`cash.${event.id}`);
+    setDetails({ country: event.country });
+    setErrors({});
+    const evCurr = Array.isArray(event.currencies) ? event.currencies : [];
+    if (evCurr.length <= 1) setSelCurrencies(evCurr);
+    else setSelCurrencies(evCurr.includes(selCurrency) ? [selCurrency] : [evCurr[0]]);
+    setStep(4);
   }
 
   function handleSelectCountry(code) {
@@ -310,7 +382,27 @@ export function AddPMFlow({ methods, onSave, onClose, editData, error, onRetry }
     );
   }
 
+  // Cash/meetup PMs have no input fields — the only state is the chosen meetup
+  // and (for multi-currency events) the selected currencies. Country rides
+  // along in details so existing serialization picks it up unchanged.
+  function handleSaveCash() {
+    if (!selEvent) return;
+    const currencies = cashNeedsCurrencyPick ? selCurrencies : eventCurrencies;
+    if (currencies.length === 0) return;
+    const methodId = `cash.${selEvent.id}`;
+    const name = selEvent.shortName || selEvent.longName || methodId;
+    onSave({
+      id:         editData?.id || `${methodId}-${Date.now()}`,
+      methodId,
+      name,
+      label:      name,
+      currencies,
+      details:    { country: selEvent.country },
+    });
+  }
+
   function handleSave() {
+    if (isCash) { handleSaveCash(); return; }
     const newErrors = {};
     const phonePrefix = PHONE_PREFIX_MAP[selMethodId];
     // Mandatory fields: must be non-empty + pass per-field validator from meta.
@@ -412,7 +504,8 @@ export function AddPMFlow({ methods, onSave, onClose, editData, error, onRetry }
                  step === 0 ? "Select currency" :
                  step === 1 ? "Select category" :
                  step === 2 ? "Select country" :
-                 step === 3 ? "Select method" : "Enter details"}
+                 step === 3 ? (isCash ? "Select meetup" : "Select method") :
+                 isCash ? (selEvent?.shortName || "Meetup") : "Enter details"}
               </span>
             </div>
             <button className="modal-close" onClick={onClose}>
@@ -422,7 +515,7 @@ export function AddPMFlow({ methods, onSave, onClose, editData, error, onRetry }
 
           {/* Progress bar */}
           <div style={{ padding:"12px 22px 0" }}>
-            <ProgressBar step={step} showCountryStep={showCountryStep}/>
+            <ProgressBar step={step} showCountryStep={showCountryStep} meetupMode={isCash}/>
           </div>
 
           {/* Body */}
@@ -498,8 +591,8 @@ export function AddPMFlow({ methods, onSave, onClose, editData, error, onRetry }
               </div>
             )}
 
-            {/* ── STEP 2: Country (national options only) ── */}
-            {step === 2 && countryMap && (
+            {/* ── STEP 2: Country (national options) ── */}
+            {step === 2 && !isCash && countryMap && (
               <div className="pm-cat-list">
                 {Object.keys(countryMap)
                   .sort((a, b) => (COUNTRY_NAMES[a] || a).localeCompare(COUNTRY_NAMES[b] || b))
@@ -523,8 +616,59 @@ export function AddPMFlow({ methods, onSave, onClose, editData, error, onRetry }
               </div>
             )}
 
+            {/* ── STEP 2: Country (cash & meetups) ── */}
+            {step === 2 && isCash && (
+              <div className="pm-cat-list">
+                {Object.keys(cashByCountry)
+                  .sort((a, b) => countryName(a).localeCompare(countryName(b)))
+                  .map(code => {
+                    const n = cashByCountry[code].length;
+                    return (
+                      <button key={code}
+                        className={`pm-cat-card${selCountry === code ? " selected" : ""}`}
+                        onClick={() => handleSelectCountry(code)}>
+                        <span className="pm-country-flag">{countryFlag(code)}</span>
+                        <div className="pm-cat-text">
+                          <span className="pm-cat-label">{countryName(code)}</span>
+                          <span className="pm-cat-desc">
+                            {n} meetup{n !== 1 ? "s" : ""} available
+                          </span>
+                        </div>
+                        <span className="pm-cat-arrow">→</span>
+                      </button>
+                    );
+                  })}
+                {Object.keys(cashByCountry).length === 0 && (
+                  <div className="pm-empty-msg">No meetups available for {selCurrency}</div>
+                )}
+              </div>
+            )}
+
+            {/* ── STEP 3: Meetup (cash & meetups) ── */}
+            {step === 3 && isCash && (
+              <div className="pm-cat-list">
+                {meetupsForCountry.map(ev => (
+                  <button key={ev.id}
+                    className={`pm-cat-card${selMethodId === `cash.${ev.id}` ? " selected" : ""}`}
+                    onClick={() => handleSelectMeetup(ev)}>
+                    {ev.logoUrl
+                      ? <img className="pm-method-logo" src={ev.logoUrl} alt="" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }}/>
+                      : <span className="pm-country-flag">{countryFlag(ev.country)}</span>}
+                    <div className="pm-cat-text" style={{ flex:1 }}>
+                      <span className="pm-cat-label">{ev.longName || ev.shortName}{ev.featured ? " ★" : ""}</span>
+                      <span className="pm-cat-desc">{ev.city || countryName(ev.country)}</span>
+                    </div>
+                    <span className="pm-cat-arrow">→</span>
+                  </button>
+                ))}
+                {meetupsForCountry.length === 0 && (
+                  <div className="pm-empty-msg">No meetups in this country for {selCurrency}</div>
+                )}
+              </div>
+            )}
+
             {/* ── STEP 3: Method ── */}
-            {step === 3 && (
+            {step === 3 && !isCash && (
               <div className="pm-cat-list">
                 {methodsForStep.map(([id, m]) => (
                   <button key={id}
@@ -544,8 +688,71 @@ export function AddPMFlow({ methods, onSave, onClose, editData, error, onRetry }
               </div>
             )}
 
+            {/* ── STEP 4: Meetup details (cash & meetups, info only) ── */}
+            {step === 4 && isCash && selEvent && (
+              <>
+                {selEvent.logoUrl && (
+                  <div className="pm-meetup-logo-wrap">
+                    <img className="pm-meetup-logo" src={selEvent.logoUrl} alt=""
+                      onError={(e) => { e.currentTarget.parentNode.style.display = "none"; }}/>
+                  </div>
+                )}
+
+                <p className="pm-meetup-desc">
+                  You can use cash to trade with your fellow bitcoiners at {selEvent.longName}!
+                </p>
+
+                {selEvent.frequency && (
+                  <p className="pm-meetup-line">
+                    Meetup date: <strong>{selEvent.frequency}</strong>
+                  </p>
+                )}
+
+                {selEvent.address && (
+                  <p className="pm-meetup-addr">{selEvent.address}</p>
+                )}
+
+                <div className="pm-meetup-links">
+                  {selEvent.address && (
+                    <a className="pm-meetup-link"
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selEvent.address)}`}
+                      target="_blank" rel="noopener noreferrer">
+                      VIEW ON MAPS <IconExtLink/>
+                    </a>
+                  )}
+                  {selEvent.url && (
+                    <a className="pm-meetup-link"
+                      href={selEvent.url} target="_blank" rel="noopener noreferrer">
+                      MEETUP LINK <IconExtLink/>
+                    </a>
+                  )}
+                </div>
+
+                {cashNeedsCurrencyPick && (
+                  <div style={{ marginTop:18 }}>
+                    <label className="field-label" style={{ marginBottom:8 }}>
+                      Currencies <span style={{ fontWeight:500, textTransform:"none",
+                        letterSpacing:0, color:"var(--black-25)" }}>— select all that apply</span>
+                    </label>
+                    <div className="curr-check-grid">
+                      {eventCurrencies.map(c => (
+                        <button key={c} className={`curr-check-btn${selCurrencies.includes(c) ? " on" : ""}`}
+                          onClick={() => toggleCurrency(c)}>
+                          {selCurrencies.includes(c) && "✓ "}{c}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <button className="btn-save-pm" style={{ marginTop:20 }} disabled={!cashSaveOk} onClick={handleSave}>
+                  {isEdit ? "Save changes" : "Add payment method"}
+                </button>
+              </>
+            )}
+
             {/* ── STEP 4: Details ── */}
-            {step === 4 && selMethod && (
+            {step === 4 && !isCash && selMethod && (
               <>
                 <div className="pm-detail-header">
                   <span className="pm-detail-tag">{selMethod.name}</span>
@@ -795,6 +1002,22 @@ const ADD_PM_CSS = `
   .pm-cat-card:hover .pm-cat-arrow{color:var(--primary)}
 
   .pm-empty-msg{text-align:center;padding:24px;font-size:.85rem;color:var(--black-65)}
+
+  /* Step 4: Meetup details (info only) */
+  .pm-meetup-logo-wrap{display:flex;justify-content:center;margin:4px 0 18px}
+  .pm-meetup-logo{max-width:120px;max-height:120px;border-radius:16px;object-fit:contain;
+    background:var(--black-5);padding:6px}
+  .pm-meetup-desc{font-size:.92rem;font-weight:500;color:var(--black);line-height:1.5;margin:0 0 16px}
+  .pm-meetup-line{font-size:.92rem;font-weight:500;color:var(--black);margin:0 0 14px}
+  .pm-meetup-line strong{color:var(--primary);font-weight:800}
+  .pm-meetup-addr{font-size:.92rem;font-weight:500;color:var(--black);line-height:1.45;
+    margin:0 0 16px;white-space:pre-line}
+  .pm-meetup-links{display:flex;flex-direction:column;gap:12px;align-items:flex-start}
+  .pm-meetup-link{display:inline-flex;align-items:center;gap:6px;font-size:.78rem;font-weight:700;
+    text-transform:uppercase;letter-spacing:.03em;color:var(--black-65);text-decoration:underline;
+    text-underline-offset:2px}
+  .pm-meetup-link svg{color:var(--primary)}
+  .pm-meetup-link:hover{color:var(--primary-dark)}
 
   /* Step 3: Details */
   /* Variant tabs (alternative field groups within a method) */

@@ -10,6 +10,7 @@ import { useApi, clearCache } from "../../hooks/useApi.js";
 import { useCurrency } from "../../components/AppLayout.jsx";
 import { useMarketStats } from "../../hooks/useMarketStats.js";
 import { useUserPMs } from "../../hooks/useUserPMs.js";
+import { useMeetupEvents } from "../../hooks/useMeetupEvents.js";
 import { addPendingEscrow, removePendingEscrow, addEscrowFundedNotification } from "../../hooks/useNotifications.js";
 import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 import { isApiError, hashPaymentFields, encryptForPublicKey, encryptPGPMessage, signPGPMessage } from "../../utils/pgp.js";
@@ -194,6 +195,7 @@ export default function OfferCreation({ initialType="buy" }) {
   const [fundingAmounts, setFundingAmounts] = useState(null); // amounts array from API (for wrong-amount case)
   const [savedMethods, setSavedMethods] = useState([]);
   const [methodsCatalogue, setMethodsCatalogue] = useState({});
+  const { events: meetupEvents } = useMeetupEvents();
   const [catalogueError, setCatalogueError] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPM,    setEditingPM]    = useState(null); // PM object being edited
@@ -1139,12 +1141,12 @@ export default function OfferCreation({ initialType="buy" }) {
     <>
       <style>{CSS}</style>
       {showAddModal&&(
-        <AddPMFlow methods={methodsCatalogue} onSave={handleSavePM}
+        <AddPMFlow methods={methodsCatalogue} meetupEvents={meetupEvents} onSave={handleSavePM}
           onClose={()=>setShowAddModal(false)}
           error={catalogueError} onRetry={fetchCatalogue}/>
       )}
       {editingPM&&(
-        <AddPMFlow methods={methodsCatalogue} editData={editingPM}
+        <AddPMFlow methods={methodsCatalogue} meetupEvents={meetupEvents} editData={editingPM}
           onSave={handleSavePM} onClose={()=>setEditingPM(null)}
           error={catalogueError} onRetry={fetchCatalogue}/>
       )}

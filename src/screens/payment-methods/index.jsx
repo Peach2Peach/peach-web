@@ -8,11 +8,12 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth.js";
 import { useApi } from "../../hooks/useApi.js";
 import { useUserPMs } from "../../hooks/useUserPMs.js";
+import { useMeetupEvents } from "../../hooks/useMeetupEvents.js";
 import { syncPMsToServer } from "../../utils/pmSync.js";
 import { CSS } from "./styles.js";
 import { IconPlus, IconEdit, IconTrash, DeleteModal } from "./components.jsx";
 import {
-  AddPMFlow, CATEGORY_META, methodLabel, normalizeApiPaymentMethods,
+  AddPMFlow, CATEGORY_META, methodLabel, normalizeApiPaymentMethods, isCashId,
 } from "../../components/AddPMFlow.jsx";
 import { getPaymentLogo } from "../../assets/logos/index.ts";
 
@@ -22,6 +23,9 @@ export default function PeachPaymentMethods() {
   // AppLayout owns Topbar/SideNav state + currency. PM screen only needs isLoggedIn + API helpers.
   const { isLoggedIn, handleLogin } = useAuth();
   const { get, patch, auth } = useApi();
+
+  // Bitcoin meetup events — drive the Cash & Meetups flow in AddPMFlow.
+  const { events: meetupEvents } = useMeetupEvents();
 
   // Payment methods catalogue from API
   const [methodsCatalogue, setMethodsCatalogue] = useState({});
@@ -213,7 +217,11 @@ export default function PeachPaymentMethods() {
                     <span className="pm-group-count">{pms.length}</span>
                   </div>
                   {pms.map(pm => {
-                    const typeName = methodsCatalogue[pm.methodId]?.name || pm.methodId || pm.name;
+                    // Cash/meetup PMs store the proper event name; the catalogue
+                    // only has the humanized id, so prefer the saved name.
+                    const typeName = isCashId(pm.methodId)
+                      ? (pm.name || methodsCatalogue[pm.methodId]?.name || pm.methodId)
+                      : (methodsCatalogue[pm.methodId]?.name || pm.methodId || pm.name);
                     // Show the user's label as a secondary line when it differs
                     // from the catalogue method name (a custom nickname).
                     const customName = pm.label && pm.label !== typeName ? pm.label : null;
@@ -273,6 +281,7 @@ export default function PeachPaymentMethods() {
       {(showAddFlow || editPM) && (
         <AddPMFlow
           methods={methodsCatalogue}
+          meetupEvents={meetupEvents}
           onSave={handleSavePM}
           onClose={() => { setShowAddFlow(false); setEditPM(null); }}
           editData={editPM}
