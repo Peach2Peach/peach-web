@@ -46,14 +46,14 @@ npm run test:watch
 The included `Dockerfile` produces an nginx image serving the static build at port 80. Both env vars are baked in at build time, so build one image per environment.
 
 ```bash
-# Build (regtest example)
+# Build (mainnet example)
 docker build \
   --build-arg VITE_API_URL=https://api.peachbitcoin.com \
   --build-arg VITE_BITCOIN_NETWORK=BITCOIN \
   -t peach-web .
 
 # Run
-docker run --rm -p 8080:80 peach-web
+docker run --rm -p 8080:80 -d peach-web
 # → http://localhost:8080
 ```
 
