@@ -222,6 +222,39 @@ const css = `
   .ath-kyc-label{font-size:.72rem;font-weight:500;color:var(--black-65);line-height:1.2}
   .ath-kyc-value{font-size:1rem;font-weight:700;color:var(--black);line-height:1.2;letter-spacing:-.01em}
 
+  /* ── OPEN OFFERS CARD ── */
+  .open-offers-card{justify-content:flex-start}
+  .open-offers-badge{
+    align-self:flex-start;background:var(--primary);color:#fff;
+    border-radius:999px;padding:6px 16px;font-size:.82rem;font-weight:800;
+    text-transform:uppercase;letter-spacing:.04em
+  }
+  .open-offers-cols{display:flex;align-items:stretch;gap:20px}
+  .oo-col{display:flex;flex-direction:column;gap:8px;flex:1 1 0;min-width:0}
+  .oo-divider{width:1px;align-self:stretch;background:var(--black-10);flex:0 0 auto}
+  .oo-count-row{display:flex;align-items:center;gap:12px}
+  .oo-count{
+    border-radius:10px;padding:6px 18px;font-size:1.7rem;font-weight:800;
+    color:var(--black);line-height:1.1;letter-spacing:-.02em
+  }
+  .oo-count-buy{background:var(--success-bg)}
+  .oo-count-sell{background:var(--primary-mild)}
+  .oo-label{font-size:1.05rem;font-weight:600;color:var(--black)}
+  .oo-premium{font-size:.82rem;font-weight:500;color:var(--black-65);line-height:1.35}
+  .oo-market-link{font-size:.8rem;font-weight:700;color:var(--primary);cursor:pointer;width:fit-content}
+  .oo-market-link:hover{color:var(--primary-dark)}
+  .oo-hr{height:1px;background:var(--black-10);width:100%;margin:2px 0}
+  .oo-actions{display:flex;gap:14px}
+  .oo-btn{
+    flex:1 1 0;background:none;border:1.5px solid;border-radius:999px;
+    padding:13px 16px;font-family:var(--font);font-size:.92rem;font-weight:800;
+    text-transform:uppercase;letter-spacing:.02em;cursor:pointer;transition:all .14s
+  }
+  .oo-btn-buy{border-color:var(--success);color:var(--success)}
+  .oo-btn-buy:hover{background:var(--success-bg)}
+  .oo-btn-sell{border-color:var(--primary);color:var(--primary)}
+  .oo-btn-sell:hover{background:var(--primary-mild)}
+
   /* ── ANIMATIONS ── */
   @keyframes fadeIn{from{opacity:0}to{opacity:1}}
   @keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
@@ -234,12 +267,12 @@ const css = `
 
   /* ── PEACH STATS RESPONSIVE GRID ── */
   .stats-card-wrap{container-type:inline-size;container-name:stats;width:100%}
-  .stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
   .stats-bottom{display:contents}
   @container stats (max-width:540px){
     .stats-grid{grid-template-columns:1fr}
     .stats-vol{grid-column:1/-1}
-    .stats-bottom{display:grid;grid-template-columns:1fr 1fr;gap:16px;grid-column:1/-1}
+    .stats-bottom{display:grid;grid-template-columns:1fr;gap:16px;grid-column:1/-1}
   }
 
   /* ── RESPONSIVE ── */
@@ -255,6 +288,15 @@ const css = `
     .cards-row{flex-direction:column!important;align-items:stretch!important}
     .ath-price-value{font-size:1.5rem}
     .ath-controls{gap:8px}
+    /* keep the Open Offers card tight so labels/buttons stay on one line */
+    .open-offers-cols{gap:12px}
+    .oo-col{gap:6px}
+    .oo-count-row{gap:8px}
+    .oo-count{padding:5px 12px;font-size:1.3rem}
+    .oo-label{font-size:.85rem;white-space:nowrap}
+    .oo-premium{font-size:.74rem}
+    .oo-actions{gap:10px}
+    .oo-btn{padding:11px 8px;font-size:.78rem;white-space:nowrap}
   }
 `;
 
@@ -408,6 +450,7 @@ export default function PeachHome() {
     setAttentionDismissed(true);
   }
   function goToTrades() { navigate("/trades"); }
+  const fmtPremium = (p) => p == null ? "—" : `${p > 0 ? "+" : ""}${p.toFixed(2)}%`;
 
   const showStrip = isLoggedIn && urgentCount > 0 && !attentionDismissed;
   const showPill  = isLoggedIn && urgentCount > 0 && !attentionDismissed && welcomeOutOfView;
@@ -578,8 +621,9 @@ export default function PeachHome() {
             {/* Sentinel: when this leaves the viewport, the floating pill appears */}
             <div ref={sentinelRef} aria-hidden="true" style={{height:1,width:"100%",margin:0,padding:0}} />
 
-            {/* ── ATH WIDGET ── */}
-            <div className="card">
+            {/* ── ATH WIDGET + OPEN OFFERS ROW ── */}
+            <div className="cards-row" style={{display:"flex",gap:18,alignItems:"flex-start",flexWrap:"wrap"}}>
+            <div className="card" style={{flex:"1 1 360px",minWidth:0,width:"auto"}}>
               <div className="ath-header">
                 <IcoBtc size={20}/>
                 <span className="card-title">Bitcoin ATH on Peach</span>
@@ -629,6 +673,38 @@ export default function PeachHome() {
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* ── OPEN OFFERS CARD ── */}
+            <div className="card open-offers-card" style={{flex:"1 1 360px",minWidth:0,width:"auto"}}>
+              <span className="open-offers-badge">OPEN OFFERS</span>
+              <div className="open-offers-cols">
+                {/* buy column */}
+                <div className="oo-col">
+                  <div className="oo-count-row">
+                    <span className="oo-count oo-count-buy">{marketStats?.buy?.open ?? "—"}</span>
+                    <span className="oo-label">buy offers</span>
+                  </div>
+                  <span className="oo-premium">average premium of completed trades: {fmtPremium(marketStats?.buy?.avgPremium)}</span>
+                  <span className="oo-market-link" onClick={() => navigate("/market", { state: { marketTab: "sell" } })}>See market →</span>
+                </div>
+                <div className="oo-divider" />
+                {/* sell column */}
+                <div className="oo-col">
+                  <div className="oo-count-row">
+                    <span className="oo-count oo-count-sell">{marketStats?.sell?.open ?? "—"}</span>
+                    <span className="oo-label">sell offers</span>
+                  </div>
+                  <span className="oo-premium">average premium of completed trades: {fmtPremium(marketStats?.sell?.avgPremium)}</span>
+                  <span className="oo-market-link" onClick={() => navigate("/market", { state: { marketTab: "buy" } })}>See market →</span>
+                </div>
+              </div>
+              <div className="oo-hr" />
+              <div className="oo-actions">
+                <button className="oo-btn oo-btn-buy"  onClick={() => navigate("/offer/new?type=buy")}>CREATE BUY OFFER</button>
+                <button className="oo-btn oo-btn-sell" onClick={() => navigate("/offer/new?type=sell")}>CREATE SELL OFFER</button>
+              </div>
+            </div>
             </div>
 
             {/* ── NEWS CARD ── */}
@@ -733,25 +809,6 @@ export default function PeachHome() {
                       <div className="stat-sub">completed trades · today</div>
                       <span className="stat-change neu">—</span>
                     </div>
-
-                    {/* Active Offers */}
-                    {(() => {
-                      const fmtPremium = (p) =>
-                        p == null ? "—" : `${p > 0 ? "+" : ""}${Math.round(p)}%`;
-                      return (
-                    <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                      <span style={{fontSize:".72rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--black-65)"}}>Active Offers</span>
-                      <div className="stat-big">{marketStats ? (marketStats.buy.open + marketStats.sell.open) : "—"}</div>
-                      <div className="stat-sub">
-                        <span style={{color:"var(--success)",fontWeight:700}}>{marketStats?.buy?.open ?? 0} buy</span>
-                        <span style={{color:"var(--black-65)",marginLeft:4}}>({fmtPremium(marketStats?.buy?.avgPremium)})</span>
-                        {" · "}
-                        <span style={{color:"var(--error)",fontWeight:700}}>{marketStats?.sell?.open ?? 0} sell</span>
-                        <span style={{color:"var(--black-65)",marginLeft:4}}>({fmtPremium(marketStats?.sell?.avgPremium)})</span>
-                      </div>
-                    </div>
-                      );
-                    })()}
 
                   </div>{/* end stats-bottom */}
 

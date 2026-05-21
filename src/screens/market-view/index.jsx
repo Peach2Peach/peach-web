@@ -242,7 +242,6 @@ export default function PeachMarket() {
 
   function handleRefreshOffers() {
     clearCache("market-offers");
-    setLiveOffers(null);
     setOffersLoading(true);
     fetchMarket();
   }
@@ -345,6 +344,16 @@ export default function PeachMarket() {
     if (direction === "sell") setTab("buy");
     setShowMyOffers(true);
     if (hasIds) setHighlightedIds(new Set(ids.map(String)));
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.state]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Plain tab pre-select when arriving from the home "Open Offers" card ──
+  // location.state shape: { marketTab: "buy"|"sell" }. Unlike highlightDirection,
+  // this just switches the tab — it does NOT enable the "my offers only" view.
+  useEffect(() => {
+    const t = location.state?.marketTab;
+    if (t !== "buy" && t !== "sell") return;
+    setTab(t);
     navigate(location.pathname, { replace: true, state: null });
   }, [location.state]); // eslint-disable-line react-hooks/exhaustive-deps
 
