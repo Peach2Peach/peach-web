@@ -3712,6 +3712,19 @@ export function ChatPanel({
               </div>
             );
           }
+          // Mediator's typed messages: centred notice, distinct from both the
+          // counterpart bubble and the automated system notices above.
+          if (msg.from === "mediator") {
+            return (
+              <div key={msg.id} className="chat-mediator-row">
+                <div className="chat-mediator-label">
+                  <IconDispute /> Peach mediator
+                </div>
+                <div className="chat-mediator-text">{msg.text}</div>
+                <div className="chat-mediator-ts">{relTime(msg.ts)}</div>
+              </div>
+            );
+          }
           const isMe = msg.from === "me";
           return (
             <div

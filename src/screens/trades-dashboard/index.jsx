@@ -456,6 +456,21 @@ const CSS = `
   .offer-detail-btn-edit:hover:not(:disabled){background:var(--primary);color:white}
   .offer-detail-btn-withdraw{background:var(--error-bg, var(--error-bg));color:var(--error)}
   .offer-detail-btn-withdraw:hover:not(:disabled){background:var(--error);color:white}
+  /* A lone cancel button sits at 50% width on desktop; on narrow screens it
+     shrinks to fit its label on one line instead of wrapping. */
+  .offer-detail-btn-solo{flex:0 0 50%}
+  @media(max-width:640px){.offer-detail-btn-solo{flex:0 0 auto}}
+  /* Escrow QR floated to top + action buttons pinned to the bottom of the popup.
+     Scoped to the offer-detail popup so the other .matches-popup users are untouched. */
+  .offer-detail-popup{display:flex;flex-direction:column}
+  .offer-detail-sticky-footer{
+    position:sticky;bottom:0;z-index:1;
+    background:var(--surface);
+    border-top:1px solid var(--black-10);
+    box-shadow:0 -4px 14px rgba(43,25,17,.08);
+    border-radius:0 0 20px 20px;
+  }
+  @media(max-width:640px){.offer-detail-sticky-footer{border-radius:0 0 16px 16px}}
 
   /* ── Premium editor (mobile-inspired) ── */
   .premium-editor{display:flex;flex-direction:column;align-items:center;gap:14px;padding:16px 24px 0}
@@ -2464,9 +2479,9 @@ export default function TradesDashboard() {
                 if (e.target === e.currentTarget) closeOfferDetail();
               }}
             >
-              <div className="matches-popup">
+              <div className="matches-popup offer-detail-popup">
                 {/* Header */}
-                <div className="matches-header">
+                <div className="matches-header" style={{ order: -3 }}>
                   <span style={{ fontWeight: 800, fontSize: ".95rem" }}>
                     {isBuy ? "Buy" : "Sell"} offer
                   </span>
@@ -2502,7 +2517,7 @@ export default function TradesDashboard() {
                 </div>
 
                 {!isBuy && !odDetailsLoading && fundingStage === "funded" && (
-                  <div style={{ textAlign: "center", padding: "18px 0 8px" }}>
+                  <div style={{ order: -1, textAlign: "center", padding: "18px 0 8px" }}>
                     <div style={{ fontWeight: 700, fontSize: ".85rem", color: "var(--black-65)", marginBottom: 8 }}>
                       Bitcoin locked in escrow
                     </div>
@@ -2856,7 +2871,7 @@ export default function TradesDashboard() {
                 {!isBuy &&
                   (o.tradeStatus === "fundEscrow" || o.tradeStatus === "fundingAmountDifferent") &&
                   odDetailsLoading && (
-                  <div style={{ padding: "12px 20px 0", borderTop: "1px solid var(--black-10)" }}>
+                  <div style={{ order: -1, padding: "12px 20px 0", borderTop: "1px solid var(--black-10)" }}>
                     <div style={{ fontSize: ".76rem", color: "var(--black-40)", fontWeight: 600, padding: "8px 0" }}>
                       Loading offer status…
                     </div>
@@ -2869,6 +2884,7 @@ export default function TradesDashboard() {
                   (fundingStage === "needs" || fundingStage === "mempool") && (
                   <div
                     style={{
+                      order: -2,
                       padding: "12px 20px 0",
                       borderTop: "1px solid var(--black-10)",
                     }}
@@ -3238,104 +3254,6 @@ export default function TradesDashboard() {
                           Send any amount within the accepted limits to activate your offer
                         </div>
 
-                        {/* Fund via mobile app — alternative to scanning QR */}
-                        <div>
-                          {odFundMobileActionId ? (
-                            <MobilePendingButton
-                              label="✓ Funding request sent — check your phone"
-                              type="fundEscrow"
-                              actionId={odFundMobileActionId}
-                            />
-                          ) : (
-                            <>
-                              <div
-                                style={{
-                                  fontSize: ".68rem",
-                                  fontWeight: 700,
-                                  color: "var(--black-65)",
-                                  textTransform: "uppercase",
-                                  letterSpacing: ".05em",
-                                  marginBottom: 6,
-                                  textAlign: "center",
-                                }}
-                              >
-                                Or fund from your Peach mobile app
-                              </div>
-                              <button
-                                disabled={odFundMobileLoading}
-                                onClick={async () => {
-                                  setOdFundMobileError(null);
-                                  setOdFundMobileLoading(true);
-                                  try {
-                                    const res = await post(
-                                      `/offer/${o.id}/fundEscrowPendingAction`,
-                                    );
-                                    if (!res.ok) {
-                                      const err = await res
-                                        .json()
-                                        .catch(() => null);
-                                      throw new Error(
-                                        err?.error ||
-                                          err?.message ||
-                                          `HTTP ${res.status}`,
-                                      );
-                                    }
-                                    // Fetch /details to pull the new pending-action id.
-                                    const detailsRes = await get(`/offer/${o.id}/details`);
-                                    if (detailsRes.ok) {
-                                      const body = await detailsRes.json().catch(() => null);
-                                      const id = body?.mobileActionFundEscrowWasTriggered;
-                                      setOdFundMobileActionId(typeof id === "number" ? id : true);
-                                    } else {
-                                      setOdFundMobileActionId(true);
-                                    }
-                                    setToast("Request sent — check your phone");
-                                    setToastTone("orange");
-                                    setTimeout(() => { setToast(null); setToastTone("default"); }, 3000);
-                                  } catch (e) {
-                                    setOdFundMobileError(
-                                      "Failed to request funding: " + e.message,
-                                    );
-                                  } finally {
-                                    setOdFundMobileLoading(false);
-                                  }
-                                }}
-                                style={{
-                                  width: "100%",
-                                  padding: "10px 14px",
-                                  borderRadius: 999,
-                                  border: "none",
-                                  background: "var(--grad)",
-                                  color: "white",
-                                  fontFamily: "var(--font)",
-                                  fontSize: ".8rem",
-                                  fontWeight: 800,
-                                  cursor: odFundMobileLoading
-                                    ? "default"
-                                    : "pointer",
-                                  opacity: odFundMobileLoading ? 0.6 : 1,
-                                }}
-                              >
-                                {odFundMobileLoading
-                                  ? "Sending request…"
-                                  : "Fund via mobile app"}
-                              </button>
-                              {odFundMobileError && (
-                                <div
-                                  style={{
-                                    color: "var(--error)",
-                                    fontSize: ".74rem",
-                                    fontWeight: 600,
-                                    marginTop: 6,
-                                    textAlign: "center",
-                                  }}
-                                >
-                                  {odFundMobileError}
-                                </div>
-                              )}
-                            </>
-                          )}
-                        </div>
                         </div>
 
                         {/* Wrong-amount call to action — parity with offer-creation step 2 */}
@@ -3441,6 +3359,7 @@ export default function TradesDashboard() {
                   !odWithdrawConfirm &&
                   !odRefundActionId && (
                     <div
+                      className="offer-detail-sticky-footer"
                       style={{
                         padding: "12px 20px 16px",
                         borderTop: "1px solid var(--black-10)",
@@ -3448,8 +3367,7 @@ export default function TradesDashboard() {
                     >
                       <div style={{ display: "flex", justifyContent: "center" }}>
                         <button
-                          className="offer-detail-btn offer-detail-btn-withdraw"
-                          style={{ flex: "0 0 50%" }}
+                          className="offer-detail-btn offer-detail-btn-withdraw offer-detail-btn-solo"
                           onClick={() => {
                             setOdWithdrawConfirm(true);
                             setOdWithdrawError(null);
@@ -3468,7 +3386,119 @@ export default function TradesDashboard() {
                   (odEditingPremium ||
                   odWithdrawConfirm ||
                   !(!isBuy && fundingStage === "funded" && !odRefundActionId)) && (
-                <div className="offer-detail-footer">
+                <div
+                  className={`offer-detail-footer${
+                    !odEditingPremium && !odWithdrawConfirm
+                      ? " offer-detail-sticky-footer"
+                      : ""
+                  }`}
+                >
+                  {/* Fund via mobile app — primary action for an unfunded sell offer,
+                    pinned in the footer alongside Cancel. */}
+                  {!odEditingPremium &&
+                    !odWithdrawConfirm &&
+                    !isBuy &&
+                    !odDetailsLoading &&
+                    fundingStage === "needs" && (
+                    <div>
+                      {odFundMobileActionId ? (
+                        <MobilePendingButton
+                          label="✓ Funding request sent — check your phone"
+                          type="fundEscrow"
+                          actionId={odFundMobileActionId}
+                        />
+                      ) : (
+                        <>
+                          <div
+                            style={{
+                              fontSize: ".68rem",
+                              fontWeight: 700,
+                              color: "var(--black-65)",
+                              textTransform: "uppercase",
+                              letterSpacing: ".05em",
+                              marginBottom: 6,
+                              textAlign: "center",
+                            }}
+                          >
+                            Or fund from your Peach mobile app
+                          </div>
+                          <button
+                            disabled={odFundMobileLoading}
+                            onClick={async () => {
+                              setOdFundMobileError(null);
+                              setOdFundMobileLoading(true);
+                              try {
+                                const res = await post(
+                                  `/offer/${o.id}/fundEscrowPendingAction`,
+                                );
+                                if (!res.ok) {
+                                  const err = await res
+                                    .json()
+                                    .catch(() => null);
+                                  throw new Error(
+                                    err?.error ||
+                                      err?.message ||
+                                      `HTTP ${res.status}`,
+                                  );
+                                }
+                                // Fetch /details to pull the new pending-action id.
+                                const detailsRes = await get(`/offer/${o.id}/details`);
+                                if (detailsRes.ok) {
+                                  const body = await detailsRes.json().catch(() => null);
+                                  const id = body?.mobileActionFundEscrowWasTriggered;
+                                  setOdFundMobileActionId(typeof id === "number" ? id : true);
+                                } else {
+                                  setOdFundMobileActionId(true);
+                                }
+                                setToast("Request sent — check your phone");
+                                setToastTone("orange");
+                                setTimeout(() => { setToast(null); setToastTone("default"); }, 3000);
+                              } catch (e) {
+                                setOdFundMobileError(
+                                  "Failed to request funding: " + e.message,
+                                );
+                              } finally {
+                                setOdFundMobileLoading(false);
+                              }
+                            }}
+                            style={{
+                              width: "100%",
+                              padding: "10px 14px",
+                              borderRadius: 999,
+                              border: "none",
+                              background: "var(--grad)",
+                              color: "white",
+                              fontFamily: "var(--font)",
+                              fontSize: ".8rem",
+                              fontWeight: 800,
+                              cursor: odFundMobileLoading
+                                ? "default"
+                                : "pointer",
+                              opacity: odFundMobileLoading ? 0.6 : 1,
+                            }}
+                          >
+                            {odFundMobileLoading
+                              ? "Sending request…"
+                              : "Fund via mobile app"}
+                          </button>
+                          {odFundMobileError && (
+                            <div
+                              style={{
+                                color: "var(--error)",
+                                fontSize: ".74rem",
+                                fontWeight: 600,
+                                marginTop: 6,
+                                textAlign: "center",
+                              }}
+                            >
+                              {odFundMobileError}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+
                   {/* Funded sell offer with refund pending: greyed message
                     (or Open Peach App deeplink on mobile). */}
                   {!odEditingPremium &&
@@ -3605,8 +3635,7 @@ export default function TradesDashboard() {
                     ) : (
                       <div style={{ display: "flex", justifyContent: "center" }}>
                         <button
-                          className="offer-detail-btn offer-detail-btn-withdraw"
-                          style={{ flex: "0 0 50%" }}
+                          className="offer-detail-btn offer-detail-btn-withdraw offer-detail-btn-solo"
                           onClick={() => {
                             setOdWithdrawConfirm(true);
                             setOdWithdrawError(null);

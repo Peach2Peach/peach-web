@@ -27,6 +27,7 @@ import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 import { extractCustomRefundAddressFromProfile } from "../../utils/customRefundAddressSync.js";
 import { fetchSavedCustomPayoutAddress } from "../../utils/customPayoutAddressSync.js";
 import { deriveDisplayStatus } from "../../data/statusConfig.js";
+import { classifySender } from "../../data/chatSystemMessages.js";
 import Avatar from "../../components/Avatar.jsx";
 import StatusChip from "../../components/StatusChip.jsx";
 import PeachRating from "../../components/PeachRating.jsx";
@@ -378,6 +379,25 @@ const CSS = `
   .chat-system-ts{
     font-size:.62rem;color:var(--black-65,var(--black-65));opacity:.8;
   }
+  .chat-mediator-row{
+    display:flex;flex-direction:column;align-items:center;gap:4px;
+    padding:10px 14px;margin:4px auto;
+    max-width:78%;border-radius:10px;
+    background:rgba(245,101,34,.10);
+    border:1px solid rgba(245,101,34,.45);
+    text-align:center;
+  }
+  .chat-mediator-label{
+    display:inline-flex;align-items:center;gap:5px;
+    font-size:.62rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--primary-dark);
+  }
+  .chat-mediator-text{
+    font-size:.8rem;line-height:1.5;color:var(--black);white-space:pre-wrap;
+  }
+  .chat-mediator-ts{
+    font-size:.62rem;color:var(--black-65);opacity:.8;
+  }
   .chat-input-row{
     display:flex;align-items:flex-end;gap:10px;
     padding:12px 18px;border-top:1px solid var(--black-10);
@@ -648,6 +668,10 @@ export default function TradeExecution() {
       cancelled = true;
     };
   }, [liveContract?.tradeStatus, liveContract?.contract?.id]);
+
+  // Counterparty's public-key id, captured when the contract loads, so the chat
+  // parse loops can tell the counterpart apart from a dispute mediator.
+  const counterpartyIdRef = useRef(null);
 
   // ── Auto-create escrow when status is createEscrow and address is null ──
   const escrowCreatedRef = useRef(false);
@@ -976,6 +1000,8 @@ export default function TradeExecution() {
         if (!res.ok) return null;
         const c = await res.json();
         const isBuyer = (c.buyer?.id ?? c.buyerId) === peachId;
+        counterpartyIdRef.current =
+          (isBuyer ? c.seller?.id : c.buyer?.id) ?? null;
         const initialDisplayStatus =
           deriveDisplayStatus({
             tradeStatus: c.tradeStatus ?? c.status,
@@ -1159,12 +1185,10 @@ export default function TradeExecution() {
               m.id != null
                 ? String(m.id)
                 : `${m.date ?? "nodate"}|${m.from ?? "anon"}|${(m.message ?? m.text ?? "").slice(0, 48)}`,
-            from:
-              m.from === peachId
-                ? "me"
-                : m.from === "system"
-                  ? "system"
-                  : "them",
+            from: classifySender(m.from, {
+              peachId,
+              counterpartyId: counterpartyIdRef.current,
+            }),
             text,
             ts: m.date ? new Date(m.date).getTime() : Date.now(),
             readBy: m.readBy ?? [],
@@ -1233,12 +1257,10 @@ export default function TradeExecution() {
                 m.id != null
                   ? String(m.id)
                   : `${m.date ?? "nodate"}|${m.from ?? "anon"}|${(m.message ?? m.text ?? "").slice(0, 48)}`,
-              from:
-                m.from === peachId
-                  ? "me"
-                  : m.from === "system"
-                    ? "system"
-                    : "them",
+              from: classifySender(m.from, {
+                peachId,
+                counterpartyId: counterpartyIdRef.current,
+              }),
               text,
               ts: m.date ? new Date(m.date).getTime() : Date.now(),
             };
@@ -1304,12 +1326,10 @@ export default function TradeExecution() {
               m.id != null
                 ? String(m.id)
                 : `${m.date ?? "nodate"}|${m.from ?? "anon"}|${(m.message ?? m.text ?? "").slice(0, 48)}`,
-            from:
-              m.from === peachId
-                ? "me"
-                : m.from === "system"
-                  ? "system"
-                  : "them",
+            from: classifySender(m.from, {
+              peachId,
+              counterpartyId: counterpartyIdRef.current,
+            }),
             text,
             ts: m.date ? new Date(m.date).getTime() : Date.now(),
             readBy: m.readBy ?? [],

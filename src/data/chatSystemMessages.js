@@ -53,6 +53,15 @@ const SYSTEM_MESSAGES = {
     "The dispute has been canceled, so your reputation has not been impacted. The seller has been asked to release the funds.",
 };
 
+// Classifies a chat sender into a render bucket. Mediator is detected by
+// exclusion (matches the mobile app): not me, not the counterparty, not system.
+export function classifySender(from, { peachId, counterpartyId } = {}) {
+  if (from === peachId) return "me";
+  if (from === "system") return "system";
+  if (counterpartyId && from === counterpartyId) return "them";
+  return "mediator";
+}
+
 // Identifies whether a raw message text is a known system message i18n key.
 export function isSystemMessageKey(text) {
   if (typeof text !== "string") return false;
