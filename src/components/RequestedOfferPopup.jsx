@@ -24,6 +24,18 @@ import ConfirmModal from "./ConfirmModal.jsx";
 const CURRENCY_SYMS = { EUR: "€", USD: "$", GBP: "£", CHF: "CHF " };
 const currSym = (c) => CURRENCY_SYMS[c] ?? `${c} `;
 
+// Undoing a sent trade request within 12h of sending costs a reputation
+// penalty; after 12h it's penalty-free (mirrors the mobile app's rule).
+const TWELVE_H_MS = 12 * 60 * 60 * 1000;
+// Ceil to minutes so the countdown reads "in 1m" right up to the threshold,
+// then the caller flips to the no-penalty copy at 0.
+function fmtRemaining(ms) {
+  const totalMin = Math.ceil(ms / 60_000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
 const POPUP_CSS = `
   .rop-overlay{position:fixed;inset:0;z-index:600;background:rgba(43,25,17,.55);
     display:flex;align-items:center;justify-content:center;padding:20px;
@@ -230,6 +242,24 @@ export default function RequestedOfferPopup({
   // Confirmation modal — gates the DELETE so users can't drop a sent request
   // without acknowledging the reputation impact.
   const [confirmUndoOpen, setConfirmUndoOpen] = useState(false);
+
+  // When the request was sent — used to compute the penalty-free countdown.
+  const requestedAtMs = tradeRequest?.creationDate
+    ? new Date(tradeRequest.creationDate).getTime()
+    : null;
+  // Tick once a minute, but only while the confirm modal is open, so the
+  // remaining-time line in the popup counts down live.
+  const [nowTick, setNowTick] = useState(Date.now());
+  useEffect(() => {
+    if (!confirmUndoOpen) return;
+    setNowTick(Date.now());
+    const iv = setInterval(() => setNowTick(Date.now()), 60_000);
+    return () => clearInterval(iv);
+  }, [confirmUndoOpen]);
+  const remainingMs = requestedAtMs != null
+    ? Math.max(TWELVE_H_MS - (nowTick - requestedAtMs), 0)
+    : null;
+  const penaltyFree = remainingMs === 0; // only once we know 12h has elapsed
 
   async function handleUndo() {
     if (undoLoading || !auth) return;
@@ -623,7 +653,17 @@ export default function RequestedOfferPopup({
       {confirmUndoOpen && (
         <ConfirmModal
           title="Are you sure?"
-          body="Your reputation will be impacted."
+          body={penaltyFree ? (
+            "You can undo it now without penalty!"
+          ) : (
+            <>
+              Undoing it will negatively affect your reputation score.<br/>
+              You can undo it without a penalty in{" "}
+              <span style={{ fontWeight: 800, color: "var(--black)" }}>
+                {requestedAtMs != null ? fmtRemaining(remainingMs) : "12h 0m"}
+              </span>.
+            </>
+          )}
           confirmLabel="Undo request"
           tone="danger"
           onCancel={() => setConfirmUndoOpen(false)}
