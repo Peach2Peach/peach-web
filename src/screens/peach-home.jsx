@@ -286,6 +286,8 @@ const css = `
     .card{width:100%!important;max-width:100%!important;min-width:0!important}
     .card.home-stack-card{max-width:450px!important}
     .cards-row{flex-direction:column!important;align-items:stretch!important}
+    /* stacked column: stop the 360px flex-basis from becoming a fixed height */
+    .ath-offers-row > .card{flex:0 0 auto!important}
     .ath-price-value{font-size:1.5rem}
     .ath-controls{gap:8px}
     /* keep the Open Offers card tight so labels/buttons stay on one line */
@@ -622,7 +624,7 @@ export default function PeachHome() {
             <div ref={sentinelRef} aria-hidden="true" style={{height:1,width:"100%",margin:0,padding:0}} />
 
             {/* ── ATH WIDGET + OPEN OFFERS ROW ── */}
-            <div className="cards-row" style={{display:"flex",gap:18,alignItems:"flex-start",flexWrap:"wrap"}}>
+            <div className="cards-row ath-offers-row" style={{display:"flex",gap:18,alignItems:"flex-start",flexWrap:"wrap"}}>
             <div className="card" style={{flex:"1 1 360px",minWidth:0,width:"auto"}}>
               <div className="ath-header">
                 <IcoBtc size={20}/>

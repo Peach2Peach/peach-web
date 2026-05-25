@@ -111,6 +111,14 @@ export const CURRENCY_REGIONS = {
 };
 const ALL_REGIONS = Object.keys(CURRENCY_REGIONS);
 
+// African currency → origin country (region label for the shared CFA francs).
+// Drives the small subtext under the currency code in the "Select currency" step.
+const AFRICA_CURRENCY_COUNTRY = {
+  NGN: "Nigeria", KES: "Kenya",    ZAR: "South Africa", GHS: "Ghana",
+  TZS: "Tanzania", UGX: "Uganda",  XOF: "West Africa",  XAF: "Central Africa",
+  EGP: "Egypt",   MAD: "Morocco",
+};
+
 // Re-export PHONE_PREFIX_MAP from the meta module so existing imports in
 // other screens (if any) keep working.
 export { PHONE_PREFIX_MAP } from "../data/paymentMethodMeta.js";
@@ -552,6 +560,9 @@ export function AddPMFlow({ methods, meetupEvents = [], onSave, onClose, editDat
                       className={`pm-option-card${selCurrency === c ? " selected" : ""}`}
                       onClick={() => handleSelectCurrency(c)}>
                       <span className="pm-option-name">{c}</span>
+                      {AFRICA_CURRENCY_COUNTRY[c] && (
+                        <span className="pm-option-country">{AFRICA_CURRENCY_COUNTRY[c]}</span>
+                      )}
                     </button>
                   ))}
                   {regionCurrencies.length === 0 && (
@@ -980,6 +991,8 @@ const ADD_PM_CSS = `
   .pm-option-card.selected{border-color:var(--primary);background:var(--primary-mild);
     box-shadow:0 0 0 2px rgba(245,101,34,.15)}
   .pm-option-name{font-size:.88rem;font-weight:800;color:var(--black)}
+  .pm-option-country{display:block;font-size:.62rem;font-weight:500;
+    color:var(--black-65);margin-top:2px}
 
   /* Step 1/2: Category/method list */
   .pm-cat-list{display:flex;flex-direction:column;gap:8px;margin-top:8px}
