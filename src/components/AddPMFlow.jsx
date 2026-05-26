@@ -309,15 +309,6 @@ export function AddPMFlow({ methods, meetupEvents = [], onSave, onClose, editDat
   const isMpesaActive = resolvedSections.some((s) =>
     s.activeFields.some((f) => f.startsWith("mpesa_"))
   );
-
-  useEffect(() => {
-    if (!isMpesaActive || methodCurrencies.length === 0) return;
-    setSelCurrencies((prev) => {
-      if (prev.length === methodCurrencies.length
-          && methodCurrencies.every((c) => prev.includes(c))) return prev;
-      return [...methodCurrencies];
-    });
-  }, [isMpesaActive, selMethodId]); // eslint-disable-line react-hooks/exhaustive-deps
   // Hide the raw `reference` optional field — the web's "Payment reference"
   // widget below owns that concept and mirrors its value into details.reference
   // on save (see handleSave).
@@ -326,7 +317,7 @@ export function AddPMFlow({ methods, meetupEvents = [], onSave, onClose, editDat
     .filter((f) => !mandatoryFields.includes(f) && f !== "reference");
 
   const step3Ok = mandatoryFields.every((k) => (details[k] || "").trim().length > 0)
-    && selCurrencies.length > 0
+    && (isMpesaActive || selCurrencies.length > 0)
     && !Object.values(errors).some((e) => e);
 
   function handleSelectCurrency(c) {
