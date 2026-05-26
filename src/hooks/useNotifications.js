@@ -111,6 +111,16 @@ function saveReadIds(readIds, notifs) {
   localStorage.setItem(k, JSON.stringify(pruned));
 }
 
+// Coerce all Map keys to strings. Old baselines (before sell offers moved from
+// v069 → /offers/summary) persisted numeric keys for sells; new code keys them
+// as strings. Without this, Map.get returns undefined and diff loops silently
+// skip every sell-offer event.
+function _stringKeyMap(entries) {
+  const out = new Map();
+  for (const [k, v] of entries) out.set(String(k), v);
+  return out;
+}
+
 function loadBaseline(peachId) {
   const k = keyBaseline(peachId);
   if (!k) return null;
@@ -119,11 +129,11 @@ function loadBaseline(peachId) {
     if (!obj) return null;
     return {
       contracts:        new Map(obj.contracts        ?? []),
-      offers:           new Map(obj.offers           ?? []),
-      tradeRequestCount: new Map(obj.tradeRequestCount ?? []),
-      matchCounts:      new Map(obj.matchCounts      ?? []),
-      offerUnread:      new Map(obj.offerUnread       ?? []),
-      sentRequests:     new Map(obj.sentRequests     ?? []),
+      offers:           _stringKeyMap(obj.offers           ?? []),
+      tradeRequestCount: _stringKeyMap(obj.tradeRequestCount ?? []),
+      matchCounts:      _stringKeyMap(obj.matchCounts      ?? []),
+      offerUnread:      _stringKeyMap(obj.offerUnread       ?? []),
+      sentRequests:     _stringKeyMap(obj.sentRequests     ?? []),
       rejectionCandidates: (() => {
         const v = obj.rejectionCandidates ?? [];
         // Migrate old format (array of bare offerId strings) to Map(offerId → offerType).
@@ -241,7 +251,7 @@ let _prevContracts = new Map();   // id → { tradeStatus, unreadMessages }
 let _prevOffers    = new Map();   // id → tradeStatus
 let _prevTradeRequestCount = new Map(); // offerId → totalTradeRequests (open incoming trade-request counter, populated for both buy and sell offers)
 let _prevMatchCounts = new Map();  // buyOfferId → totalMatches (track additional matches arriving on hasMatchesAvailable offers)
-let _prevOfferUnread = new Map();  // offerId → boolean; sourced from offer.containsUnreadMessages
+let _prevOfferUnread = new Map();  // offerId → boolean; sourced from offer.unreadMessages (number, hidden when 0)
 let _prevSentRequests = new Map(); // offerId → offerType ("buyOffer" | "sellOffer") — outbound trade requests, used to detect rejection by offer owner
 let _rejectionCandidates = new Map(); // offerId → offerType ("buyOffer" | "sellOffer") — outbound requests suspected of rejection; only emitted on the second consecutive confirmation tick (race protection)
 let _pollTick      = 0;            // incremented every poll; chat layer runs only on even ticks (~16s cadence)
@@ -344,10 +354,9 @@ async function _poll(auth, base) {
 
   try {
     const peachId = window.__PEACH_AUTH__?.peachId;
-    const [contractsRes, buyRes, ownOffersRes, offersSummaryRes] = await Promise.all([
+    const [contractsRes, buyRes, offersSummaryRes] = await Promise.all([
       fetchWithSessionCheck(`${base}/contracts/summary`, { headers: hdrs }).then(r => r.ok ? r.json() : null).catch(() => null),
       fetchWithSessionCheck(`${v069Base}/buyOffer?ownOffers=true`, { headers: hdrs }).then(r => r.ok ? r.json() : null).catch(() => null),
-      fetchWithSessionCheck(`${v069Base}/user/${peachId}/offers`, { headers: hdrs }).then(r => r.ok ? r.json() : null).catch(() => null),
       fetchWithSessionCheck(`${base}/offers/summary`, { headers: hdrs }).then(r => r.ok ? r.json() : null).catch(() => null),
     ]);
 
@@ -399,15 +408,15 @@ async function _poll(auth, base) {
     }
 
     const buyOffers  = buyRes  ? (Array.isArray(buyRes)  ? buyRes  : (buyRes.offers ?? []))  : [];
-    // Own sell offers from /v069/user/{id}/offers (sellOffer endpoint doesn't support ownOffers param)
-    const sellOffers = ownOffersRes?.sellOffers ?? [];
+    const offersArr  = offersSummaryRes
+      ? (Array.isArray(offersSummaryRes) ? offersSummaryRes : (offersSummaryRes.offers ?? []))
+      : [];
+    // Own sell offers come from /offers/summary — canonical for tradeStatus, unreadMessages (hidden when 0), and totalTradeRequests.
+    const sellOffers = offersArr.filter(o => o.type === "ask");
     const allOffers  = [
       ...buyOffers.map(o => ({ ...o, _dir: "buy" })),
       ...sellOffers.map(o => ({ ...o, _dir: "sell" })),
     ];
-    const offersArr = offersSummaryRes
-      ? (Array.isArray(offersSummaryRes) ? offersSummaryRes : (offersSummaryRes.offers ?? []))
-      : [];
 
     // ── totalTradeRequests lookup: /offers/summary for sells, buyOffer?ownOffers=true for buys ──
     const trReqLookup = new Map();
@@ -445,9 +454,10 @@ async function _poll(auth, base) {
         _prevContracts.set(c.id, { tradeStatus: c.tradeStatus, unreadMessages: c.unreadMessages ?? 0 });
       }
       for (const o of allOffers) {
-        _prevOffers.set(o.id, o.tradeStatus ?? o.tradeStatusNew ?? "");
-        _prevOfferUnread.set(o.id, o.containsUnreadMessages === true);
-        _prevTradeRequestCount.set(o.id, trReqLookup.get(String(o.id)) ?? 0);
+        const oid = String(o.id);
+        _prevOffers.set(oid, o.tradeStatus ?? o.tradeStatusNew ?? "");
+        _prevOfferUnread.set(oid, (o.unreadMessages ?? 0) > 0);
+        _prevTradeRequestCount.set(oid, trReqLookup.get(oid) ?? 0);
       }
       saveBaseline();
       _notify();
@@ -509,9 +519,13 @@ async function _poll(auth, base) {
     }
 
     // ── Diff offers ──
+    // String(o.id) is mandatory: summary entries (sells) carry string ids while
+    // v069 buyOffer entries (buys) carry numeric ids. Map.get is type-strict,
+    // so missing the coercion silently skips every sell-offer diff event.
     for (const o of allOffers) {
+      const oid = String(o.id);
       const status = o.tradeStatus ?? o.tradeStatusNew ?? "";
-      const prev = _prevOffers.get(o.id);
+      const prev = _prevOffers.get(oid);
 
       if (prev && prev !== status && STATUS_NOTIF[status]) {
         const sn = STATUS_NOTIF[status];
@@ -519,40 +533,42 @@ async function _poll(auth, base) {
           ? "Waiting for you to fund escrow."
           : sn.body;
         events.push(_makeNotif(
-          `o-${o.id}-${status}-${now}`, sn.type,
-          sn.title, body, null, o.id
+          `o-${oid}-${status}-${now}`, sn.type,
+          sn.title, body, null, oid
         ));
       } else if (!prev && STATUS_NOTIF[status]) {
         // New offer appeared — skip, it's the user's own action
       }
 
-      _prevOffers.set(o.id, status);
+      _prevOffers.set(oid, status);
     }
 
     // ── Diff per-offer unread chat flag (replaces per-chat polling) ──
     for (const o of allOffers) {
-      const curr = o.containsUnreadMessages === true;
-      const prev = _prevOfferUnread.get(o.id) ?? false;
+      const oid = String(o.id);
+      const curr = (o.unreadMessages ?? 0) > 0;
+      const prev = _prevOfferUnread.get(oid) ?? false;
       if (curr && !prev) {
         events.push(_makeNotif(
-          `o-${o.id}-msg-${now}`, "message",
-          "New message", "", null, o.id
+          `o-${oid}-msg-${now}`, "message",
+          "New message", "", null, oid
         ));
       }
-      _prevOfferUnread.set(o.id, curr);
+      _prevOfferUnread.set(oid, curr);
     }
     // Prune _prevOfferUnread for offers no longer present
-    const currentOfferIds = new Set(allOffers.map(o => o.id));
+    const currentOfferIds = new Set(allOffers.map(o => String(o.id)));
     for (const id of [..._prevOfferUnread.keys()]) {
       if (!currentOfferIds.has(id)) _prevOfferUnread.delete(id);
     }
 
     // ── Diff trade-request counts on own offers (buy + sell, via totalTradeRequests counter) ──
     for (const o of allOffers) {
-      const current = trReqLookup.get(String(o.id)) ?? 0;
-      const prev = _prevTradeRequestCount.get(o.id);
+      const oid = String(o.id);
+      const current = trReqLookup.get(oid) ?? 0;
+      const prev = _prevTradeRequestCount.get(oid);
       if (prev === undefined) {
-        _prevTradeRequestCount.set(o.id, current);
+        _prevTradeRequestCount.set(oid, current);
         continue;
       }
       const delta = current - prev;
@@ -561,16 +577,16 @@ async function _poll(auth, base) {
           ? "Trade request received"
           : `${delta} trade requests received`;
         events.push(_makeNotif(
-          `o-${o.id}-tradeReq-${now}`, "tradeRequest",
-          title, "Review and accept or decline.", null, o.id,
+          `o-${oid}-tradeReq-${now}`, "tradeRequest",
+          title, "Review and accept or decline.", null, oid,
           o._dir === "buy" ? "buyOffer" : "sellOffer"
         ));
       }
-      _prevTradeRequestCount.set(o.id, current);
+      _prevTradeRequestCount.set(oid, current);
     }
 
     // Prune _prevTradeRequestCount for offers no longer present
-    const currentAllOfferIds = new Set(allOffers.map(o => o.id));
+    const currentAllOfferIds = new Set(allOffers.map(o => String(o.id)));
     for (const id of [..._prevTradeRequestCount.keys()]) {
       if (!currentAllOfferIds.has(id)) _prevTradeRequestCount.delete(id);
     }

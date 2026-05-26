@@ -61,7 +61,7 @@ await fetch(`${v069Base}/selfUser`, {
 
 | Method | Endpoint | Used in | Description |
 |--------|----------|---------|-------------|
-| GET | `/offers/summary` | home, trades-dashboard, offer-creation | Summaries of own offers. **Returns historical offers** (completed, cancelled) — not pending/active. Each has `type: "ask"` (sell) or `"bid"` (buy) + `tradeStatus`. |
+| GET | `/offers/summary` | home, trades-dashboard, offer-creation, useNotifications | Summaries of **all** own offers (active + historical), both `type: "ask"` (sell) and `"bid"` (buy). Fields: `id, type, tradeStatus, tradeStatusNew?, prices?, matches, refunded, amount, premium, creationDate, lastModified, escrowType, fundingTxId, txId?, newTradeId?`, plus `unreadMessages` (number, hidden when 0) and `totalTradeRequests`. **Does NOT carry `returnAddress`** — that requires `/v069/user/{id}/offers`. Canonical source for sell-offer status, unread count, and trade-request count. |
 | POST | `/offer` | offer-creation | Create a **sell offer only** (v1). Body: `{ type:"ask", escrowPublicKey, meansOfPayment, amount, premium, ... }`. **Buy offers use v069** (see below). |
 | PATCH | `/offer/:offerId` | market-view | Update offer fields (e.g. edit premium). |
 | POST | `/offer/:offerId/cancel` | market-view, trades-dashboard | Cancel an offer. |
@@ -126,7 +126,7 @@ The web app cannot sign Bitcoin transactions directly (private key stays on mobi
 | GET | `/v069/buyOffer?ownOffers=true` | trades-dashboard, useNotifications | Get own active buy offers. Works correctly for buy offers. |
 | GET | `/v069/buyOffer?ownOffers=false` | trades-dashboard | Browse non-own buy offers (for finding incoming trade requests). |
 | GET | `/v069/sellOffer?ownOffers=false` | trades-dashboard | Browse non-own sell offers (same purpose). |
-| GET | `/v069/user/:publicKeyId/offers` | trades-dashboard, market-view, offer-creation, useNotifications | Get `{ buyOffers: [...], sellOffers: [...] }` for any user. **This is the correct way to fetch own sell offers** (replacement for broken `sellOffer?ownOffers=true`). **Caveat:** does not return `tradeStatus` on sell offers. |
+| GET | `/v069/user/:publicKeyId/offers` | offer-creation, market-view | Get `{ buyOffers: [...], sellOffers: [...] }` for any user. Returns ACTIVE offers only, with full offer objects. **Only used by offer-creation** for `returnAddress` (BIP32 index derivation). For listing / status / unread / trade-request counts, use `/offers/summary` instead. |
 | POST | `/v069/buyOffer` | offer-creation | Create a **buy offer** (v069). Sell offers use `POST /offer` (v1). |
 | PATCH | `/v069/:offerType/:id` | trades-dashboard | Edit offer premium via v069. `:offerType` = `buyOffer` or `sellOffer`. |
 | DELETE | `/v069/buyOffer/:id` | trades-dashboard | Delete/withdraw a buy offer. |
@@ -221,14 +221,14 @@ These endpoints exist in the API but are not wired in the web app yet.
 | Endpoint | Issue |
 |----------|-------|
 | `GET /user/me/paymentMethods` | Returns `{"forbidden":{"buy":[],"sell":[]}}` — use `GET /v069/selfUser` instead |
-| `GET /v069/sellOffer?ownOffers=true` | `ownOffers` param is silently ignored for sell offers (backend asymmetry). Use `GET /v069/user/:publicKeyId/offers` instead |
+| `GET /v069/sellOffer?ownOffers=true` | `ownOffers` param is silently ignored for sell offers (backend asymmetry). Use `/offers/summary` for listing, status, unread, and trade-request counts; use `/v069/user/:publicKeyId/offers` only when `returnAddress` is needed (offer-creation). |
 | `GET /v069/sellOffer` (market browse) | Excludes your own offers from results — by design, not a bug |
 
 ---
 
 ## API Quirks & Gotchas
 
-- **`/offers/summary` and `/contracts/summary` return HISTORICAL data only** — completed, cancelled, expired. For active/pending offers, use v069 endpoints.
+- **`/offers/summary` returns ALL own offers** (active + historical), both `"ask"` and `"bid"`, with `tradeStatus`, `unreadMessages` (hidden when 0), and `totalTradeRequests`. It lacks `returnAddress` — that's the only reason `/v069/user/{id}/offers` still exists in the codebase (offer-creation). **`/contracts/summary`** — historical-status claim unverified; treat with care.
 - **`POST /offer/search` `size` defaults to ~2** — always pass `size: 50` for full results.
 - **v069 offer IDs are numbers, v1 IDs are strings** — always coerce with `String(o.id)` when normalizing.
 - **v069 buy offers use `amountSats`**, sell offers use `amount`** — different field names for the same concept.
