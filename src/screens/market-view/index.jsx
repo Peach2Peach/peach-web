@@ -70,6 +70,14 @@ export default function PeachMarket() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortOpen, setSortOpen]       = useState(false);
   const [bannerOpen, setBannerOpen]   = useState(true);
+  const [controlsCollapsed, setControlsCollapsed] = useState(() => {
+    try { return localStorage.getItem("peach_marketControlsCollapsed") === "1"; }
+    catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("peach_marketControlsCollapsed", controlsCollapsed ? "1" : "0"); }
+    catch {}
+  }, [controlsCollapsed]);
 
   // ── Pull-to-refresh (mobile) ──
   const ptrStartY = useRef(0);
@@ -652,6 +660,20 @@ export default function PeachMarket() {
               <button className={`tab${ isSellTab ? " active-sell" : ""}`} onClick={()=>setTab("sell")}>Sell BTC</button>
             </div>
 
+            {/* Mobile-only collapse toggle */}
+            {isMobile && (
+              <button
+                type="button"
+                className="controls-toggle"
+                onClick={() => setControlsCollapsed(v => !v)}
+                aria-expanded={!controlsCollapsed}
+              >
+                {controlsCollapsed ? "show more" : "show less"}
+                <span className={`controls-toggle-chev${controlsCollapsed ? "" : " open"}`}>▾</span>
+              </button>
+            )}
+
+            <div className={`subheader-collapsible${isMobile && controlsCollapsed ? " is-collapsed" : ""}`}>
             {/* Stats */}
             {stats.avg !== null && (
               <div className="stat-pill">
@@ -760,6 +782,7 @@ export default function PeachMarket() {
                 : <button className="cta-btn-disabled">+ Create Offer</button>
               }
               <span className="how-to-start">How to start</span>
+            </div>
             </div>
           </div>
 

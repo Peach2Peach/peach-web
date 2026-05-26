@@ -398,6 +398,17 @@ export const CSS = `
   .offer-table tbody tr.requested-row:hover td{background:rgba(101,165,25,.11)}
   .offer-card.requested-card{border-color:var(--success-mild);background:linear-gradient(135deg,rgba(101,165,25,.06),var(--surface))}
 
+  /* ── MOBILE COLLAPSIBLE CONTROLS ── */
+  .subheader-collapsible{display:contents}
+  .subheader-collapsible.is-collapsed{display:none}
+  .controls-toggle{margin-left:auto;background:transparent;border:none;padding:6px 4px;
+    color:var(--primary);text-decoration:underline;text-underline-offset:2px;
+    font-family:var(--font);font-weight:600;font-size:.85rem;
+    display:none;align-items:center;gap:4px;cursor:pointer;white-space:nowrap}
+  .controls-toggle:hover{color:var(--primary-dark)}
+  .controls-toggle-chev{font-size:.7rem;transition:transform .15s ease}
+  .controls-toggle-chev.open{transform:rotate(180deg)}
+
   @media(max-width:768px){
     .subheader{padding:10px 14px;gap:8px}
     .table-wrap{display:none}
@@ -407,6 +418,7 @@ export const CSS = `
     .filters-desktop{display:none}
     .filters-btn,.sort-btn{display:inline-flex}
     .refresh-btn{display:none}
+    .controls-toggle{display:inline-flex}
   }
   @media(max-width:767px){
     .page-wrap{margin-left:0!important}
