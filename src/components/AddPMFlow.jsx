@@ -7,7 +7,7 @@
 // self-contained — screens just import and render it.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { validatePhone, validatePaymentReference, isPhoneAllowed, makeBlurHandler } from "../peach-validators.js";
 import {
   PHONE_PREFIX_MAP, getFieldMeta, getTabLabel, fieldsForTab, parseSections,
@@ -125,6 +125,8 @@ export function methodLabel(pm) {
   if (d.userName)    return d.userName;
   if (d.email)       return d.email.replace(/(.{2})(.*)(@.*)/, "$1•••$3");
   if (d.phone)       return d.phone.replace(/(.{5})(.*)(.{3})/, "$1•••$3");
+  if (d.mpesa_phone) return d.mpesa_phone.replace(/(.{5})(.*)(.{3})/, "$1•••$3");
+  if (d.mpesa_name)  return d.mpesa_name;
   if (d.beneficiary) return d.beneficiary;
   if (d.ukSortCode)  return `${d.ukSortCode} / ${d.bankAccountNumber || ""}`;
   return "—";
@@ -300,6 +302,22 @@ export function AddPMFlow({ methods, meetupEvents = [], onSave, onClose, editDat
   });
   const hasAnyTabs = resolvedSections.some((s) => s.alternatives.length > 1);
   const mandatoryFields = [...new Set(resolvedSections.flatMap((s) => s.activeFields))];
+  // The m-pesa alternative (used by Revolut/Wise) is identified by any field
+  // id prefixed `mpesa_` in the active alternative. When it's on, the per-PM
+  // currency picker is hidden and `selCurrencies` is forced to every currency
+  // the method accepts.
+  const isMpesaActive = resolvedSections.some((s) =>
+    s.activeFields.some((f) => f.startsWith("mpesa_"))
+  );
+
+  useEffect(() => {
+    if (!isMpesaActive || methodCurrencies.length === 0) return;
+    setSelCurrencies((prev) => {
+      if (prev.length === methodCurrencies.length
+          && methodCurrencies.every((c) => prev.includes(c))) return prev;
+      return [...methodCurrencies];
+    });
+  }, [isMpesaActive, selMethodId]); // eslint-disable-line react-hooks/exhaustive-deps
   // Hide the raw `reference` optional field — the web's "Payment reference"
   // widget below owns that concept and mirrors its value into details.reference
   // on save (see handleSave).
@@ -469,6 +487,15 @@ export function AddPMFlow({ methods, meetupEvents = [], onSave, onClose, editDat
       }
       cleanDetails._variants = variants;
     }
+    // M-Pesa flag + country auto-derivation (matches mobile's PaymentData shape).
+    // `country` from IBAN's first 2 chars lets a SEPA counterparty see the country
+    // before accepting the trade request. `isMpesa` rides alongside hashes so the
+    // counterparty knows to treat the encrypted fields as M-Pesa-shaped.
+    if (isMpesaActive) cleanDetails.isMpesa = true;
+    if (cleanDetails.iban && !cleanDetails.country) {
+      const code = cleanDetails.iban.replace(/\s+/g, "").slice(0, 2).toUpperCase();
+      if (/^[A-Z]{2}$/.test(code)) cleanDetails.country = code;
+    }
 
     const methodName = selMethod?.name || selMethodId;
     const pm = {
@@ -476,7 +503,7 @@ export function AddPMFlow({ methods, meetupEvents = [], onSave, onClose, editDat
       methodId:   selMethodId,
       name:       methodName,
       label:      (pmLabel || "").trim() || methodName,
-      currencies: selCurrencies,
+      currencies: isMpesaActive ? [...methodCurrencies] : selCurrencies,
       details:    cleanDetails,
     };
     onSave(pm);
@@ -761,7 +788,7 @@ export function AddPMFlow({ methods, meetupEvents = [], onSave, onClose, editDat
                   )}
                 </div>
 
-                {methodCurrencies.length > 1 && (
+                {methodCurrencies.length > 1 && !isMpesaActive && (
                   <div style={{ marginBottom:16 }}>
                     <label className="field-label" style={{ marginBottom:8 }}>
                       Currencies <span style={{ fontWeight:500, textTransform:"none",
@@ -806,6 +833,33 @@ export function AddPMFlow({ methods, meetupEvents = [], onSave, onClose, editDat
                       if (primaryOk && meta.requireAllowedCountry) {
                         handleBlur(fid, details[fid], isPhoneAllowed);
                       }
+                    }
+
+                    if (meta.type === "single-select") {
+                      const opts = meta.options || [];
+                      const current = details[fid] || "";
+                      return (
+                        <div key={fid} style={{ marginBottom:14 }}>
+                          <label className="field-label" style={{ marginBottom:8 }}>
+                            {meta.label}
+                            {isOptional && <span style={{ fontWeight:500, textTransform:"none",
+                              letterSpacing:0, color:"var(--black-25)", marginLeft:4 }}>(optional)</span>}
+                          </label>
+                          <div className="curr-check-grid">
+                            {opts.map((opt) => (
+                              <button key={opt}
+                                className={`curr-check-btn${current === opt ? " on" : ""}`}
+                                onClick={() => {
+                                  setDetails((prev) => ({ ...prev, [fid]: opt }));
+                                  if (errors[fid]) setErrors((p) => ({ ...p, [fid]: null }));
+                                }}>
+                                {current === opt && "✓ "}{opt}
+                              </button>
+                            ))}
+                          </div>
+                          <FieldError error={errors[fid]}/>
+                        </div>
+                      );
                     }
 
                     return (

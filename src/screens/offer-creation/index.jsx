@@ -233,9 +233,14 @@ export default function OfferCreation({ initialType="buy" }) {
   useEffect(() => { setPmError(!!pmFetchError); }, [pmFetchError]);
   useEffect(() => {
     if (!pmsRaw) return;
+    // `country` is intentionally NOT in this STRUCTURAL set — it's a
+    // legitimate per-PM detail (e.g. SEPA IBAN's 2-letter country code)
+    // that must survive into pm.details so buildPaymentPayload can forward
+    // it to hashPaymentFields. PM_STRUCTURAL below (used by cleanPMData)
+    // DOES include "country" so it never lands in the encrypted payload.
     const STRUCTURAL = new Set([
       "id", "methodId", "type", "name", "label", "currencies", "hashes",
-      "details", "data", "country", "anonymous",
+      "details", "data", "anonymous",
     ]);
     const shortId = (raw) => raw.replace(/-\d+$/, "");
     const sweepFields = (obj) => {
@@ -1297,9 +1302,14 @@ export default function OfferCreation({ initialType="buy" }) {
                               whiteSpace:"nowrap"}}>
                               {methodLabel(pm)}
                             </span>
-                            {/* inline currency tags */}
+                            {/* inline currency tags — for m-pesa PMs we
+                                collapse the (long) currency list down to the
+                                single mpesa_finalCurrency to keep the chip readable. */}
                             <span style={{display:"flex",gap:3,flexShrink:0}}>
-                              {(pm.currencies||[]).map(c=>(
+                              {(pm.details?.isMpesa
+                                ? (pm.details?.mpesa_finalCurrency ? [pm.details.mpesa_finalCurrency] : [])
+                                : (pm.currencies||[])
+                              ).map(c=>(
                                 <span key={c} style={{
                                   padding:"1px 5px",borderRadius:4,fontSize:".6rem",fontWeight:800,
                                   background:sel?"rgba(245,101,34,.15)":"var(--black-5)",
@@ -1816,7 +1826,16 @@ export default function OfferCreation({ initialType="buy" }) {
                     </span>],
                   ["Current effective price", `${currSym(selectedCurrency)}${Math.round(effP).toLocaleString()}/BTC`],
                   ["Methods", offerMethods.join(", ")||"—"],
-                  ["Currencies", offerCurrencies.join(", ")||"—"],
+                  ["Currencies", (() => {
+                    // For m-pesa PMs we collapse the (long) currencies list down
+                    // to the single mpesa_finalCurrency on the review card.
+                    const display = [...new Set(selectedSaved.flatMap((m) =>
+                      m.details?.isMpesa
+                        ? (m.details?.mpesa_finalCurrency ? [m.details.mpesa_finalCurrency] : [])
+                        : (m.currencies || [])
+                    ))];
+                    return display.join(", ") || "—";
+                  })()],
                   ...(!isSell?[["Release to",
                     form.releaseMode==="saved" && savedPayoutAddress?.address
                       ? <AddressWithActions addr={savedPayoutAddress.address} label={savedPayoutAddress.label}/>
