@@ -2,7 +2,7 @@
 // Extracted from peach-trade-execution.jsx to keep the main file navigable.
 // All components are used only by the trade-execution screen.
 // ─────────────────────────────────────────────────────────────────────────────
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Children } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { SatsAmount } from "../../components/BitcoinAmount.jsx";
 import {
@@ -2945,7 +2945,9 @@ export function ActionPanel({
         />
       )}
 
-      <div className="action-panel">
+      {(() => {
+      const actionEntries = (
+      <>
         {/* Buyer waiting for seller to fund escrow */}
         {(status === "fundEscrow" ||
           status === "createEscrow" ||
@@ -3001,50 +3003,6 @@ export function ActionPanel({
               </div>
             </div>
           )}
-
-        {/* Escrow tx broadcast, waiting for confirmations */}
-        {status === "escrowWaitingForConfirmation" && (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 12,
-              padding: "20px 0",
-              textAlign: "center",
-            }}
-          >
-            <div
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: "50%",
-                background: "var(--warning-soft)",
-                border: "2px solid var(--warning)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: "1.4rem",
-              }}
-            >
-              ⛏️
-            </div>
-            <div style={{ fontWeight: 700, fontSize: ".95rem" }}>
-              Escrow confirming
-            </div>
-            <div
-              style={{
-                fontSize: ".83rem",
-                color: "var(--black-65)",
-                lineHeight: 1.6,
-                maxWidth: 280,
-              }}
-            >
-              The escrow funding transaction has been broadcast. Waiting for
-              blockchain confirmations.
-            </div>
-          </div>
-        )}
 
         {/* Buyer: send payment */}
         {status === "paymentRequired" && role === "buyer" && (
@@ -3208,22 +3166,19 @@ export function ActionPanel({
 
         {/* Trade cancelled — final state. Status card now rendered above the
             counterparty card in index.jsx (status, not action). */}
-        {(status === "tradeCanceled" || status === "confirmCancelation") && (
-          <>
-          {scenario.revived &&
-            role === "seller" &&
-            scenario.newOfferId && (
-              <Btn
-                label="Go to new trade"
-                bg="var(--primary-bg)"
-                color="var(--primary)"
-                onClick={() =>
-                  onAction("go_to_new_offer", scenario.newOfferId)
-                }
-              />
-            )}
-          </>
-        )}
+        {(status === "tradeCanceled" || status === "confirmCancelation") &&
+          scenario.revived &&
+          role === "seller" &&
+          scenario.newOfferId && (
+            <Btn
+              label="Go to new trade"
+              bg="var(--primary-bg)"
+              color="var(--primary)"
+              onClick={() =>
+                onAction("go_to_new_offer", scenario.newOfferId)
+              }
+            />
+          )}
 
         {/* Dispute states — DisputeBanner now rendered above the counterparty
             card in index.jsx (status, not action). */}
@@ -3245,7 +3200,40 @@ export function ActionPanel({
               onClick={() => setShowCancelConfirm(true)}
             />
           )}
-      </div>
+      </>
+      );
+      const renderedActions = Children.toArray(actionEntries.props.children).filter(Boolean);
+      const isExempt =
+        status === "rateUser" ||
+        status === "tradeCompleted" ||
+        (role === "seller" &&
+          [
+            "fundEscrow",
+            "createEscrow",
+            "waitingForFunding",
+            "fundingAmountDifferent",
+            "wrongAmountFundedOnContract",
+            "wrongAmountFundedOnContractRefundWaiting",
+          ].includes(status));
+      const showEmptyPlaceholder = !isExempt && renderedActions.length === 0;
+      return (
+        <div className="action-panel">
+          {showEmptyPlaceholder && (
+            <div
+              style={{
+                fontSize: ".85rem",
+                fontWeight: 700,
+                color: "var(--black-65)",
+                padding: "4px 0",
+              }}
+            >
+              No actions required for the moment.
+            </div>
+          )}
+          {actionEntries}
+        </div>
+      );
+      })()}
     </>
   );
 }

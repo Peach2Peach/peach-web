@@ -155,7 +155,12 @@ const CSS = `
   @media(max-width:900px){
     .split-left{width:100%}
     .split-right{display:none}
-    .split-right.mobile-active{display:flex}
+    .split-right.mobile-active{
+      display:flex;
+      flex:1;
+      max-width:none;
+      width:100%;
+    }
     .split-left.mobile-hidden{display:none}
     .mobile-tabs{
       display:flex;gap:0;border-bottom:1px solid var(--black-10);
@@ -174,9 +179,6 @@ const CSS = `
     color:var(--black-65);margin-bottom:10px;display:flex;align-items:center;gap:6px}
   .panel-section-title::before{content:'';display:inline-block;width:3px;height:12px;
     background:var(--primary);border-radius:2px}
-  /* Hide a section title when its only following content is an empty action panel */
-  .panel-section:not(:has(.panel-section-title ~ *:not(.action-panel:empty))) .panel-section-title{
-    display:none}
 
   /* ── Counterparty card ── */
   .counterparty-card{
@@ -2235,6 +2237,63 @@ export default function TradeExecution() {
                       />
                     </div>
                   )}
+
+                {/* Escrow tx broadcast, waiting for confirmations — illustration + explorer link, shown above the partner card for both roles. */}
+                {status === "escrowWaitingForConfirmation" && contract.escrow && (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: 12,
+                      padding: "20px 0 24px",
+                      textAlign: "center",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: "50%",
+                        background: "var(--warning-soft)",
+                        border: "2px solid var(--warning)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "1.4rem",
+                      }}
+                    >
+                      ⛏️
+                    </div>
+                    <div style={{ fontWeight: 700, fontSize: ".95rem" }}>
+                      Escrow confirming
+                    </div>
+                    <div
+                      style={{
+                        fontSize: ".83rem",
+                        color: "var(--black-65)",
+                        lineHeight: 1.6,
+                        maxWidth: 280,
+                      }}
+                    >
+                      The escrow funding transaction has been broadcast. Waiting for
+                      blockchain confirmations.
+                    </div>
+                    <a
+                      href={`${contract.escrow.startsWith("bcrt1") ? "https://electrum-regtest.peachbitcoin.com" : "https://mempool.space"}/address/${contract.escrow}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        fontSize: ".8rem",
+                        fontWeight: 600,
+                        color: "var(--primary)",
+                        textDecoration: "underline",
+                      }}
+                    >
+                      view escrow in explorer
+                    </a>
+                  </div>
+                )}
 
                 {/* Funding-stage two-column wrapper. Outside funding stage the
                     wrappers use display:contents and disappear from layout. */}
