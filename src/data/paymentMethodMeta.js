@@ -398,6 +398,11 @@ export const PM_FIELD_META = {
     placeholder: "Full name",
     validator: validateHolder,
   },
+  mpesa_finalCurrency: {
+    label: "M-Pesa final currency",
+    type: "single-select",
+    options: ["CDF", "KES", "TZS"],
+  },
   // Bank
   iban: {
     label: "IBAN",
@@ -537,6 +542,7 @@ export const TAB_LABEL_OVERRIDES = {
   email: "email",
   mpesa: "m-pesa",
   mpesa_name: "m-pesa",
+  mpesa_phone: "m-pesa",
   mpesaName: "m-pesa",
   iban: "IBAN",
   accountNumber: "account number",

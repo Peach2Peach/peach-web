@@ -68,7 +68,14 @@ export default function PeachPaymentMethods() {
   // User PMs come from the shared useUserPMs hook. We mirror them into local
   // savedMethods so the save/delete handlers below can keep their optimistic
   // updates and post-write `refetch()` reloads server truth for everyone.
-  const { pms: pmsRaw, loading: pmsLoading, error: pmFetchError, refetch } = useUserPMs(auth);
+  const { pms: pmsRaw, loading: pmsLoading, error: pmFetchError, refetch, refetchIfStale } = useUserPMs(auth);
+  // Refresh on page mount, but skip if we've fetched in the last 30s. Covers
+  // the cross-screen case where a PM was added on offer-creation and the
+  // cache hadn't been refreshed by the time the user navigated here, without
+  // hammering the server on quick back-and-forth navigation.
+  useEffect(() => {
+    refetchIfStale(30_000);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setSavedLoading(pmsLoading); }, [pmsLoading]);
   useEffect(() => { setPmError(!!pmFetchError); }, [pmFetchError]);
   useEffect(() => {
@@ -235,9 +242,16 @@ export default function PeachPaymentMethods() {
                         )}
                         <div className="pm-card-detail">{methodLabel(pm)}</div>
                         <div className="pm-card-currencies">
-                          {pm.currencies.map(c => (
-                            <span key={c} className="pm-card-curr-tag">{c}</span>
-                          ))}
+                          {pm.details?.isMpesa
+                            ? (pm.details?.mpesa_finalCurrency && (
+                                <span className="pm-card-curr-tag">
+                                  {pm.details.mpesa_finalCurrency}
+                                </span>
+                              ))
+                            : pm.currencies.map(c => (
+                                <span key={c} className="pm-card-curr-tag">{c}</span>
+                              ))
+                          }
                         </div>
                       </div>
                       <div className="pm-card-actions">

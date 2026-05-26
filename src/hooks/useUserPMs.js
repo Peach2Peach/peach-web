@@ -8,6 +8,7 @@ import { extractPMsFromProfile, isApiError } from "../utils/pgp";
 let cache = null;        // { pms } once loaded
 let inflight = null;     // Promise<pms> | null
 let lastError = null;    // Error from most recent failed load, surfaced to consumers
+let lastLoadedAt = 0;    // ms timestamp of last successful load — used by refetchIfStale()
 const subscribers = new Set();
 
 function notify() {
@@ -18,6 +19,7 @@ export function invalidateUserPMs() {
   cache = null;
   inflight = null;
   lastError = null;
+  lastLoadedAt = 0;
   notify();
 }
 
@@ -54,6 +56,7 @@ function startLoad(auth) {
     .then((pms) => {
       cache = { pms };
       lastError = null;
+      lastLoadedAt = Date.now();
       inflight = null;
       notify();
       return pms;
@@ -91,11 +94,22 @@ export function useUserPMs(auth) {
     return inflight ?? Promise.resolve(null);
   }, [auth]);
 
+  // Refetch only if the cached PMs are older than `maxAgeMs`. Useful for
+  // page-mount triggers where we want to keep the data fresh but avoid
+  // hammering the server on every navigation.
+  const refetchIfStale = useCallback((maxAgeMs = 30_000) => {
+    if (!auth?.token || !auth?.pgpPrivKey) return Promise.resolve(null);
+    if (inflight) return inflight;
+    if (Date.now() - lastLoadedAt < maxAgeMs) return Promise.resolve(cache?.pms ?? null);
+    return refetch();
+  }, [auth, refetch]);
+
   return {
     pms: cache?.pms ?? null,
     loading: !!inflight,
     error: lastError,
     ready: !!auth?.token && !!auth?.pgpPrivKey,
     refetch,
+    refetchIfStale,
   };
 }

@@ -242,6 +242,7 @@ export async function hashPaymentFields(methodType, pmData, country) {
     }
     const result = { hashes };
     if (country) result.country = country;
+    if (pmData.isMpesa === true) result.isMpesa = true;
     return { [methodType]: result };
   } catch (err) {
     console.warn("[PGP] hashPaymentFields failed:", err.message);

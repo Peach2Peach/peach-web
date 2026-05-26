@@ -27,6 +27,7 @@ import RepeatTraderBadge from "./RepeatTraderBadge.jsx";
 import RequestedOfferPopup from "./RequestedOfferPopup.jsx";
 import { BadgesInfoPopup } from "./InfoPopup.jsx";
 import { methodDisplayName } from "../data/paymentMethodMeta.js";
+import { methodLabel } from "./AddPMFlow.jsx";
 
 const CURRENCY_SYMS = { EUR: "€", USD: "$", GBP: "£", CHF: "CHF " };
 const currSym = (c) => CURRENCY_SYMS[c] ?? `${c} `;
@@ -35,9 +36,15 @@ const currSym = (c) => CURRENCY_SYMS[c] ?? `${c} `;
 // builds the {id, type, currencies, details} shape the popup expects.
 function normalizeUserPMs(pmsRaw) {
   if (!pmsRaw) return [];
+  // NOTE: `country` is intentionally NOT in this STRUCTURAL set — it's a
+  // legitimate per-PM detail (e.g. SEPA IBAN's 2-letter country code) that
+  // must survive into pm.details so executeRequestTrade can forward it to
+  // hashPaymentFields. The cleanData STRUCTURAL sets below DO include
+  // "country" — that's correct, since country travels in the plaintext
+  // hash bucket and must not be duplicated into the encrypted payload.
   const STRUCTURAL = new Set([
     "id", "methodId", "type", "name", "label", "currencies", "hashes",
-    "details", "data", "country", "anonymous",
+    "details", "data", "anonymous",
   ]);
   const shortId = (raw) => raw.replace(/-\d+$/, "");
   const sweepFields = (obj) => {
@@ -53,6 +60,7 @@ function normalizeUserPMs(pmsRaw) {
     return pmsRaw.map(pm => ({
       id: pm.id,
       type: shortId(pm.type ?? pm.id),
+      label: pm.label || "",
       currencies: pm.currencies ?? [],
       details: sweepFields(pm),
     }));
@@ -61,6 +69,7 @@ function normalizeUserPMs(pmsRaw) {
     return Object.entries(pmsRaw).map(([key, val]) => ({
       id: val?.id || key,
       type: shortId(key),
+      label: val?.label || "",
       currencies: val?.currencies ?? [],
       details: sweepFields(val || {}),
     }));
@@ -679,7 +688,17 @@ export default function OfferDetailPopup({
               <span className="popup-label">Payment methods</span>
               <span className="popup-value">
                 <span style={{display:"flex",gap:4,flexWrap:"wrap",justifyContent:"flex-end"}}>
-                  {offer.methods.map(m => <span key={m} className="method-chip">{methodDisplayName(m)}</span>)}
+                  {offer.methods.map(m => {
+                    // Country code comes from the seller's hash bucket
+                    // (auto-extracted from IBAN's first 2 chars on save). For
+                    // SEPA in particular this distinguishes SEPA-NL from SEPA-DE.
+                    const country = offerDetails?.details?.paymentData?.[m]?.country;
+                    return (
+                      <span key={m} className="method-chip">
+                        {methodDisplayName(m)}{country ? ` (${country})` : ""}
+                      </span>
+                    );
+                  })}
                 </span>
               </span>
             </div>
@@ -769,11 +788,11 @@ export default function OfferDetailPopup({
                 <div className="popup-pm-list">
                   {visiblePMs.map(pm => {
                     const sel = selectedPM === pm.id;
-                    const detailStr = pm.type === "SEPA"
-                      ? `${pm.details.beneficiary} · ${pm.details.iban?.slice(0,8)}…`
-                      : pm.type === "Revolut"
-                        ? pm.details.userName
-                        : pm.details.email || pm.details.userName || "—";
+                    // Use the shared methodLabel helper so SEPA shows a masked
+                    // IBAN preview, Revolut shows the username, m-pesa shows
+                    // the masked phone, etc. — same precedence as the PM cards
+                    // on the Payment Methods screen.
+                    const detailStr = methodLabel(pm);
                     const validChips = pm.currencies.filter(c => pmWorksForCurrency(offer, pm, c));
                     return (
                       <button key={pm.id}
@@ -792,6 +811,12 @@ export default function OfferDetailPopup({
                         </div>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{fontWeight:700,fontSize:".82rem"}}>{pm.type}</div>
+                          {pm.label && pm.label.trim().toLowerCase() !== (pm.type || "").trim().toLowerCase() && (
+                            <div style={{fontSize:".72rem",fontWeight:600,color:"var(--black-80, var(--black))",
+                              overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                              {pm.label}
+                            </div>
+                          )}
                           <div style={{fontSize:".72rem",color:"var(--black-65)",
                             overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                             {detailStr}
@@ -830,6 +855,32 @@ export default function OfferDetailPopup({
                   </div>
                 </>
               )}
+
+              {/* M-Pesa notice — sell offer side: seller marked their PM as
+                  isMpesa, so the buyer must use the m-pesa flow inside their
+                  own Wise / Revolut to pay. */}
+              {(() => {
+                if (offer.type !== "ask" || !selectedPM) return null;
+                const pm = userPMs.find(p => p.id === selectedPM);
+                if (!pm) return null;
+                const sellerIsMpesa = offerDetails?.details?.paymentData?.[pm.type]?.isMpesa === true;
+                if (!sellerIsMpesa) return null;
+                return (
+                  <div style={{
+                    marginTop: 12,
+                    padding: "10px 12px",
+                    background: "var(--primary-mild)",
+                    borderRadius: 10,
+                    fontSize: ".78rem",
+                    fontWeight: 600,
+                    color: "var(--black-80, var(--black))",
+                    lineHeight: 1.45,
+                  }}>
+                    Attention — you will need to pay using the <strong>M-Pesa alternative</strong> on
+                    your {methodDisplayName(pm.type)} app to settle this trade.
+                  </div>
+                );
+              })()}
             </>
           )}
 

@@ -825,7 +825,10 @@ export default function PeachMarket() {
                       <td><PriceCell offer={offer} btcPrice={btcPrice} currency={selectedCurrency} isSellTab={isSellTab}/></td>
                       <td>
                         <div className="methods">
-                          <Chips items={offer.methods.map(methodDisplayName)} className="method-chip"/>
+                          <Chips items={offer.methods.map((m) => {
+                            const c = offer._raw?.paymentData?.[m]?.country;
+                            return `${methodDisplayName(m)}${c ? ` (${c})` : ""}`;
+                          })} className="method-chip"/>
                         </div>
                       </td>
                       <td>
@@ -969,7 +972,10 @@ export default function PeachMarket() {
                 })()}
                 {/* Row 4: tags */}
                 <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                  <Chips items={offer.methods.map(methodDisplayName)} className="method-chip"/>
+                  <Chips items={offer.methods.map((m) => {
+                    const c = offer._raw?.paymentData?.[m]?.country;
+                    return `${methodDisplayName(m)}${c ? ` (${c})` : ""}`;
+                  })} className="method-chip"/>
                   <Chips items={offer.currencies} className="currency-chip"/>
                 </div>
               </div>

@@ -13,6 +13,7 @@ import { Badge, satsToFiat } from "./components.jsx";
 import PeachRating from "../../components/PeachRating.jsx";
 import { toPeaches } from "../../utils/format.js";
 import { STATUS_CONFIG } from "../../data/statusConfig.js";
+import { methodDisplayName } from "../../data/paymentMethodMeta.js";
 import {
   decryptPGPMessage,
   decryptSymmetric,
@@ -187,6 +188,11 @@ export function transformTradeRequest(tr, offer, userProfile) {
       // v069-specific: counterparty already sent their encrypted payment data
       paymentDataEncrypted: tr.paymentDataEncrypted,
       paymentDataSignature: tr.paymentDataSignature,
+      // Plaintext hash bucket the requester emitted alongside the encrypted
+      // PM payload — carries `country` / `isMpesa` markers visible pre-decrypt.
+      // Backend may echo it under either field name, so keep both.
+      paymentDataHashed: tr.paymentDataHashed,
+      paymentData: tr.paymentData,
       isTradeRequest: true, // flag to use v069 accept endpoint
       tradeRequestUserId: peachId,
     },
@@ -254,6 +260,54 @@ export default function MatchesPopup({
   // ── Unread dot state ──
   // Map: offerId → { count, latestMessageId }
   const [unreadMatchCounts, setUnreadMatchCounts] = useState(new Map());
+
+  // Decrypted PM flags per incoming trade request (offerId → { isMpesa }).
+  // We decrypt the requester's PM blob on-demand so the buy-offer-side M-Pesa
+  // notice can render even when the backend doesn't echo the plaintext hash
+  // bucket back in the trade-request list.
+  const [tradeRequestPMFlags, setTradeRequestPMFlags] = useState({});
+  useEffect(() => {
+    if (!auth?.pgpPrivKey) return;
+    let cancelled = false;
+    const toLoad = matches.filter(
+      (m) =>
+        m._raw?.isTradeRequest &&
+        m._raw?.paymentDataEncrypted &&
+        m._raw?.symmetricKeyEncrypted &&
+        tradeRequestPMFlags[m.offerId] === undefined,
+    );
+    if (toLoad.length === 0) return;
+    (async () => {
+      for (const m of toLoad) {
+        try {
+          const symKey = await decryptPGPMessage(
+            m._raw.symmetricKeyEncrypted,
+            auth.pgpPrivKey,
+          );
+          if (!symKey || cancelled) continue;
+          const pmJson = await decryptSymmetric(
+            m._raw.paymentDataEncrypted,
+            symKey.trim(),
+          );
+          if (!pmJson || cancelled) continue;
+          const data = JSON.parse(pmJson);
+          if (cancelled) return;
+          setTradeRequestPMFlags((prev) =>
+            prev[m.offerId] !== undefined
+              ? prev
+              : { ...prev, [m.offerId]: { isMpesa: data?.isMpesa === true } },
+          );
+        } catch {
+          if (!cancelled) {
+            setTradeRequestPMFlags((prev) =>
+              prev[m.offerId] !== undefined ? prev : { ...prev, [m.offerId]: { isMpesa: false } },
+            );
+          }
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [matches, auth?.pgpPrivKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Check for unread messages on each match — runs on matches change AND on a 16s interval.
   // Uses local lastReadMessageId (localStorage) instead of server `seen` field.
@@ -832,11 +886,16 @@ export default function MatchesPopup({
               <div className="match-detail-row">
                 <span className="match-detail-label">Payment</span>
                 <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                  {m.methods.map((pm) => (
-                    <span key={pm} className="tag tag-method">
-                      {pm}
-                    </span>
-                  ))}
+                  {m.methods.map((pm) => {
+                    const country =
+                      m._raw?.paymentDataHashed?.[pm]?.country ||
+                      m._raw?.paymentData?.[pm]?.country;
+                    return (
+                      <span key={pm} className="tag tag-method">
+                        {methodDisplayName(pm)}{country ? ` (${country})` : ""}
+                      </span>
+                    );
+                  })}
                   {m.currencies.map((c) => (
                     <span key={c} className="tag tag-currency">
                       {c}
@@ -867,6 +926,36 @@ export default function MatchesPopup({
                 {matchError}
               </div>
             )}
+            {/* M-Pesa notice — buy offer side: incoming trade request from a
+                seller whose payment method was created with the M-Pesa
+                alternative. The buyer must pay through the m-pesa flow inside
+                their own Wise / Revolut. */}
+            {(() => {
+              if (!m._raw?.isTradeRequest) return null;
+              if (trade.direction !== "buy") return null;
+              const pmType = m.methods?.[0];
+              if (!pmType) return null;
+              const isMpesa =
+                m._raw?.paymentDataHashed?.[pmType]?.isMpesa === true ||
+                m._raw?.paymentData?.[pmType]?.isMpesa === true ||
+                tradeRequestPMFlags[m.offerId]?.isMpesa === true;
+              if (!isMpesa) return null;
+              return (
+                <div style={{
+                  marginTop: 12,
+                  padding: "10px 12px",
+                  background: "var(--primary-mild)",
+                  borderRadius: 10,
+                  fontSize: ".78rem",
+                  fontWeight: 600,
+                  color: "var(--black-80, var(--black))",
+                  lineHeight: 1.45,
+                }}>
+                  Attention — this trader expects you to send the money using the
+                  {" "}<strong>M-Pesa alternative</strong> on your {methodDisplayName(pmType)} app.
+                </div>
+              );
+            })()}
             {/* Actions */}
             <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
               {m._raw?.isTradeRequest ? (
@@ -1404,11 +1493,16 @@ export default function MatchesPopup({
                           marginTop: 4,
                         }}
                       >
-                        {m.methods.map((pm) => (
-                          <span key={pm} className="tag tag-method">
-                            {pm}
-                          </span>
-                        ))}
+                        {m.methods.map((pm) => {
+                          const country =
+                            m._raw?.paymentDataHashed?.[pm]?.country ||
+                            m._raw?.paymentData?.[pm]?.country;
+                          return (
+                            <span key={pm} className="tag tag-method">
+                              {methodDisplayName(pm)}{country ? ` (${country})` : ""}
+                            </span>
+                          );
+                        })}
                         {m.currencies.map((c) => (
                           <span key={c} className="tag tag-currency">
                             {c}
@@ -1416,6 +1510,35 @@ export default function MatchesPopup({
                         ))}
                       </div>
                     )}
+                    {/* M-Pesa notice — buy offer side: the requester used the
+                        m-pesa alternative of their PM, so the buyer must pay
+                        via the m-pesa flow inside their own Wise / Revolut. */}
+                    {(() => {
+                      if (!m._raw?.isTradeRequest) return null;
+                      if (trade.direction !== "buy") return null;
+                      const pmType = m.methods?.[0];
+                      if (!pmType) return null;
+                      const isMpesa =
+                        m._raw?.paymentDataHashed?.[pmType]?.isMpesa === true ||
+                        m._raw?.paymentData?.[pmType]?.isMpesa === true ||
+                        tradeRequestPMFlags[m.offerId]?.isMpesa === true;
+                      if (!isMpesa) return null;
+                      return (
+                        <div style={{
+                          marginTop: 8,
+                          padding: "8px 10px",
+                          background: "var(--primary-mild)",
+                          borderRadius: 8,
+                          fontSize: ".74rem",
+                          fontWeight: 600,
+                          color: "var(--black-80, var(--black))",
+                          lineHeight: 1.4,
+                        }}>
+                          Attention — this trader expects you to send the money using the
+                          {" "}<strong>M-Pesa alternative</strong> on your {methodDisplayName(pmType)} app.
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
                 {/* Actions */}
