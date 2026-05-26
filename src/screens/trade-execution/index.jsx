@@ -23,6 +23,7 @@ import {
   toPeaches,
 } from "../../utils/format.js";
 import { deriveEscrowPubKey, deriveReturnAddress } from "../../utils/escrow.js";
+import { getEsploraBaseUrl } from "../../utils/esplora.js";
 import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 import { extractCustomRefundAddressFromProfile } from "../../utils/customRefundAddressSync.js";
 import { fetchSavedCustomPayoutAddress } from "../../utils/customPayoutAddressSync.js";
@@ -47,6 +48,7 @@ import {
   RatingPanel,
   TradeCompleteModal,
   BatchInfoModal,
+  TradeBreakdownPopup,
   ChatPanel,
   DisputeFlow,
   BuyerGroupHugDisplay,
@@ -78,9 +80,9 @@ const CSS = `
     position:relative;flex:1;
   }
   .h-step-line{
-    position:absolute;top:8px;right:50%;
-    width:100%;height:2px;
-    transform:translateX(-50%);
+    position:absolute;top:8px;
+    left:-50%;right:50%;
+    height:2px;
     z-index:0;
   }
   .h-step-dot{
@@ -313,6 +315,32 @@ const CSS = `
   .tc-thanks{padding:30px 0;animation:celebrationPop .4s cubic-bezier(.34,1.56,.64,1);font-weight:700;color:var(--success)}
   .tc-checkmark{font-size:2.6rem;color:var(--success);font-weight:800;margin-bottom:6px}
 
+  /* ── Trade breakdown popup ── */
+  /* Card shell + rows reuse the BatchInfoModal vocabulary (.bi-modal-card,
+     .bi-row*). Only the few popup-specific bits live here. */
+  .tb-headline{
+    font-size:1.1rem;font-weight:800;color:var(--black);
+    margin-bottom:6px;
+  }
+  .tb-status{
+    margin-top:12px;font-size:.78rem;color:var(--black-65);
+    text-align:center;font-style:italic;
+  }
+  .tb-explorer{
+    display:inline-block;margin-top:14px;
+    color:var(--primary-dark);font-weight:700;font-size:.82rem;
+    text-decoration:underline;
+  }
+  .tb-explorer:hover{opacity:.85}
+
+  /* Inline link to open trade breakdown */
+  .tb-link-inline{
+    margin-top:10px;background:transparent;border:0;padding:0;
+    color:var(--brand);font-weight:700;font-size:.85rem;
+    text-decoration:underline;cursor:pointer;font-family:inherit;
+  }
+  .tb-link-inline:hover{opacity:.85}
+
   /* ── Batch info (GroupHug) modal ── */
   .bi-modal-card{
     position:relative;background:var(--surface);
@@ -513,6 +541,7 @@ export default function TradeExecution() {
   const [celebrationDismissed, setCelebrationDismissed] = useState(null);
   const [payoutCelebOpen, setPayoutCelebOpen] = useState(false);
   const [batchInfoOpen, setBatchInfoOpen] = useState(false);
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
 
   // Load the buyer's saved custom payout address from /v069/selfUser once
   // on mount (canonical source: PGP-encrypted blob, same as Settings reads).
@@ -821,6 +850,25 @@ export default function TradeExecution() {
             );
           }
         }
+        // Always sync release-tx fields — the buyer's contract response
+        // gains `releaseTransaction` / `releaseTxId` once the seller has
+        // signed and broadcast; that often arrives without a status change.
+        if (
+          (c.releaseTransaction ?? null) !==
+            (liveContract.releaseTransaction ?? null) ||
+          (c.releaseTxId ?? null) !== (liveContract.releaseTxId ?? null)
+        ) {
+          setLiveContract((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  releaseTransaction:
+                    c.releaseTransaction ?? prev.releaseTransaction ?? null,
+                  releaseTxId: c.releaseTxId ?? prev.releaseTxId ?? null,
+                }
+              : prev,
+          );
+        }
         if (!newStatus || newStatus === liveContract.tradeStatus) return;
         setLiveContract((prev) =>
           prev
@@ -1062,6 +1110,8 @@ export default function TradeExecution() {
             };
           })(),
           releaseAddress: c.releaseAddress ?? null,
+          releaseTransaction: c.releaseTransaction ?? null,
+          releaseTxId: c.releaseTxId ?? null,
           paymentDetails: null, // will be populated below after decryption
           paymentDetailsError: false,
           ownPaymentDetails: null, // user's own PM, populated below after decryption
@@ -2019,6 +2069,15 @@ export default function TradeExecution() {
                           ? "Your sats are on their way"
                           : "You've successfully sold Bitcoin"}
                       </div>
+                      {role === "buyer" && (
+                        <button
+                          type="button"
+                          className="tb-link-inline"
+                          onClick={() => setBreakdownOpen(true)}
+                        >
+                          trade breakdown
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
@@ -3136,6 +3195,19 @@ export default function TradeExecution() {
           navigate("/settings", { state: { openSection: "tx-batching" } });
         }}
       />
+
+      {/* ── TRADE BREAKDOWN POPUP (buyer only) ── */}
+      {breakdownOpen && role === "buyer" && contract && (
+        <TradeBreakdownPopup
+          inputAmount={contract.amount ?? 0}
+          releaseTransaction={liveContract?.releaseTransaction}
+          releaseAddress={liveContract?.releaseAddress}
+          releaseTxId={liveContract?.releaseTxId}
+          isRegtest={!!contract.escrow?.startsWith("bcrt1")}
+          esploraBaseUrl={auth?.xpub ? getEsploraBaseUrl(auth.xpub) : null}
+          onClose={() => setBreakdownOpen(false)}
+        />
+      )}
 
       {/* ── PAYOUT PENDING CELEBRATION (auto-dismiss after 2s) ── */}
       {payoutCelebOpen && (

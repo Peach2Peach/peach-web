@@ -145,4 +145,18 @@ export async function getTipHeight(baseUrl, opts = {}) {
   return h;
 }
 
+// GET /tx/{txid}/hex → raw hex string as text/plain.
+// Used by the trade-breakdown popup to derive Peach-fee / network-fee /
+// you-get from the broadcast release tx when the contract response doesn't
+// carry `releaseTransaction` yet.
+export async function getTransactionHex(baseUrl, txid, opts = {}) {
+  const res = await fetch(`${baseUrl}/tx/${txid}/hex`, { signal: opts.signal });
+  if (!res.ok) {
+    throw new EsploraError(`tx/${txid}/hex HTTP ${res.status}`, {
+      status: res.status,
+    });
+  }
+  return (await res.text()).trim();
+}
+
 export { EsploraError };

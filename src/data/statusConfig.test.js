@@ -17,8 +17,8 @@ describe("STATUS_CONFIG", () => {
     for (const key of keys) {
       const entry = STATUS_CONFIG[key];
       expect(entry.label, `${key}.label`).toBeTruthy();
-      expect(entry.bg, `${key}.bg`).toMatch(/^#/);
-      expect(entry.color, `${key}.color`).toMatch(/^#/);
+      expect(entry.bg, `${key}.bg`).toMatch(/^(#|var\()/);
+      expect(entry.color, `${key}.color`).toMatch(/^(#|var\()/);
       expect(typeof entry.action, `${key}.action`).toBe("boolean");
     }
   });

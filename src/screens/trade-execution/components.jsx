@@ -10,6 +10,8 @@ import {
   resolveSystemMessage,
 } from "../../data/chatSystemMessages.js";
 import { relTime, formatTradeId } from "../../utils/format.js";
+import { getTradeBreakdown } from "../../utils/tradeBreakdown.js";
+import { getTransactionHex } from "../../utils/esplora.js";
 import {
   getFieldMeta,
   methodDisplayName,
@@ -447,18 +449,25 @@ const STEPS_BY_ORIGIN = {
 
 export function HorizontalStepper({ status, statusWithoutDispute, originOfferType = "buy" }) {
   const stepMap = {
-    createEscrow: 0,
-    fundEscrow: 0,
-    waitingForFunding: 0,
-    escrowWaitingForConfirmation: 0,
-    fundingAmountDifferent: 0,
-    paymentRequired: 1,
-    paymentTooLate: 1,
-    confirmPaymentRequired: 2,
-    releaseEscrow: 2,
+    // Phase 1: Escrow funding in progress (Accepted milestone reached)
+    createEscrow: 1,
+    fundEscrow: 1,
+    waitingForFunding: 1,
+    escrowWaitingForConfirmation: 1,
+    fundingAmountDifferent: 1,
+    wrongAmountFundedOnContract: 1,
+    wrongAmountFundedOnContractRefundWaiting: 1,
+    fundingExpired: 1,
+    // Phase 2: Buyer is paying (Escrow Funded milestone reached)
+    paymentRequired: 2,
+    paymentTooLate: 2,
+    // Phase 3: Awaiting seller confirmation / final settlement
+    confirmPaymentRequired: 3,
+    releaseEscrow: 3,
     payoutPending: 3,
     rateUser: 3,
     tradeCompleted: 3,
+    // Dispute / cancellation — abort states, unchanged from prior behavior
     dispute: 2,
     disputeWithoutEscrowFunded: 0,
     confirmCancelation: 2,
@@ -467,9 +476,6 @@ export function HorizontalStepper({ status, statusWithoutDispute, originOfferTyp
     refundAddressRequired: 2,
     refundOrReviveRequired: 2,
     refundTxSignatureRequired: 2,
-    wrongAmountFundedOnContract: 0,
-    wrongAmountFundedOnContractRefundWaiting: 0,
-    fundingExpired: 0,
   };
   const isDispute =
     status === "dispute" || status === "disputeWithoutEscrowFunded";
@@ -490,8 +496,16 @@ export function HorizontalStepper({ status, statusWithoutDispute, originOfferTyp
       {steps.map((s, i) => {
         const isFinalDone =
           i === steps.length - 1 && status === "tradeCompleted";
+        // Last step is "active" but the trade isn't actually finished yet
+        // (e.g. confirmPaymentRequired) — render it grey, not orange.
+        const isFinalPending =
+          i === steps.length - 1 &&
+          i === activeStep &&
+          !isFinalDone &&
+          !isAborted;
         const isDone = i < activeStep || isFinalDone;
-        const isActive = i === activeStep && !isAborted && !isFinalDone;
+        const isActive =
+          i === activeStep && !isAborted && !isFinalDone && !isFinalPending;
         const isAbortedStep = isAborted && i === activeStep;
         const dotColor = isDone
           ? "var(--success)"
@@ -508,28 +522,15 @@ export function HorizontalStepper({ status, statusWithoutDispute, originOfferTyp
               ? "var(--error)"
               : "var(--black-25)";
         const lineColor =
-          i <= activeStep && !isAborted ? "var(--success)" : "var(--black-10)";
+          i <= activeStep && !isAborted && !isFinalPending
+            ? "var(--success)"
+            : "var(--black-10)";
 
         return (
           <div key={s.id} className="h-step">
             {/* Left connector */}
             {i > 0 && (
               <div className="h-step-line" style={{ background: lineColor }} />
-            )}
-            {/* Tail to dot center on final-done step (connectors only reach the
-                step's left edge; without this, the line stops half a step short
-                of the Completed dot when trade is fully finalized). */}
-            {isFinalDone && (
-              <div
-                className="h-step-line"
-                style={{
-                  background: "var(--success)",
-                  right: "auto",
-                  left: 0,
-                  width: "50%",
-                  transform: "none",
-                }}
-              />
             )}
             {/* Dot */}
             <div
@@ -3524,6 +3525,138 @@ export function BatchInfoModal({
               </button>
             )}
           </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── TRADE BREAKDOWN POPUP ────────────────────────────────────────────────────
+// Shown to the buyer after escrow release. Reuses the BatchInfoModal visual
+// vocabulary (.bi-modal-card, .bi-row*, .tc-close) so it matches the sibling
+// popup in this screen. Parses the broadcast release transaction client-side
+// to derive Peach fee, network fee, and the actual amount received; falls
+// back to fetching the raw tx hex via Esplora when the contract response
+// doesn't carry `releaseTransaction` yet.
+export function TradeBreakdownPopup({
+  inputAmount,
+  releaseTransaction,
+  releaseAddress,
+  releaseTxId,
+  isRegtest,
+  esploraBaseUrl,
+  onClose,
+}) {
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const [fetchedHex, setFetchedHex] = useState(null);
+  const [fetchState, setFetchState] = useState(
+    releaseTransaction ? "ok" : "idle",
+  );
+
+  useEffect(() => {
+    if (releaseTransaction || !releaseTxId || !esploraBaseUrl) return;
+    let cancelled = false;
+    setFetchState("loading");
+    getTransactionHex(esploraBaseUrl, releaseTxId)
+      .then((hex) => {
+        if (cancelled) return;
+        setFetchedHex(hex);
+        setFetchState("ok");
+      })
+      .catch(() => {
+        if (!cancelled) setFetchState("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [releaseTransaction, releaseTxId, esploraBaseUrl]);
+
+  const txHex = releaseTransaction || fetchedHex;
+  const breakdown = getTradeBreakdown({
+    releaseTransaction: txHex,
+    releaseAddress,
+    inputAmount,
+    isRegtest,
+  });
+
+  const tradeAmount = breakdown.totalAmount - breakdown.peachFee;
+  const explorerBase = isRegtest
+    ? "https://electrum-regtest.peachbitcoin.com"
+    : "https://mempool.space";
+  const explorerUrl = releaseTxId ? `${explorerBase}/tx/${releaseTxId}` : null;
+
+  const statusText =
+    !breakdown.ok && fetchState === "loading"
+      ? "loading breakdown…"
+      : !breakdown.ok && fetchState === "error"
+        ? "could not load breakdown"
+        : !breakdown.ok
+          ? "transaction not yet available"
+          : null;
+
+  return (
+    <div className="tc-modal-backdrop" onClick={onClose}>
+      <div className="bi-modal-card" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          className="tc-close"
+          onClick={onClose}
+          aria-label="Close"
+        >
+          ✕
+        </button>
+
+        <div className="tb-headline">trade breakdown</div>
+
+        <div className="bi-row">
+          <div className="bi-row-label">seller amount</div>
+          <div className="bi-row-value">
+            <SatsAmount sats={breakdown.totalAmount} size="sm" />
+          </div>
+        </div>
+        <div className="bi-row">
+          <div className="bi-row-label">Peach fees</div>
+          <div className="bi-row-value">
+            <SatsAmount sats={breakdown.peachFee} size="sm" />
+          </div>
+        </div>
+        <div className="bi-row">
+          <div className="bi-row-label">trade amount</div>
+          <div className="bi-row-value">
+            <SatsAmount sats={tradeAmount} size="sm" />
+          </div>
+        </div>
+        <div className="bi-row">
+          <div className="bi-row-label">network fees</div>
+          <div className="bi-row-value">
+            <SatsAmount sats={breakdown.networkFee} size="sm" />
+          </div>
+        </div>
+        <div className="bi-row">
+          <div className="bi-row-label">you get</div>
+          <div className="bi-row-value">
+            <SatsAmount sats={breakdown.amountReceived} size="sm" />
+          </div>
+        </div>
+
+        {statusText && <div className="tb-status">{statusText}</div>}
+
+        {explorerUrl && (
+          <a
+            className="tb-explorer"
+            href={explorerUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            view in explorer ↗
+          </a>
         )}
       </div>
     </div>
