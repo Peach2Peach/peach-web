@@ -195,6 +195,9 @@ export function AddPMFlow({ methods, meetupEvents = [], onSave, onClose, editDat
   const [selRegion, setSelRegion] = useState("Europe");
   // The meetup event chosen on the cash flow's method step (step 3).
   const [pickedEvent, setPickedEvent] = useState(null);
+  // Free-text search shown on the category step; matches across all methods
+  // for the selected currency and skips the category/country drill-down.
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Per-section active-alternative index for methods whose fields.mandatory has
   // tabbed sections (e.g. Revolut: username | phone | m-pesa, or Bulgaria NT:
@@ -293,6 +296,86 @@ export function AddPMFlow({ methods, meetupEvents = [], onSave, onClose, editDat
       .sort((a, b) => a[1].name.localeCompare(b[1].name));
   })();
 
+  // ── Step-1 search results ───────────────────────────────────────────────
+  // Flat list across all categories for the active currency. Matches are
+  // substring + case-insensitive against the method name (plus country/city
+  // for the national + meetup variants). National methods are expanded so a
+  // method available in N countries yields N result rows. Meetups produce
+  // one row per live event for selCurrency. Capped at 30 to keep the
+  // dropdown manageable.
+  const SEARCH_RESULT_CAP = 30;
+  const searchResults = (() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q || step !== 1 || !selCurrency) return [];
+
+    const standard = [];
+    const national = [];
+    const meetups = [];
+
+    // 1. Standard methods (not national, not cash)
+    for (const [id, m] of Object.entries(methods)) {
+      if (m.category === "cash" || m.category === "national") continue;
+      if (!m.currencies.includes(selCurrency)) continue;
+      if (!m.name.toLowerCase().includes(q)) continue;
+      standard.push({
+        key: `m:${id}`,
+        label: m.name,
+        sublabel: CATEGORY_META[m.category]?.label || m.category,
+        logoSrc: getPaymentLogo(id),
+        onPick: () => pickSearchMethod(id, ""),
+      });
+    }
+
+    // 2. National-option methods, one row per (method, country) variant
+    const ng = nationalGroupFor(selCurrency);
+    if (ng && NATIONAL_OPTIONS[ng]) {
+      for (const [code, methodIds] of Object.entries(NATIONAL_OPTIONS[ng])) {
+        const cName = COUNTRY_NAMES[code] || code;
+        for (const id of methodIds) {
+          const m = methods[id];
+          if (!m) continue;
+          if (!m.currencies.includes(selCurrency)) continue;
+          const nameMatch = m.name.toLowerCase().includes(q);
+          const countryMatch = cName.toLowerCase().includes(q);
+          if (!nameMatch && !countryMatch) continue;
+          national.push({
+            key: `n:${id}:${code}`,
+            label: `${m.name} — ${cName}`,
+            sublabel: CATEGORY_META.national.label,
+            logoSrc: getPaymentLogo(id),
+            onPick: () => pickSearchMethod(id, code),
+          });
+        }
+      }
+    }
+
+    // 3. Cash meetup events for the active currency
+    for (const e of meetupEvents || []) {
+      if (!e || !e.live) continue;
+      if (!Array.isArray(e.currencies) || !e.currencies.includes(selCurrency)) continue;
+      if (!methods[`cash.${e.id}`]) continue;
+      const label = e.longName || e.shortName || "";
+      const city = e.city || "";
+      const cName = countryName(e.country);
+      const hay = `${label} ${city} ${cName}`.toLowerCase();
+      if (!hay.includes(q)) continue;
+      meetups.push({
+        key: `c:${e.id}`,
+        label,
+        sublabel: city ? `${city}, ${cName}` : cName,
+        logoSrc: e.logoUrl || null,
+        flagCode: e.logoUrl ? null : e.country,
+        onPick: () => pickSearchMeetup(e),
+      });
+    }
+
+    standard.sort((a, b) => a.label.localeCompare(b.label));
+    national.sort((a, b) => a.label.localeCompare(b.label));
+    meetups.sort((a, b) => a.label.localeCompare(b.label));
+
+    return [...standard, ...national, ...meetups].slice(0, SEARCH_RESULT_CAP);
+  })();
+
   const selMethod = methods[selMethodId] || null;
   const methodCurrencies = selMethod?.currencies || [];
 
@@ -327,6 +410,7 @@ export function AddPMFlow({ methods, meetupEvents = [], onSave, onClose, editDat
     setDetails({});
     setSelCurrencies([]);
     setErrors({});
+    setSearchQuery("");
     setStep(1);
   }
 
@@ -371,6 +455,33 @@ export function AddPMFlow({ methods, meetupEvents = [], onSave, onClose, editDat
       setSelCurrencies(m.currencies.includes(selCurrency) ? [selCurrency] : [m.currencies[0]]);
     }
     setStep(4);
+  }
+
+  // Jump from a search-result row straight to the details form. National
+  // variants pre-set the country so the (skipped) country step is consistent
+  // if the user navigates back. Meetup rows route through handleSelectMeetup.
+  function pickSearchMethod(id, countryCode) {
+    const m = methods[id];
+    if (!m) return;
+    setSelCategory(m.category);
+    setSelCountry(countryCode || "");
+    setSelMethodId(id);
+    setDetails({});
+    setSelCurrencies(m.currencies.includes(selCurrency) ? [selCurrency] : [m.currencies[0]]);
+    setErrors({});
+    setPickedEvent(null);
+    setSearchQuery("");
+    setStep(4);
+  }
+
+  function pickSearchMeetup(event) {
+    // handleSelectMeetup expects to be called from inside the cash flow
+    // (where selCategory === "cash" is already set), since the step-4 cash
+    // branch is gated on isCash. Pre-set category + country before jumping.
+    setSelCategory("cash");
+    setSelCountry(event.country);
+    setSearchQuery("");
+    handleSelectMeetup(event);
   }
 
   // Back-button routing: skip the country step on non-national flows.
@@ -574,32 +685,65 @@ export function AddPMFlow({ methods, meetupEvents = [], onSave, onClose, editDat
               </>
             )}
 
-            {/* ── STEP 1: Category ── */}
+            {/* ── STEP 1: Category (+ search across all methods) ── */}
             {step === 1 && (
-              <div className="pm-cat-list">
-                {catsForCurrency.map(catId => {
-                  const cat = CATEGORY_META[catId];
-                  if (!cat) return null;
-                  const CatIcon = cat.icon;
-                  const count = Object.values(methods)
-                    .filter(m => m.category === catId && m.currencies.includes(selCurrency)).length;
-                  return (
-                    <button key={catId}
-                      className={`pm-cat-card${selCategory === catId ? " selected" : ""}`}
-                      onClick={() => handleSelectCategory(catId)}>
-                      <span className="pm-cat-icon"><CatIcon/></span>
-                      <div className="pm-cat-text">
-                        <span className="pm-cat-label">{cat.label}</span>
-                        <span className="pm-cat-desc">{count} method{count !== 1 ? "s" : ""} available</span>
-                      </div>
-                      <span className="pm-cat-arrow">→</span>
-                    </button>
-                  );
-                })}
-                {catsForCurrency.length === 0 && (
-                  <div className="pm-empty-msg">No payment methods available for {selCurrency}</div>
+              <>
+                <input
+                  type="text"
+                  className="pm-search-input"
+                  placeholder="Search payment methods…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  autoFocus
+                />
+                {searchQuery.trim() === "" ? (
+                  <div className="pm-cat-list">
+                    {catsForCurrency.map(catId => {
+                      const cat = CATEGORY_META[catId];
+                      if (!cat) return null;
+                      const CatIcon = cat.icon;
+                      const count = Object.values(methods)
+                        .filter(m => m.category === catId && m.currencies.includes(selCurrency)).length;
+                      return (
+                        <button key={catId}
+                          className={`pm-cat-card${selCategory === catId ? " selected" : ""}`}
+                          onClick={() => handleSelectCategory(catId)}>
+                          <span className="pm-cat-icon"><CatIcon/></span>
+                          <div className="pm-cat-text">
+                            <span className="pm-cat-label">{cat.label}</span>
+                            <span className="pm-cat-desc">{count} method{count !== 1 ? "s" : ""} available</span>
+                          </div>
+                          <span className="pm-cat-arrow">→</span>
+                        </button>
+                      );
+                    })}
+                    {catsForCurrency.length === 0 && (
+                      <div className="pm-empty-msg">No payment methods available for {selCurrency}</div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="pm-cat-list">
+                    {searchResults.map(r => (
+                      <button key={r.key} className="pm-cat-card" onClick={r.onPick}>
+                        {r.logoSrc
+                          ? <img className="pm-method-logo" src={r.logoSrc} alt=""
+                              onError={(e) => { e.currentTarget.style.visibility = "hidden"; }}/>
+                          : r.flagCode
+                            ? <span className="pm-country-flag">{countryFlag(r.flagCode)}</span>
+                            : <span className="pm-method-logo"/>}
+                        <div className="pm-cat-text">
+                          <span className="pm-cat-label">{r.label}</span>
+                          <span className="pm-cat-desc">{r.sublabel}</span>
+                        </div>
+                        <span className="pm-cat-arrow">→</span>
+                      </button>
+                    ))}
+                    {searchResults.length === 0 && (
+                      <div className="pm-empty-msg">No methods match “{searchQuery}”</div>
+                    )}
+                  </div>
                 )}
-              </div>
+              </>
             )}
 
             {/* ── STEP 2: Country (national options) ── */}
@@ -993,6 +1137,14 @@ const ADD_PM_CSS = `
   .pm-option-name{font-size:.88rem;font-weight:800;color:var(--black)}
   .pm-option-country{display:block;font-size:.62rem;font-weight:500;
     color:var(--black-65);margin-top:2px}
+
+  /* Step 1: Search bar (filters across all methods for selected currency) */
+  .pm-search-input{width:100%;box-sizing:border-box;border:1.5px solid var(--black-10);
+    border-radius:10px;padding:10px 14px;font-family:var(--font);font-size:.88rem;
+    font-weight:500;color:var(--black);background:var(--surface);outline:none;
+    transition:border-color .15s;margin-top:8px;margin-bottom:4px}
+  .pm-search-input:focus{border-color:var(--primary)}
+  .pm-search-input::placeholder{color:var(--black-25)}
 
   /* Step 1/2: Category/method list */
   .pm-cat-list{display:flex;flex-direction:column;gap:8px;margin-top:8px}

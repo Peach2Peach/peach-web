@@ -90,7 +90,6 @@ export function ProfileSubScreen({ onBack }) {
   const trades  = isLoggedIn ? (liveProfile?.trades ?? 0) : 0;
   const openedTrades = isLoggedIn ? (liveProfile?.openedTrades ?? 0) : 0;
   const canceledTrades = isLoggedIn ? (liveProfile?.canceledTrades ?? 0) : 0;
-  const bitcoinLevel = isLoggedIn ? (liveProfile?.bitcoinLevel ?? "—") : "—";
   const linkedIdsCount = isLoggedIn ? (liveProfile?.linkedIds?.length ?? 0) : 0;
 
   // ── Disputes — API returns number or object ──
@@ -257,10 +256,6 @@ export function ProfileSubScreen({ onBack }) {
             <div className="mp-meta-row">
               <div className="lbl">Account created</div>
               <div className="val">{createdStr}</div>
-            </div>
-            <div className="mp-meta-row">
-              <div className="lbl">Bitcoin level</div>
-              <div className="val">{bitcoinLevel}</div>
             </div>
             <div className="mp-meta-row">
               <div className="lbl">Linked IDs</div>

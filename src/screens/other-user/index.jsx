@@ -388,10 +388,6 @@ export default function OtherUserPage() {
                       <div className="lbl">Account created</div>
                       <div className="val">{createdStr}</div>
                     </div>
-                    <div className="ou-meta-row">
-                      <div className="lbl">Bitcoin level</div>
-                      <div className="val">{user?.bitcoinLevel ?? "—"}</div>
-                    </div>
                     {user?.referralCode && (
                       <div className="ou-meta-row">
                         <div className="lbl">Referral code</div>
