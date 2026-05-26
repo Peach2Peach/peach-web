@@ -3,13 +3,14 @@
 // All components are used only by the trade-execution screen.
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useRef, Children } from "react";
+import { useNavigate } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { SatsAmount } from "../../components/BitcoinAmount.jsx";
 import {
   isSystemMessageKey,
   resolveSystemMessage,
 } from "../../data/chatSystemMessages.js";
-import { relTime, formatTradeId } from "../../utils/format.js";
+import { relTime, formatTradeId, truncateAddress } from "../../utils/format.js";
 import { getTradeBreakdown } from "../../utils/tradeBreakdown.js";
 import { getTransactionHex } from "../../utils/esplora.js";
 import {
@@ -250,10 +251,12 @@ const IconChevronUp = () => (
   </svg>
 );
 
-// ─── BUYER: GROUPHUG (read-only batching mirror) ─────────────────────────────
-// Greyed-out toggle that mirrors the user's batching setting from Settings.
-// Not editable here.
+// ─── BUYER: BATCH TRANSACTION (read-only batching mirror) ────────────────────
+// Read-only status display that mirrors the user's batching setting from
+// Settings. Shows a muted On/Off pill and an inline "edit in settings" link
+// that jumps to the Transaction Batching section of Settings.
 export function BuyerGroupHugDisplay() {
+  const navigate = useNavigate();
   const profile = (typeof window !== "undefined" && window.__PEACH_AUTH__?.profile) || null;
   const isOn = !!profile?.isBatchingEnabled;
   const [showInfo, setShowInfo] = useState(false);
@@ -261,7 +264,7 @@ export function BuyerGroupHugDisplay() {
   return (
     <>
       {showInfo && (
-        <InfoPopup title="How Group Hug works" onClose={() => setShowInfo(false)}>
+        <InfoPopup title="How transaction batching works" onClose={() => setShowInfo(false)}>
           <p className="ip-text">
             Transaction batching, or Group Hug, means your payout will be batched with other transactions, which allows to reduce transaction fees.
           </p>
@@ -284,7 +287,6 @@ export function BuyerGroupHugDisplay() {
           alignItems: "center",
           justifyContent: "space-between",
           gap: 12,
-          opacity: 0.65,
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
@@ -295,77 +297,139 @@ export function BuyerGroupHugDisplay() {
               color: "var(--black)",
             }}
           >
-            GroupHug
+            Batch transaction
           </span>
-          <InfoDot ariaLabel="About Group Hug" onClick={() => setShowInfo(true)} />
+          <InfoDot ariaLabel="About transaction batching" onClick={() => setShowInfo(true)} />
         </div>
-      <div
-        aria-disabled="true"
-        role="switch"
-        aria-checked={isOn}
-        title="edit in the settings"
-        style={{
-          width: 38,
-          height: 22,
-          borderRadius: 999,
-          background: isOn ? "var(--primary)" : "var(--black-25)",
-          position: "relative",
-          flexShrink: 0,
-          cursor: "not-allowed",
-          transition: "background .15s",
-        }}
-      >
-        <span
-          style={{
-            position: "absolute",
-            top: 2,
-            left: isOn ? 18 : 2,
-            width: 18,
-            height: 18,
-            borderRadius: "50%",
-            background: "#fff",
-            boxShadow: "0 1px 3px rgba(0,0,0,.2)",
-            transition: "left .15s",
-          }}
-        />
-      </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          <span
+            style={{
+              padding: "2px 10px",
+              borderRadius: 999,
+              fontSize: ".72rem",
+              fontWeight: 700,
+              textTransform: "uppercase",
+              opacity: 0.7,
+              background: isOn ? "rgba(245,101,34,.18)" : "var(--black-10)",
+              color: isOn ? "var(--primary)" : "var(--black-65)",
+            }}
+          >
+            {isOn ? "On" : "Off"}
+          </span>
+          <span style={{ color: "var(--black-25)", fontWeight: 700 }}>·</span>
+          <button
+            type="button"
+            onClick={() => navigate("/settings", { state: { openSection: "tx-batching" } })}
+            style={{
+              border: "none",
+              background: "transparent",
+              padding: 0,
+              color: "var(--primary)",
+              fontFamily: "inherit",
+              fontWeight: 600,
+              fontSize: ".8rem",
+              cursor: "pointer",
+            }}
+          >
+            edit in settings ›
+          </button>
+        </div>
       </div>
     </>
   );
 }
 
-// ─── BUYER: CUSTOM PAYOUT ADDRESS TOGGLE ─────────────────────────────────────
-// Active toggle that controls whether the buyer is offered the choice of using
-// their saved custom payout address when sliding "I've sent the payment".
-// Default state mirrors whether the user has an address saved in Settings;
-// state is held in the parent and ephemeral per-trade. If the user tries to
-// flip ON without a saved address, the parent shows a setup popup instead.
-export function BuyerCustomAddressToggle({
-  isOn,
-  hasSavedAddress,
-  onToggle,
+// ─── BUYER: PAYOUT ADDRESS DROPDOWN ──────────────────────────────────────────
+// Replaces the previous toggle. Shows "Receive bitcoin to:" with a dropdown
+// to pick between the Peach wallet and the user's saved custom payout address.
+// When no custom address is saved, the second option redirects the user to
+// Settings via the parent's setup popup (onRequestSetup). The selection is
+// the buyer's final confirmation — sliding "I've sent the payment" submits
+// the chosen address directly with no follow-up modal.
+export function BuyerPayoutAddressSelect({
+  selection,
+  onChange,
+  savedAddress,
   onRequestSetup,
 }) {
+  const navigate = useNavigate();
   const [showInfo, setShowInfo] = useState(false);
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
 
-  const handleClick = () => {
-    if (hasSavedAddress) onToggle?.();
-    else onRequestSetup?.();
-  };
+  const hasSaved = !!savedAddress?.address;
+  const customLabel = hasSaved
+    ? (savedAddress.label
+        ? `${savedAddress.label} — ${truncateAddress(savedAddress.address)} (custom)`
+        : `${truncateAddress(savedAddress.address)} (custom)`)
+    : null;
+  const currentLabel =
+    selection === "custom" && hasSaved ? customLabel : "Peach Wallet";
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const optionStyle = (active) => ({
+    padding: "8px 12px",
+    cursor: "pointer",
+    fontSize: ".82rem",
+    fontWeight: 600,
+    color: active ? "var(--primary)" : "var(--black)",
+    background: active ? "var(--primary-mild)" : "transparent",
+    whiteSpace: "nowrap",
+  });
 
   return (
     <>
       {showInfo && (
-        <InfoPopup title="Receive to a custom address" onClose={() => setShowInfo(false)}>
+        <InfoPopup title="Receive bitcoin to" onClose={() => setShowInfo(false)}>
           <p className="ip-text">
-            When ON, the bitcoin from this trade is paid out to the external address you saved in Settings instead of your Peach wallet.
+            Choose where to receive the bitcoin from this trade — your in-app
+            Peach wallet, or a custom Bitcoin address you've saved in Settings.
           </p>
           <p className="ip-text">
-            You can add or change the address from Settings → Custom Payout Address.
+            You can add or change your custom address from Settings →{" "}
+            <button
+              type="button"
+              onClick={() => {
+                setShowInfo(false);
+                navigate("/settings", {
+                  state: { openSection: "payout" },
+                });
+              }}
+              style={{
+                border: "none",
+                background: "transparent",
+                padding: 0,
+                color: "var(--primary)",
+                fontFamily: "inherit",
+                fontWeight: 700,
+                fontSize: "inherit",
+                cursor: "pointer",
+                textDecoration: "underline",
+              }}
+            >
+              Custom Payout Address
+            </button>
+            .
           </p>
         </InfoPopup>
       )}
       <div
+        ref={wrapRef}
         style={{
           background: "var(--surface)",
           border: "1px solid var(--black-10)",
@@ -376,6 +440,7 @@ export function BuyerCustomAddressToggle({
           alignItems: "center",
           justifyContent: "space-between",
           gap: 12,
+          position: "relative",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
@@ -386,45 +451,111 @@ export function BuyerCustomAddressToggle({
               color: "var(--black)",
             }}
           >
-            receive to custom address
+            Receive bitcoin to:
           </span>
-          <InfoDot ariaLabel="About custom payout address" onClick={() => setShowInfo(true)} />
-        </div>
-        <div
-          role="switch"
-          aria-checked={isOn}
-          tabIndex={0}
-          onClick={handleClick}
-          onKeyDown={(e) => {
-            if (e.key === " " || e.key === "Enter") {
-              e.preventDefault();
-              handleClick();
-            }
-          }}
-          style={{
-            width: 38,
-            height: 22,
-            borderRadius: 999,
-            background: isOn ? "var(--primary)" : "var(--black-25)",
-            position: "relative",
-            flexShrink: 0,
-            cursor: "pointer",
-            transition: "background .15s",
-          }}
-        >
-          <span
-            style={{
-              position: "absolute",
-              top: 2,
-              left: isOn ? 18 : 2,
-              width: 18,
-              height: 18,
-              borderRadius: "50%",
-              background: "#fff",
-              boxShadow: "0 1px 3px rgba(0,0,0,.2)",
-              transition: "left .15s",
-            }}
+          <InfoDot
+            ariaLabel="About receive address"
+            onClick={() => setShowInfo(true)}
           />
+        </div>
+        <div style={{ position: "relative", flexShrink: 0 }}>
+          <button
+            type="button"
+            aria-haspopup="listbox"
+            aria-expanded={open}
+            onClick={() => setOpen((o) => !o)}
+            style={{
+              border: "none",
+              background: "transparent",
+              padding: 0,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              color: "var(--black-65)",
+              fontFamily: "inherit",
+              fontWeight: 600,
+              fontSize: ".82rem",
+              cursor: "pointer",
+              maxWidth: "60vw",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <span
+              style={{
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {currentLabel}
+            </span>
+            <span style={{ fontSize: ".7rem", opacity: 0.6 }}>▾</span>
+          </button>
+          {open && (
+            <ul
+              role="listbox"
+              style={{
+                position: "absolute",
+                top: "calc(100% + 6px)",
+                right: 0,
+                minWidth: 220,
+                background: "var(--surface)",
+                border: "1px solid var(--black-10)",
+                borderRadius: 10,
+                boxShadow: "0 8px 24px rgba(0,0,0,.12)",
+                padding: "6px 0",
+                margin: 0,
+                listStyle: "none",
+                zIndex: 50,
+              }}
+            >
+              <li
+                role="option"
+                aria-selected={selection === "peach"}
+                onClick={() => {
+                  onChange?.("peach");
+                  setOpen(false);
+                }}
+                style={optionStyle(selection === "peach")}
+              >
+                Peach Wallet
+              </li>
+              {hasSaved ? (
+                <li
+                  role="option"
+                  aria-selected={selection === "custom"}
+                  onClick={() => {
+                    onChange?.("custom");
+                    setOpen(false);
+                  }}
+                  style={optionStyle(selection === "custom")}
+                >
+                  {customLabel}
+                </li>
+              ) : (
+                <li
+                  role="option"
+                  aria-disabled="true"
+                  onClick={() => {
+                    setOpen(false);
+                    onRequestSetup?.();
+                  }}
+                  style={{
+                    padding: "8px 12px",
+                    cursor: "pointer",
+                    fontSize: ".8rem",
+                    fontStyle: "italic",
+                    color: "var(--primary)",
+                    fontWeight: 600,
+                  }}
+                >
+                  Add custom payout address in the settings
+                </li>
+              )}
+            </ul>
+          )}
         </div>
       </div>
     </>

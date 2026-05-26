@@ -52,7 +52,7 @@ import {
   ChatPanel,
   DisputeFlow,
   BuyerGroupHugDisplay,
-  BuyerCustomAddressToggle,
+  BuyerPayoutAddressSelect,
   SuccessBanner,
   ActionBanner,
   IconClock,
@@ -520,12 +520,8 @@ export default function TradeExecution() {
   const [pendingTaskType, setPendingTaskType] = useState(null); // "release" | "refund" | "rate" | "fundEscrow" | "confirmPayment" | null
   const [fundEscrowLoading, setFundEscrowLoading] = useState(false);
   const [fundEscrowError, setFundEscrowError] = useState(null);
-  // Payout-choice modal: shown when the buyer slides "I've sent the payment"
-  // and the contract has no releaseAddress yet but the user has a saved
-  // custom payout address. `null` means closed.
-  const [payoutChoice, setPayoutChoice] = useState(null); // null | { address, signature }
   // Bumped to remount the buyer's "I've sent the payment" slider so it
-  // returns to its un-slid state when the choice modal is dismissed.
+  // returns to its un-slid state after a hard-block error.
   const [paymentSliderKey, setPaymentSliderKey] = useState(0);
   // Bumped to remount the refund sliders if the refund API call fails, so the
   // slider doesn't stay frozen at the right edge in awaiting-mobile state.
@@ -2639,10 +2635,12 @@ export default function TradeExecution() {
                     pendingTaskType !== "confirmPayment" && (
                       <>
                         <BuyerGroupHugDisplay />
-                        <BuyerCustomAddressToggle
-                          isOn={useCustomPayout}
-                          hasSavedAddress={!!savedCustomPayout?.address}
-                          onToggle={() => setUseCustomPayout((v) => !v)}
+                        <BuyerPayoutAddressSelect
+                          selection={useCustomPayout ? "custom" : "peach"}
+                          onChange={(next) =>
+                            setUseCustomPayout(next === "custom")
+                          }
+                          savedAddress={savedCustomPayout}
                           onRequestSetup={() => setShowSetupPayoutPopup(true)}
                         />
                       </>
@@ -2860,24 +2858,45 @@ export default function TradeExecution() {
                                 await refreshContractMobileActions();
                                 return;
                               }
-                              // (2) No release address on contract — if the
-                              // buyer has the "receive to custom address"
-                              // toggle ON and a saved address is loaded, open
-                              // the choice modal as a final confirmation
-                              // step. Toggle OFF (or no saved address) skips
-                              // this and falls through to the mobile-signing path.
-                              if (
-                                useCustomPayout &&
-                                savedCustomPayout?.address &&
-                                savedCustomPayout?.bip322Signature
-                              ) {
-                                setPayoutChoice({
-                                  address: savedCustomPayout.address,
-                                  signature: savedCustomPayout.bip322Signature,
-                                });
+                              // (2) Dropdown set to "custom" — submit the
+                              // saved address + BIP322 signature directly via
+                              // /payment/confirm. The dropdown was the user's
+                              // choice; no follow-up confirmation modal.
+                              // Hard-block if signature or address didn't load.
+                              if (useCustomPayout) {
+                                if (
+                                  !savedCustomPayout?.address ||
+                                  !savedCustomPayout?.bip322Signature
+                                ) {
+                                  setActionError(
+                                    "Custom payout address isn't properly configured. Go to Settings → Payout Address to set one up, or choose Peach Wallet in the dropdown.",
+                                  );
+                                  setPaymentSliderKey((k) => k + 1);
+                                  return;
+                                }
+                                const res = await post(
+                                  `/contract/${contract.id}/payment/confirm`,
+                                  {
+                                    releaseAddress: savedCustomPayout.address,
+                                    releaseAddressMessageSignature:
+                                      savedCustomPayout.bip322Signature,
+                                  },
+                                );
+                                if (!res.ok) {
+                                  const err = await res
+                                    .json()
+                                    .catch(() => null);
+                                  throw new Error(
+                                    err?.error ||
+                                      err?.message ||
+                                      `HTTP ${res.status}`,
+                                  );
+                                }
+                                await refreshContractMobileActions();
                                 return;
                               }
-                              // (3) Fallback: original mobile-action flow.
+                              // (3) Dropdown set to "Peach Wallet" — normal
+                              // release via the mobile-signing flow.
                               const res = await post(
                                 `/contract/${contract.id}/payment/createPaymentMadePendingAction`,
                               );
@@ -3304,172 +3323,6 @@ export default function TradeExecution() {
                   marginTop: 4,
                 }}
                 onClick={() => setShowSetupPayoutPopup(false)}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── PAYOUT-CHOICE MODAL (buyer: payment_sent w/ saved address) ── */}
-      {payoutChoice && contract && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 700,
-            background: "rgba(0,0,0,.55)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 20,
-          }}
-        >
-          <div
-            style={{
-              background: "var(--surface)",
-              borderRadius: 16,
-              padding: "28px 24px",
-              maxWidth: 380,
-              width: "100%",
-              boxShadow: "0 20px 60px rgba(0,0,0,.25)",
-              animation: "modalIn .18s ease",
-            }}
-          >
-            <div
-              style={{
-                fontWeight: 800,
-                fontSize: "1.05rem",
-                marginBottom: 8,
-                color: "var(--text)",
-              }}
-            >
-              Choose payout address
-            </div>
-            <div
-              style={{
-                fontSize: ".88rem",
-                color: "var(--black-65)",
-                lineHeight: 1.6,
-                marginBottom: 20,
-              }}
-            >
-              Where would you like to receive the bitcoin from this trade?
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <button
-                style={{
-                  border: "none",
-                  background: "var(--grad)",
-                  borderRadius: 999,
-                  fontFamily: "Baloo 2, cursive",
-                  fontWeight: 800,
-                  fontSize: ".87rem",
-                  color: "white",
-                  padding: "12px",
-                  cursor: "pointer",
-                  boxShadow: "0 2px 10px rgba(245,101,34,.3)",
-                }}
-                onClick={async () => {
-                  setPayoutChoice(null);
-                  setActionError(null);
-                  try {
-                    const res = await post(
-                      `/contract/${contract.id}/payment/createPaymentMadePendingAction`,
-                    );
-                    if (!res.ok) {
-                      const err = await res.json().catch(() => null);
-                      throw new Error(
-                        err?.error || err?.message || `HTTP ${res.status}`,
-                      );
-                    }
-                    savePendingTask(routeId, "confirmPayment");
-                    setPendingTaskType("confirmPayment");
-                    await refreshContractMobileActions();
-                  } catch (e) {
-                    setActionError(
-                      "Failed to request confirmation: " + e.message,
-                    );
-                    setPaymentSliderKey((k) => k + 1);
-                  }
-                }}
-              >
-                Use Peach wallet
-              </button>
-              <button
-                style={{
-                  border: "1.5px solid var(--primary)",
-                  background: "var(--primary-mild)",
-                  borderRadius: 999,
-                  fontFamily: "Baloo 2, cursive",
-                  fontWeight: 800,
-                  fontSize: ".87rem",
-                  color: "var(--primary)",
-                  padding: "12px",
-                  cursor: "pointer",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 2,
-                  alignItems: "center",
-                }}
-                onClick={async () => {
-                  const choice = payoutChoice;
-                  setPayoutChoice(null);
-                  setActionError(null);
-                  try {
-                    const res = await post(
-                      `/contract/${contract.id}/payment/confirm`,
-                      {
-                        releaseAddress: choice.address,
-                        releaseAddressMessageSignature: choice.signature,
-                      },
-                    );
-                    if (!res.ok) {
-                      const err = await res.json().catch(() => null);
-                      throw new Error(
-                        err?.error || err?.message || `HTTP ${res.status}`,
-                      );
-                    }
-                    await refreshContractMobileActions();
-                  } catch (e) {
-                    setActionError(
-                      "Failed to request confirmation: " + e.message,
-                    );
-                    setPaymentSliderKey((k) => k + 1);
-                  }
-                }}
-              >
-                <span>Use saved payout address</span>
-                <span
-                  style={{
-                    fontSize: ".72rem",
-                    fontWeight: 600,
-                    color: "var(--black-65)",
-                    fontFamily: "monospace",
-                  }}
-                >
-                  {payoutChoice.address.length > 14
-                    ? `${payoutChoice.address.slice(0, 8)}…${payoutChoice.address.slice(-6)}`
-                    : payoutChoice.address}
-                </span>
-              </button>
-              <button
-                style={{
-                  border: "none",
-                  background: "transparent",
-                  color: "var(--black-65)",
-                  fontFamily: "Baloo 2, cursive",
-                  fontWeight: 700,
-                  fontSize: ".82rem",
-                  padding: "8px",
-                  cursor: "pointer",
-                  marginTop: 4,
-                }}
-                onClick={() => {
-                  setPayoutChoice(null);
-                  setPaymentSliderKey((k) => k + 1);
-                }}
               >
                 Cancel
               </button>
