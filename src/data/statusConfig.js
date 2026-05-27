@@ -50,6 +50,44 @@ export const STATUS_CONFIG = {
   refundTxSignatureRequired: { label: "Sign Refund",           bg: "var(--primary-mild)", color: "var(--primary-dark)", action: true  },
 };
 
+// Direction-aware fused labels for the trade-execution header pill.
+// Used ONLY by trade-execution/index.jsx — dashboard pills keep the
+// existing direction-badge + StatusChip rendering.
+// Pill colour/background still come from STATUS_CONFIG[status]; only
+// the text differs. Falls back to STATUS_CONFIG[status].label if no
+// fused entry exists.
+export const FUSED_STATUS_LABEL = {
+  // ── Finished ──
+  tradeCompleted:  { buy: "Purchase completed",   sell: "Sale completed" },
+  tradeCanceled:   { buy: "Purchase cancelled",   sell: "Sale cancelled" },
+  offerCanceled:   { buy: "Offer cancelled",      sell: "Offer cancelled" },
+  fundingExpired:  { buy: "Funding expired",      sell: "Funding expired" },
+  wrongAmountFundedOnContract:              { buy: "Wrong amount — refunded", sell: "Wrong amount — refunded" },
+  wrongAmountFundedOnContractRefundWaiting: { buy: "Refund pending",          sell: "Refund pending" },
+
+  // ── Active (contract stage) ──
+  fundEscrow:                   { buy: "Purchase — awaiting escrow",      sell: "Sale — fund escrow" },
+  waitingForFunding:            { buy: "Purchase — waiting for funding",  sell: "Sale — waiting for funding" },
+  escrowWaitingForConfirmation: { buy: "Purchase — escrow pending",       sell: "Sale — escrow pending" },
+  fundingAmountDifferent:       { buy: "Wrong amount funded",             sell: "Wrong amount funded" },
+  paymentRequired:              { buy: "Purchase — make payment",         sell: "Sale — awaiting payment" },
+  confirmPaymentRequired:       { buy: "Purchase — payment sent",         sell: "Sale — confirm payment" },
+  releaseEscrow:                { buy: "Purchase — awaiting release",     sell: "Sale — release escrow" },
+  paymentTooLate:               { buy: "Purchase — not paid in time",     sell: "Sale — not paid in time" },
+  payoutPending:                { buy: "Purchase — payout pending",       sell: "Sale — payout pending" },
+  rateUser:                     { buy: "Purchase — rate seller",          sell: "Sale — rate buyer" },
+
+  // ── Dispute / cancel-in-flight ──
+  dispute:                    { buy: "Purchase — dispute",          sell: "Sale — dispute" },
+  disputeWithoutEscrowFunded: { buy: "Purchase — dispute",          sell: "Sale — dispute" },
+  confirmCancelation:         { buy: "Purchase — cancel requested", sell: "Sale — cancel requested" },
+
+  // ── Refund-related (sell-side in practice; both sides covered for safety) ──
+  refundAddressRequired:     { buy: "Refund address needed", sell: "Refund address needed" },
+  refundOrReviveRequired:    { buy: "Refund or republish",   sell: "Refund or republish" },
+  refundTxSignatureRequired: { buy: "Sign refund",           sell: "Sign refund" },
+};
+
 // Statuses that represent a finished state → Trade History tab
 // Note: wrongAmountFundedOnContractRefundWaiting is only finished from the
 // buyer's perspective (the seller still has an in-flight refund). The

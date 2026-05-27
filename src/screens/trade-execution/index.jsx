@@ -27,7 +27,7 @@ import { getEsploraBaseUrl } from "../../utils/esplora.js";
 import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 import { extractCustomRefundAddressFromProfile } from "../../utils/customRefundAddressSync.js";
 import { fetchSavedCustomPayoutAddress } from "../../utils/customPayoutAddressSync.js";
-import { deriveDisplayStatus } from "../../data/statusConfig.js";
+import { deriveDisplayStatus, STATUS_CONFIG, FUSED_STATUS_LABEL } from "../../data/statusConfig.js";
 import { classifySender } from "../../data/chatSystemMessages.js";
 import Avatar from "../../components/Avatar.jsx";
 import StatusChip from "../../components/StatusChip.jsx";
@@ -104,8 +104,14 @@ const CSS = `
   .trade-topbar{
     display:flex;align-items:center;gap:12px;padding:0 24px;
     height:52px;background:var(--surface);border-bottom:1px solid var(--black-10);
-    flex-shrink:0;
+    flex-shrink:0;min-width:0;
   }
+  .trade-topbar-scroll{
+    flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:12px;
+    overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+  }
+  .trade-topbar-scroll::-webkit-scrollbar{display:none}
   .trade-topbar-back{
     display:flex;align-items:center;justify-content:center;
     width:32px;height:32px;border-radius:8px;border:1.5px solid var(--black-10);
@@ -1183,6 +1189,9 @@ export default function TradeExecution() {
           revived: !!c.newOfferId || !!meta?.newTradeId,
           refunded: !!c.refunded || !!meta?.refunded,
           newOfferId: c.newOfferId ?? meta?.newTradeId ?? null,
+          // lastModified — also bridged via sessionStorage from /contracts/summary.
+          // Used by the header to show the date next to the fused status pill.
+          lastModified: c.lastModified ?? meta?.lastModified ?? null,
           unreadMessages: c.unreadMessages ?? 0,
         });
 
@@ -1674,26 +1683,49 @@ export default function TradeExecution() {
               >
                 <IconBack />
               </button>
-              <span
-                className={`trade-topbar-id${copiedId ? " is-copied" : ""}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const text = formatTradeId(contract.id);
-                  try { navigator.clipboard.writeText(text); } catch {}
-                  setCopiedId(true);
-                  setTimeout(() => setCopiedId(false), 1500);
-                }}
-                title="Copy contract ID"
-                role="button"
-              >
-                {copiedId ? "✓ Copied" : formatTradeId(contract.id)}
-              </span>
-              <span className="trade-topbar-sep">·</span>
-              <span className={role === "buyer" ? "dir-buy" : "dir-sell"}>
-                {role === "buyer" ? "BUY" : "SELL"}
-              </span>
-              <span className="trade-topbar-sep">·</span>
-              <StatusChip status={status} large role={role} />
+              <div className="trade-topbar-scroll">
+                <span
+                  className={`trade-topbar-id${copiedId ? " is-copied" : ""}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const text = formatTradeId(contract.id);
+                    try { navigator.clipboard.writeText(text); } catch {}
+                    setCopiedId(true);
+                    setTimeout(() => setCopiedId(false), 1500);
+                  }}
+                  title="Copy contract ID"
+                  role="button"
+                >
+                  {copiedId ? "✓ Copied" : formatTradeId(contract.id)}
+                </span>
+                <span className="trade-topbar-sep">·</span>
+                {(() => {
+                  const cfg = STATUS_CONFIG[status] ?? { label: "Unknown", bg: "var(--black-5)", color: "var(--black-65)" };
+                  const label = FUSED_STATUS_LABEL[status]?.[contract.direction] ?? cfg.label;
+                  return (
+                    <span style={{
+                      display: "inline-flex", alignItems: "center",
+                      background: cfg.bg, color: cfg.color,
+                      borderRadius: 999, padding: "5px 14px",
+                      fontSize: ".8rem", fontWeight: 700, whiteSpace: "nowrap",
+                    }}>
+                      {label}
+                    </span>
+                  );
+                })()}
+                {(() => {
+                  const ts = scenario.lastModified ?? contract?.creationDate;
+                  if (!ts) return null;
+                  return (
+                    <>
+                      <span className="trade-topbar-sep">·</span>
+                      <span style={{ fontSize: ".82rem", color: "var(--black-65)", fontWeight: 600, whiteSpace: "nowrap" }}>
+                        {new Date(ts).toLocaleDateString("en-GB")}
+                      </span>
+                    </>
+                  );
+                })()}
+              </div>
             </div>
 
             {/* ── Mobile tabs ── */}
@@ -2106,7 +2138,9 @@ export default function TradeExecution() {
                         }}
                       >
                         {role === "buyer"
-                          ? "Your sats are on their way"
+                          ? (scenario.releaseTxId
+                              ? "Payout has been sent to your wallet."
+                              : "Your sats are on their way")
                           : "You've successfully sold Bitcoin"}
                       </div>
                       {role === "buyer" && (

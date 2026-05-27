@@ -733,13 +733,14 @@ export default function TradesDashboard() {
         // Cache revive/refund state per contract — trade execution page reads this
         // since /contract/:id doesn't return these fields
         contractsArr.forEach((c) => {
-          if (c.refunded || c.newTradeId) {
+          if (c.refunded || c.newTradeId || c.lastModified) {
             try {
               sessionStorage.setItem(
                 `contract-meta:${c.id}`,
                 JSON.stringify({
                   refunded: !!c.refunded,
                   newTradeId: c.newTradeId ?? null,
+                  lastModified: c.lastModified ?? null,
                 }),
               );
             } catch {}
