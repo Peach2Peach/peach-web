@@ -46,6 +46,8 @@ export default function PayoutAddressWizard({ auth, onClose, onDone, asModal = f
   const [label, setLabel] = useState("");
   const [address, setAddress] = useState("");
   const [signature, setSignature] = useState("");
+  const [sigCryptoValid, setSigCryptoValid] = useState(null); // null | true | false
+  const [verifying, setVerifying] = useState(false);
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -69,6 +71,35 @@ export default function PayoutAddressWizard({ auth, onClose, onDone, asModal = f
     })();
     return () => { cancelled = true; };
   }, [auth?.token, auth?.pgpPrivKey, auth?.baseUrl, btcNetwork]);
+
+  // Live cryptographic verification of the signature against (address, signMessage).
+  // bip322-js is heavy, so dynamic-import it inside the effect — the chunk only
+  // loads when the user is actually in the wizard with a pasted signature.
+  useEffect(() => {
+    const sig = signature.trim();
+    if (!sig || !address.trim()) { setSigCryptoValid(null); setVerifying(false); return; }
+    const shape = validateBIP322Signature(sig);
+    if (!shape.valid) { setSigCryptoValid(null); setVerifying(false); return; }
+
+    let cancelled = false;
+    setVerifying(true);
+    (async () => {
+      try {
+        const { isValidBitcoinSignature } = await import("../utils/bitcoinSignatureVerify.js");
+        const ok = isValidBitcoinSignature({ message: signMessage, address, signature: sig });
+        if (cancelled) return;
+        setSigCryptoValid(ok);
+        setErrors(p => ({ ...p, sig: ok ? null : "Signature does not match this address and message" }));
+      } catch {
+        if (cancelled) return;
+        setSigCryptoValid(false);
+        setErrors(p => ({ ...p, sig: "Could not verify signature" }));
+      } finally {
+        if (!cancelled) setVerifying(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [signature, address, signMessage]);
 
   function handleAddressBlur() {
     if (!address.trim()) { setErrors(p => ({ ...p, address: null })); return; }
@@ -111,6 +142,21 @@ export default function PayoutAddressWizard({ auth, onClose, onDone, asModal = f
     setErrors(p => ({ ...p, sig: null }));
 
     try {
+      // Final cryptographic guard — protects against the user clicking CONFIRM
+      // before the live-verify effect has finished.
+      const { isValidBitcoinSignature } = await import("../utils/bitcoinSignatureVerify.js");
+      const cryptoValid = isValidBitcoinSignature({
+        message: signMessage,
+        address,
+        signature: signature.trim(),
+      });
+      if (!cryptoValid) {
+        setErrors(p => ({ ...p, sig: "Signature does not match this address and message" }));
+        setSigCryptoValid(false);
+        setSubmitting(false);
+        return;
+      }
+
       if (auth) {
         const ok = await syncCustomPayoutAddressToServer(
           {
@@ -161,7 +207,8 @@ export default function PayoutAddressWizard({ auth, onClose, onDone, asModal = f
   }
 
   function renderStep2() {
-    const sigValid = signature.trim() && validateBIP322Signature(signature).valid && !errors.sig;
+    const shapeOk = signature.trim() && validateBIP322Signature(signature).valid;
+    const sigValid = shapeOk && sigCryptoValid === true && !errors.sig;
     return (
       <>
         <WizardHeader title="Sign Your Address" onBack={() => setStep(1)}/>
@@ -188,25 +235,35 @@ export default function PayoutAddressWizard({ auth, onClose, onDone, asModal = f
         <div style={{ marginBottom:12 }}>
           <div style={{ fontSize:".75rem", fontWeight:700, color:"var(--black)", marginBottom:6 }}>signature</div>
           <div style={{ position:"relative" }}>
-            <input value={signature} onChange={e => { setSignature(e.target.value); setErrors(p => ({ ...p, sig: null })); }} onBlur={() => { if (signature.trim()) handleBlur("sig", signature, validateBIP322Signature); }} placeholder="signature"
-              style={{ width:"100%", padding:"10px 40px 10px 14px", borderRadius:10, border: errors.sig ? "1.5px solid var(--error)" : "1.5px solid var(--black-25)", background:"var(--surface)", fontFamily:"'Baloo 2',cursive", fontSize:".85rem", color:"var(--black)", outline:"none" }}/>
+            <input value={signature} onChange={e => { setSignature(e.target.value); setSigCryptoValid(null); setErrors(p => ({ ...p, sig: null })); }} onBlur={() => {
+              if (!signature.trim()) return;
+              const shape = validateBIP322Signature(signature);
+              if (!shape.valid) setErrors(p => ({ ...p, sig: shape.error }));
+            }} placeholder="signature"
+              style={{ width:"100%", padding:"10px 40px 10px 14px", borderRadius:10, border: errors.sig ? "1.5px solid var(--error)" : sigValid ? "1.5px solid var(--primary)" : "1.5px solid var(--black-25)", background:"var(--surface)", fontFamily:"'Baloo 2',cursive", fontSize:".85rem", color:"var(--black)", outline:"none" }}/>
             <div style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)" }}>
-              <button onClick={async () => { try { const t = await navigator.clipboard.readText(); setSignature(t); setErrors(p => ({ ...p, sig: null })); } catch {} }}
+              <button onClick={async () => { try { const t = await navigator.clipboard.readText(); setSignature(t); setSigCryptoValid(null); setErrors(p => ({ ...p, sig: null })); } catch {} }}
                 style={{ border:"none", background:"transparent", cursor:"pointer", color:"var(--primary)", padding:4 }}>
                 <IconCopy size={16}/>
               </button>
             </div>
           </div>
           <FieldError error={errors.sig}/>
+          {sigValid && (
+            <div style={{ marginTop:8, fontSize:".8rem", fontWeight:800, color:"var(--success)", letterSpacing:".04em" }}>SIGNATURE VALID ✓</div>
+          )}
+          {verifying && !errors.sig && (
+            <div style={{ marginTop:8, fontSize:".78rem", color:"var(--black-65)" }}>Verifying signature…</div>
+          )}
         </div>
 
         <div style={{ background:"var(--primary-mild)", border:"1.5px solid var(--primary)", borderRadius:10, padding:"12px 14px", marginBottom:24 }}>
           <p style={{ fontSize:".76rem", color:"var(--black-65)", lineHeight:1.5, margin:0 }}>
-            <span style={{ fontWeight:800, color:"var(--primary)" }}>Note:</span> BIP322 signature verification is required. This is verified server-side when saving your payout address.
+            <span style={{ fontWeight:800, color:"var(--primary)" }}>Note:</span> Signatures are verified locally in your browser before save.
           </p>
         </div>
 
-        <PrimaryBtn label={submitting ? "VERIFYING…" : "CONFIRM"} onClick={handleConfirm} disabled={!sigValid || submitting}/>
+        <PrimaryBtn label={submitting ? "SAVING…" : "CONFIRM"} onClick={handleConfirm} disabled={!sigValid || submitting || verifying}/>
       </>
     );
   }
