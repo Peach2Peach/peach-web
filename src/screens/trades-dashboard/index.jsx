@@ -1701,13 +1701,18 @@ export default function TradesDashboard() {
       setMatchesLoading(false);
       return;
     }
-    // Never-matched canceled sell offer (contract-shaped in /contracts/summary
-    // but bare offer-style ID, no "-peerId"). Trade-execution expects a matched
-    // contract, so routing there calls /v1/contract/:id on an offer id and breaks.
-    // Show a read-only popup with refund status instead.
+    // Canceled sell offer — route to the read-only refund-status popup.
+    // Two shapes can land here:
+    //   • contract-shape from /contracts/summary with a bare offer-style id
+    //     (never matched). Routing this to trade-execution would call
+    //     /v1/contract/:id on an offer id and break.
+    //   • offer-shape from /v1/offers/summary (the live offer was cancelled,
+    //     refunded or not). Falling through to openOfferDetail would paint
+    //     "Bitcoin locked in escrow" because funding.confirmations stays > 0
+    //     after the refund tx confirms.
     if (
-      trade.kind === "contract" &&
-      !String(trade.id).includes("-") &&
+      ((trade.kind === "contract" && !String(trade.id).includes("-")) ||
+        trade.kind === "offer") &&
       (trade.tradeStatus === "offerCanceled" ||
         trade.tradeStatus === "tradeCanceled")
     ) {
