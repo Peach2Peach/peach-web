@@ -45,7 +45,6 @@ export default function PayoutAddressWizard({ auth, onClose, onDone, asModal = f
   const [step, setStep] = useState(1);
   const [label, setLabel] = useState("");
   const [address, setAddress] = useState("");
-  const [addressSet, setAddressSet] = useState(false);
   const [signature, setSignature] = useState("");
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -54,6 +53,9 @@ export default function PayoutAddressWizard({ auth, onClose, onDone, asModal = f
   const handleBlur = makeBlurHandler(setErrors);
   const peachId = getSigningPeachId(auth?.peachId);
   const signMessage = `I confirm that only I, ${peachId}, control the address ${address}`;
+
+  const addressValid = address.trim().length > 0
+    && validateBtcAddress(address, btcNetwork).valid;
 
   useEffect(() => {
     if (!auth?.token || !auth?.pgpPrivKey) return;
@@ -64,17 +66,13 @@ export default function PayoutAddressWizard({ auth, onClose, onDone, asModal = f
       if (saved.label)           setLabel(saved.label);
       if (saved.address)         setAddress(saved.address);
       if (saved.bip322Signature) setSignature(saved.bip322Signature);
-      if (saved.address && validateBtcAddress(saved.address, btcNetwork).valid) {
-        setAddressSet(true);
-      }
     })();
     return () => { cancelled = true; };
   }, [auth?.token, auth?.pgpPrivKey, auth?.baseUrl, btcNetwork]);
 
   function handleAddressBlur() {
-    if (!address.trim()) { setErrors(p => ({ ...p, address: null })); setAddressSet(false); return; }
-    const valid = handleBlur("address", address, validateBtcAddress, btcNetwork);
-    setAddressSet(valid);
+    if (!address.trim()) { setErrors(p => ({ ...p, address: null })); return; }
+    handleBlur("address", address, validateBtcAddress, btcNetwork);
   }
 
   async function handleRemove() {
@@ -95,7 +93,6 @@ export default function PayoutAddressWizard({ auth, onClose, onDone, asModal = f
       setLabel("");
       setAddress("");
       setSignature("");
-      setAddressSet(false);
       if (onDone) onDone(null);
       setRemoveSuccess(true);
       setTimeout(() => setRemoveSuccess(false), 1500);
@@ -227,12 +224,12 @@ export default function PayoutAddressWizard({ auth, onClose, onDone, asModal = f
         <input value={label} onChange={e => setLabel(e.target.value)} placeholder="address label"
           style={{ width:"100%", padding:"10px 14px", borderRadius:10, marginBottom:10, border:"1.5px solid var(--black-25)", background:"var(--surface)", fontFamily:"'Baloo 2',cursive", fontSize:".85rem", color:"var(--black)", outline:"none" }}/>
 
-        <div style={{ position:"relative", marginBottom: addressSet ? 8 : (errors.address ? 0 : 24) }}>
-          <input value={address} onChange={e => { setAddress(e.target.value); setAddressSet(false); setErrors(p => ({ ...p, address: null })); }} onBlur={handleAddressBlur}
+        <div style={{ position:"relative", marginBottom: addressValid ? 8 : (errors.address ? 0 : 24) }}>
+          <input value={address} onChange={e => { setAddress(e.target.value); setErrors(p => ({ ...p, address: null })); }} onBlur={handleAddressBlur}
             placeholder={btcNetwork === "regtest" ? "bcrt1q …" : "bc1q …"}
-            style={{ width:"100%", padding:"10px 72px 10px 14px", borderRadius:10, border: errors.address ? "2px solid var(--error)" : addressSet ? "2px solid var(--primary)" : "1.5px solid var(--black-25)", background:"var(--surface)", fontFamily:"monospace", fontSize:".85rem", color:"var(--black)", outline:"none" }}/>
+            style={{ width:"100%", padding:"10px 72px 10px 14px", borderRadius:10, border: errors.address ? "2px solid var(--error)" : addressValid ? "2px solid var(--primary)" : "1.5px solid var(--black-25)", background:"var(--surface)", fontFamily:"monospace", fontSize:".85rem", color:"var(--black)", outline:"none" }}/>
           <div style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)", display:"flex", gap:4 }}>
-            <button onClick={async () => { try { const t = await navigator.clipboard.readText(); setAddress(t); setErrors(p => ({ ...p, address: null })); const r = validateBtcAddress(t, btcNetwork); if(r.valid) setAddressSet(true); else { setAddressSet(false); setErrors(p => ({ ...p, address: r.error })); } } catch {} }}
+            <button onClick={async () => { try { const t = await navigator.clipboard.readText(); setAddress(t); setErrors(p => ({ ...p, address: null })); } catch {} }}
               style={{ border:"none", background:"transparent", cursor:"pointer", color:"var(--primary)", padding:4 }}>
               <IconCopy size={16}/>
             </button>
@@ -246,7 +243,7 @@ export default function PayoutAddressWizard({ auth, onClose, onDone, asModal = f
           </div>
         )}
 
-        {addressSet && (
+        {addressValid && (
           <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8, marginBottom:20 }}>
             <span style={{ fontSize:".8rem", fontWeight:800, color:"var(--success)", letterSpacing:".04em" }}>ADDRESS VALID ✓</span>
             <button onClick={handleRemove} disabled={submitting} style={{ display:"flex", alignItems:"center", gap:5, border:"none", background:"transparent", cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.5 : 1, color:"var(--black)", fontFamily:"'Baloo 2',cursive", fontSize:".78rem", fontWeight:700, textDecoration:"underline", textTransform:"uppercase", letterSpacing:".04em" }}>
@@ -255,7 +252,7 @@ export default function PayoutAddressWizard({ auth, onClose, onDone, asModal = f
           </div>
         )}
 
-        <PrimaryBtn label="NEXT" onClick={() => setStep(2)} disabled={!addressSet || !!errors.address || submitting}/>
+        <PrimaryBtn label="NEXT" onClick={() => setStep(2)} disabled={!addressValid || !!errors.address || submitting}/>
       </>
     );
   }

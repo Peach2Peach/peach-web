@@ -708,11 +708,15 @@ export function RefundAddressSubScreen({ onBack }) {
   const btcNetwork = BITCOIN_NETWORK;
   const [label, setLabel] = useState("");
   const [address, setAddress] = useState("");
-  const [addressSet, setAddressSet] = useState(false);
+  const [savedAddress, setSavedAddress] = useState("");
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const handleBlur = makeBlurHandler(setErrors);
+
+  const addressValid = address.trim().length > 0
+    && validateBtcAddress(address, btcNetwork).valid;
+  const addressSaved = !!savedAddress && address.trim() === savedAddress.trim();
 
   // Load the existing encrypted refund address from /v069/selfUser on mount.
   useEffect(() => {
@@ -732,7 +736,7 @@ export function RefundAddressSubScreen({ onBack }) {
         setLabel(saved.label || "");
         setAddress(saved.address || "");
         if (saved.address && validateBtcAddress(saved.address, btcNetwork).valid) {
-          setAddressSet(true);
+          setSavedAddress(saved.address);
         }
       } catch (err) {
         console.warn("[RefundAddress] Failed to load:", err.message);
@@ -746,9 +750,8 @@ export function RefundAddressSubScreen({ onBack }) {
     else setErrors(p => ({ ...p, label: null }));
   }
   function handleAddressBlur() {
-    if (!address.trim()) { setErrors(p => ({ ...p, address: null })); setAddressSet(false); return; }
-    const valid = handleBlur("address", address, validateBtcAddress, btcNetwork);
-    setAddressSet(valid);
+    if (!address.trim()) { setErrors(p => ({ ...p, address: null })); return; }
+    handleBlur("address", address, validateBtcAddress, btcNetwork);
   }
   async function handleRemove() {
     setErrors({});
@@ -767,7 +770,7 @@ export function RefundAddressSubScreen({ onBack }) {
       }
       setLabel("");
       setAddress("");
-      setAddressSet(false);
+      setSavedAddress("");
     } catch {
       setErrors(p => ({ ...p, form: "Network error — check your connection" }));
     } finally {
@@ -792,6 +795,7 @@ export function RefundAddressSubScreen({ onBack }) {
       } else {
         await new Promise(r => setTimeout(r, 600));
       }
+      setSavedAddress(address);
       setSubmitting(false);
       setShowSuccess(true);
     } catch {
@@ -806,7 +810,7 @@ export function RefundAddressSubScreen({ onBack }) {
     return () => clearTimeout(t);
   }, [showSuccess]);
 
-  const canSave = !!label.trim() && addressSet && !errors.label && !errors.address && !submitting;
+  const canSave = !!label.trim() && addressValid && !addressSaved && !errors.label && !errors.address && !submitting;
 
   return (
     <SubScreenWrapper title="Refund Address" onBack={onBack}>
@@ -820,12 +824,12 @@ export function RefundAddressSubScreen({ onBack }) {
         style={{ width:"100%", padding:"10px 14px", borderRadius:10, marginBottom: errors.label ? 0 : 10, border: errors.label ? "2px solid var(--error)" : "1.5px solid var(--black-25)", background:"var(--surface)", fontFamily:"'Baloo 2',cursive", fontSize:".85rem", color:"var(--black)", outline:"none" }}/>
       {errors.label && <div style={{ marginBottom:10 }}><FieldError error={errors.label}/></div>}
 
-      <div style={{ position:"relative", marginBottom: addressSet ? 8 : (errors.address ? 0 : 24) }}>
-        <input value={address} onChange={e => { setAddress(e.target.value); setAddressSet(false); setErrors(p => ({ ...p, address: null })); }} onBlur={handleAddressBlur}
+      <div style={{ position:"relative", marginBottom: (addressValid || addressSaved) ? 8 : (errors.address ? 0 : 24) }}>
+        <input value={address} onChange={e => { setAddress(e.target.value); setErrors(p => ({ ...p, address: null })); }} onBlur={handleAddressBlur}
           placeholder={btcNetwork === "regtest" ? "bcrt1q …" : "bc1q …"}
-          style={{ width:"100%", padding:"10px 44px 10px 14px", borderRadius:10, border: errors.address ? "2px solid var(--error)" : addressSet ? "2px solid var(--primary)" : "1.5px solid var(--black-25)", background:"var(--surface)", fontFamily:"monospace", fontSize:".85rem", color:"var(--black)", outline:"none" }}/>
+          style={{ width:"100%", padding:"10px 44px 10px 14px", borderRadius:10, border: errors.address ? "2px solid var(--error)" : addressValid ? "2px solid var(--primary)" : "1.5px solid var(--black-25)", background:"var(--surface)", fontFamily:"monospace", fontSize:".85rem", color:"var(--black)", outline:"none" }}/>
         <div style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)", display:"flex", gap:4 }}>
-          <button onClick={async () => { try { const t = await navigator.clipboard.readText(); setAddress(t); setErrors(p => ({ ...p, address: null })); const r = validateBtcAddress(t, btcNetwork); if(r.valid) setAddressSet(true); else { setAddressSet(false); setErrors(p => ({ ...p, address: r.error })); } } catch {} }}
+          <button onClick={async () => { try { const t = await navigator.clipboard.readText(); setAddress(t); setErrors(p => ({ ...p, address: null })); } catch {} }}
             style={{ border:"none", background:"transparent", cursor:"pointer", color:"var(--primary)", padding:4 }}>
             <IconCopy size={16}/>
           </button>
@@ -833,7 +837,13 @@ export function RefundAddressSubScreen({ onBack }) {
       </div>
       {errors.address && <div style={{ marginBottom:16 }}><FieldError error={errors.address}/></div>}
 
-      {addressSet && (
+      {addressValid && !addressSaved && (
+        <div style={{ display:"flex", justifyContent:"center", marginBottom:20 }}>
+          <span style={{ fontSize:".8rem", fontWeight:800, color:"var(--success)", letterSpacing:".04em" }}>ADDRESS VALID ✓</span>
+        </div>
+      )}
+
+      {addressSaved && (
         <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8, marginBottom:20 }}>
           <span style={{ fontSize:".8rem", fontWeight:800, color:"var(--success)", letterSpacing:".04em" }}>ADDRESS SET ✓</span>
           <button onClick={handleRemove} disabled={submitting} style={{ display:"flex", alignItems:"center", gap:5, border:"none", background:"transparent", cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.5 : 1, color:"var(--black)", fontFamily:"'Baloo 2',cursive", fontSize:".78rem", fontWeight:700, textDecoration:"underline", textTransform:"uppercase", letterSpacing:".04em" }}>
