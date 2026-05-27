@@ -868,6 +868,10 @@ export default function PeachAuth() {
                         fontSize: ".8rem",
                         fontWeight: 700,
                         color: "var(--error)",
+                        wordBreak: "break-word",
+                        whiteSpace: "pre-wrap",
+                        textAlign: "center",
+                        maxWidth: "100%",
                       }}
                     >
                       {qrError || "Connection failed"}
@@ -1683,8 +1687,9 @@ export default function PeachAuth() {
                 {qrPhase === "error" ? (
                   <div
                     style={{
-                      width: 204,
-                      height: 204,
+                      minWidth: 204,
+                      minHeight: 204,
+                      maxWidth: 360,
                       borderRadius: 14,
                       background: "var(--error-bg)",
                       border: "1.5px solid var(--error-bg)",
@@ -1698,10 +1703,14 @@ export default function PeachAuth() {
                   >
                     <span
                       style={{
-                        fontSize: ".8rem",
+                        fontSize: ".75rem",
                         fontWeight: 700,
                         color: "var(--error)",
                         textAlign: "center",
+                        wordBreak: "break-word",
+                        whiteSpace: "pre-wrap",
+                        maxWidth: "100%",
+                        overflowWrap: "anywhere",
                       }}
                     >
                       {qrError || "Connection failed"}

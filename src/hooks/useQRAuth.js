@@ -15,7 +15,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
   generateEphemeralKeyPair,
-  verifyDetachedSignature,
   decryptPGPMessage,
   signPGPMessage,
 } from "../utils/pgp.js";
@@ -68,6 +67,71 @@ function clearActiveSession() {
 function dbg(msg, data) {
   // eslint-disable-next-line no-console
   console.log("[useQRAuth]", msg, data ?? "");
+}
+
+// Verify the server-issued connection ID signature. Throws an Error whose
+// message embeds the underlying failure reason so it can be shown in the UI —
+// "Server signature verification failed" alone is overloaded (bad signature,
+// malformed armor, decryption mismatch, OpenPGP internal error all look the
+// same), and the reason is otherwise only available as a console.warn.
+async function verifyConnectionIdSignature({ decryptedId, signatureArmored, serverPubKey }) {
+  const diag = {
+    decryptedIdType: typeof decryptedId,
+    decryptedIdLen: decryptedId?.length,
+    sigArmoredLen: signatureArmored?.length,
+    serverPubKeyLen: serverPubKey?.length,
+  };
+
+  if (!signatureArmored) {
+    throw new Error(`Server signature verification failed: missing signature in response (${JSON.stringify(diag)})`);
+  }
+  if (!serverPubKey) {
+    throw new Error(`Server signature verification failed: missing server public key (${JSON.stringify(diag)})`);
+  }
+
+  let publicKey;
+  try {
+    publicKey = await openpgp.readKey({ armoredKey: serverPubKey });
+  } catch (err) {
+    throw new Error(`Server signature verification failed: could not parse server public key — ${err?.message || err} (${JSON.stringify(diag)})`);
+  }
+
+  let signature;
+  try {
+    signature = await openpgp.readSignature({ armoredSignature: signatureArmored });
+  } catch (err) {
+    throw new Error(`Server signature verification failed: could not parse signature — ${err?.message || err} (${JSON.stringify(diag)})`);
+  }
+
+  try {
+    const issuerKeyIDs = signature.getSigningKeyIDs?.()?.map((id) => id.toHex?.() || String(id));
+    const keyFp = publicKey.getKeyID?.()?.toHex?.();
+    diag.issuerKeyIDs = issuerKeyIDs;
+    diag.serverKeyID = keyFp;
+  } catch {
+    // best-effort: don't block verification on fingerprint extraction
+  }
+
+  let verifyResult;
+  try {
+    verifyResult = await openpgp.verify({
+      message: await openpgp.createMessage({ text: decryptedId }),
+      signature,
+      verificationKeys: publicKey,
+    });
+  } catch (err) {
+    throw new Error(`Server signature verification failed: verify threw — ${err?.message || err} (${JSON.stringify(diag)})`);
+  }
+
+  try {
+    const ok = await verifyResult.signatures[0].verified;
+    if (!ok) {
+      throw new Error(`Server signature verification failed: signature did not match decrypted ID (${JSON.stringify(diag)})`);
+    }
+  } catch (err) {
+    if (err?.message?.startsWith("Server signature verification failed")) throw err;
+    throw new Error(`Server signature verification failed: ${err?.message || err} (${JSON.stringify(diag)})`);
+  }
 }
 
 export function useQRAuth({ baseUrl, auto = true }) {
@@ -145,13 +209,13 @@ export function useQRAuth({ baseUrl, auto = true }) {
       const encMsg = await openpgp.readMessage({ armoredMessage: connData.encryptedDesktopConnectionId });
       const { data: decryptedId } = await openpgp.decrypt({ message: encMsg, decryptionKeys: privKeyObj });
 
-      // 5. Verify server signature
-      const sigValid = await verifyDetachedSignature(
+      // 5. Verify server signature — inline so we can surface the underlying
+      // failure reason in the UI (the shared helper returns a plain boolean).
+      await verifyConnectionIdSignature({
         decryptedId,
-        connData.signatureDesktopConnectionId,
-        serverPubKey
-      );
-      if (!sigValid) throw new Error("Server signature verification failed");
+        signatureArmored: connData.signatureDesktopConnectionId,
+        serverPubKey,
+      });
 
       if (ac.signal.aborted) return;
 
