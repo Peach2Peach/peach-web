@@ -443,6 +443,18 @@ const CSS = `
     display:flex;align-items:center;justify-content:center;flex-shrink:0;
     transition:transform .15s,opacity .15s;box-shadow:0 2px 8px rgba(245,101,34,.3)}
   .chat-send-btn:hover:not(:disabled){transform:scale(1.07)}
+  .chat-new-pill{
+    position:absolute;left:50%;bottom:74px;transform:translateX(-50%);
+    z-index:5;background:var(--grad);color:#fff;border:none;
+    border-radius:999px;padding:7px 14px;
+    font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;
+    box-shadow:0 4px 12px rgba(245,101,34,.35);
+    display:flex;align-items:center;gap:6px;
+    animation:chat-pill-in .18s ease-out}
+  .chat-new-pill:hover{transform:translateX(-50%) scale(1.04)}
+  @keyframes chat-pill-in{
+    from{opacity:0;transform:translateX(-50%) translateY(6px)}
+    to{opacity:1;transform:translateX(-50%) translateY(0)}}
 
   /* ── Direction badge ── */
   .dir-buy{background:var(--success-bg);color:var(--success);border-radius:999px;padding:5px 14px;font-size:.8rem;font-weight:800}

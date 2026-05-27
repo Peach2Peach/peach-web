@@ -3810,29 +3810,59 @@ export function ChatPanel({
     status === "dispute" || status === "disputeWithoutEscrowFunded";
   const [text, setText] = useState("");
   const [localMsgs, setLocalMsgs] = useState(messages);
+  const [newCount, setNewCount] = useState(0);
   const messagesRef = useRef(null);
   const prevScrollHeight = useRef(0);
+  const isAtBottomRef = useRef(true);
+  const seenIdsRef = useRef(new Set());
+  const forceScrollRef = useRef(true);
 
   useEffect(() => {
     setLocalMsgs(messages);
   }, [messages]);
 
-  // Scroll to bottom on first load and new messages; preserve position when prepending older
+  // Scroll behavior: auto-scroll only when user is at bottom, otherwise track unread count.
   useEffect(() => {
     if (!messagesRef.current) return;
     const el = messagesRef.current;
+
+    // Prepend branch: preserve relative position when older history loads.
     if (
       prevScrollHeight.current &&
       el.scrollHeight > prevScrollHeight.current
     ) {
       el.scrollTop = el.scrollHeight - prevScrollHeight.current;
-    } else {
-      el.scrollTop = el.scrollHeight;
+      prevScrollHeight.current = 0;
+      return;
     }
-    prevScrollHeight.current = 0;
+
+    // Count newly-arrived incoming messages (skip own messages and already-seen ids).
+    let incomingDelta = 0;
+    for (const m of localMsgs) {
+      if (!seenIdsRef.current.has(m.id)) {
+        seenIdsRef.current.add(m.id);
+        if (m.from !== "me") incomingDelta += 1;
+      }
+    }
+
+    // Force scroll: initial mount or after the user pressed Send.
+    if (forceScrollRef.current) {
+      el.scrollTop = el.scrollHeight;
+      forceScrollRef.current = false;
+      isAtBottomRef.current = true;
+      setNewCount(0);
+      return;
+    }
+
+    if (isAtBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+      setNewCount(0);
+    } else if (incomingDelta > 0) {
+      setNewCount((c) => c + incomingDelta);
+    }
   }, [localMsgs]);
 
-  // Auto-load older messages when user scrolls near the top
+  // Track scroll position: load older near top, clear pill once back at bottom.
   useEffect(() => {
     const el = messagesRef.current;
     if (!el) return;
@@ -3841,6 +3871,9 @@ export function ChatPanel({
         prevScrollHeight.current = el.scrollHeight;
         onLoadOlder?.();
       }
+      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
+      isAtBottomRef.current = atBottom;
+      if (atBottom) setNewCount(0);
     }
     el.addEventListener("scroll", onScroll);
     return () => el.removeEventListener("scroll", onScroll);
@@ -3848,6 +3881,7 @@ export function ChatPanel({
 
   async function send() {
     if (!text.trim() || disabled) return;
+    forceScrollRef.current = true;
     const msg = text.trim();
     const tempId = Date.now();
     // Optimistic UI — show immediately
@@ -4004,6 +4038,20 @@ export function ChatPanel({
           );
         })}
       </div>
+
+      {newCount > 0 && (
+        <button
+          type="button"
+          className="chat-new-pill"
+          onClick={() => {
+            const el = messagesRef.current;
+            if (el) el.scrollTop = el.scrollHeight;
+            setNewCount(0);
+          }}
+        >
+          ↓ {newCount} new {newCount === 1 ? "message" : "messages"}
+        </button>
+      )}
 
       <div className="chat-input-row">
         <textarea
