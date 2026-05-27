@@ -464,10 +464,51 @@ async function _poll(auth, base) {
       return;
     }
 
-    // ── Diff contracts ──
     const events = [];
     const now = Date.now();
 
+    // ── Detect acceptance of outbound trade requests ──
+    // Positive signal, parallel to the rejection detector below. When the
+    // hasTurnedToMyContract endpoint definitively returns accepted=true for
+    // an offer the user sent a request to, fire an explicit "Its a match!"
+    // and suppress the contract diff's first-sighting notification for the
+    // same contract on this tick.
+    //
+    // Why this exists: on regtest (and any fast environment) the contract
+    // can advance through fundEscrow → paymentRequired between two polls,
+    // so the contract diff's brand-new branch only ever sees the downstream
+    // state. The user then gets "Payment required" instead of the acceptance
+    // milestone. Running this check pre-diff with same-tick suppression
+    // guarantees the acceptance signal lands first, regardless of cadence.
+    const acceptedContractIds = new Set();
+    if (_prevSentRequests.size > 0) {
+      const sentEntries = [..._prevSentRequests.entries()];
+      const checks = await Promise.all(
+        sentEntries.map(([offerId, offerType]) =>
+          offerType
+            ? hasOfferTurnedToMyContract(offerId, offerType, auth)
+            : Promise.resolve({ accepted: null, contractId: null })
+        )
+      );
+      sentEntries.forEach(([offerId], i) => {
+        const { accepted, contractId } = checks[i];
+        if (accepted !== true || !contractId) return;
+        const cid = String(contractId);
+        const notifId = `o-${offerId}-accepted-${cid}`;
+        if (_state.notifications.some(n => n.id === notifId)) return;
+        acceptedContractIds.add(cid);
+        events.push(_makeNotif(
+          notifId, "statusChange",
+          "Its a match!",
+          "Your trade request was accepted.",
+          cid, offerId
+        ));
+        _prevSentRequests.delete(offerId);
+        _rejectionCandidates.delete(offerId);
+      });
+    }
+
+    // ── Diff contracts ──
     for (const c of contracts) {
       const prev = _prevContracts.get(c.id);
       const status = c.tradeStatus;
@@ -476,6 +517,7 @@ async function _poll(auth, base) {
       const isBuyer  = rawType === "bid" || rawType === "buy" || (c.buyer?.id ?? c.buyerId) === peachId;
       const isSeller = !isBuyer;
       const sellerOv = isSeller ? SELLER_OVERRIDE[status] : null;
+      const suppressEmit = acceptedContractIds.has(String(c.id));
 
       if (prev) {
         // Seller granted more time after the buyer missed the payment window:
@@ -488,7 +530,7 @@ async function _poll(auth, base) {
             "the seller gave you more time to make the payment. Proceed as soon as possible.",
             c.id, null
           ));
-        } else if (prev.tradeStatus !== status && STATUS_NOTIF[status]) {
+        } else if (prev.tradeStatus !== status && STATUS_NOTIF[status] && !suppressEmit) {
           const sn = STATUS_NOTIF[status];
           events.push(_makeNotif(
             `c-${c.id}-${status}-${now}`, sn.type,
@@ -505,8 +547,9 @@ async function _poll(auth, base) {
           ));
         }
       } else {
-        // Brand new contract since last poll — notify if it has an interesting status
-        if (STATUS_NOTIF[status]) {
+        // Brand new contract since last poll — notify if it has an interesting status,
+        // unless the acceptance emitter already fired for this contract on this tick.
+        if (STATUS_NOTIF[status] && !suppressEmit) {
           const sn = STATUS_NOTIF[status];
           events.push(_makeNotif(
             `c-${c.id}-${status}-${now}`, sn.type,
