@@ -587,6 +587,7 @@ body{font-family:var(--font);background:var(--primary-bg);color:var(--black)}
   letter-spacing:.04em;transition:all .12s;
 }
 .popup-cur-pill:hover{border-color:var(--primary);color:var(--primary-dark)}
+.popup-cur-pill.pm-ready{border-color:var(--black-25);color:var(--black)}
 .popup-cur-pill.selected{border-color:var(--primary);background:var(--primary-mild);color:var(--primary-dark)}
 
 /* Requested state */

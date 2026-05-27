@@ -91,7 +91,7 @@ export default function OfferDetailPopup({
   const location = useLocation();
   const { get, post, patch, auth } = useApi();
   const isLoggedIn = !!auth;
-  const { btcPrice, selectedCurrency } = useCurrency();
+  const { btcPrice, selectedCurrency, allPrices } = useCurrency();
   const { pms: pmsRaw, error: pmFetchError } = useUserPMs(auth);
   const pmError = !!pmFetchError;
   const userPMs = normalizeUserPMs(pmsRaw);
@@ -515,9 +515,11 @@ export default function OfferDetailPopup({
   const isOwn = offer.isOwn;
   const isRequested = (offer.hasPerformedTradeRequest || localJustRequested || !!acceptedContractId) && !isOwn;
   const isInstant = offer.auto;
-  const sym = currSym(selectedCurrency);
-  const rate = Math.round(btcPrice * (1 + offer.premium / 100));
-  const fiat = (offer.amount / 100_000_000) * btcPrice * (1 + offer.premium / 100);
+  const displayCurrency = popupCurrency ?? selectedCurrency;
+  const displayBtcPrice = Math.round(allPrices?.[displayCurrency] ?? btcPrice);
+  const sym = currSym(displayCurrency);
+  const rate = Math.round(displayBtcPrice * (1 + offer.premium / 100));
+  const fiat = (offer.amount / 100_000_000) * displayBtcPrice * (1 + offer.premium / 100);
   // Color from the viewer's perspective, matching the list row's premiumCls(premium, isSellTab):
   // ask/buy-tab → positive = bad (red); bid/sell-tab → positive = good (green).
   const premCls = offer.premium === 0 ? "prem-zero" : offer.type === "ask"
@@ -800,10 +802,8 @@ export default function OfferDetailPopup({
                         onClick={() => {
                           if (sel) { setSelectedPM(null); return; }
                           setSelectedPM(pm.id);
-                          const currencyValid = popupCurrency && pmWorksForCurrency(offer, pm, popupCurrency);
-                          if (!currencyValid) {
-                            const firstValid = offer.currencies.find(c => pmWorksForCurrency(offer, pm, c)) ?? null;
-                            setPopupCurrency(firstValid);
+                          if (popupCurrency && !pmWorksForCurrency(offer, pm, popupCurrency)) {
+                            setPopupCurrency(null);
                           }
                         }}>
                         <div className={`popup-pm-radio${sel ? " checked" : ""}`}>
@@ -834,24 +834,31 @@ export default function OfferDetailPopup({
               )}
 
               {/* Currency selector — only when offer has 2+ currencies */}
-              {!hasMissingPM && offer.currencies.length > 1 && (
+              {offer.currencies.length > 1 && (
                 <>
                   <div className="popup-section-label">
                     Select currency
                   </div>
                   <div className="popup-currency-pills">
-                    {offer.currencies.map(c => (
-                      <button key={c}
-                        className={`popup-cur-pill${popupCurrency === c ? " selected" : ""}`}
-                        onClick={() => {
-                          if (popupCurrency === c) { setPopupCurrency(null); return; }
-                          setPopupCurrency(c);
-                          const pm = userPMs.find(p => p.id === selectedPM);
-                          if (pm && !pmWorksForCurrency(offer, pm, c)) setSelectedPM(null);
-                        }}>
-                        {c}
-                      </button>
-                    ))}
+                    {offer.currencies.map(c => {
+                      const selectedPMObj = selectedPM ? userPMs.find(p => p.id === selectedPM) : null;
+                      const pmReady = selectedPMObj
+                        ? pmWorksForCurrency(offer, selectedPMObj, c)
+                        : userPMs.some(pm => pmWorksForCurrency(offer, pm, c));
+                      const level = popupCurrency === c ? "selected" : pmReady ? "pm-ready" : "accepted";
+                      return (
+                        <button key={c}
+                          className={`popup-cur-pill ${level}`}
+                          onClick={() => {
+                            if (popupCurrency === c) { setPopupCurrency(null); return; }
+                            setPopupCurrency(c);
+                            const pm = userPMs.find(p => p.id === selectedPM);
+                            if (pm && !pmWorksForCurrency(offer, pm, c)) setSelectedPM(null);
+                          }}>
+                          {c}
+                        </button>
+                      );
+                    })}
                   </div>
                 </>
               )}
