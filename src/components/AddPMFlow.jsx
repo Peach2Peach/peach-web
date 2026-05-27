@@ -144,20 +144,21 @@ export function methodLabel(pm) {
 
 const STEP_LABELS_FULL = ["Currency", "Category", "Country", "Method", "Details"];
 
-function ProgressBar({ step, showCountryStep, meetupMode }) {
-  // Country step (index 2) is hidden when showCountryStep is false. We collapse
-  // the visible labels accordingly and renumber for display so users see a
-  // continuous 4- or 5-step bar.
+function ProgressBar({ step, showCountryStep, meetupMode, skipCategoryStep }) {
+  // Hidden source-step indices: Category (1) when skipCategoryStep, Country (2)
+  // when showCountryStep is false. We filter both labels and the current-step
+  // index against the same set so the bar stays consistent at 3, 4, or 5 steps.
   const baseLabels = meetupMode
     ? STEP_LABELS_FULL.map((l, i) => (i === 3 ? "Meetup" : l))
     : STEP_LABELS_FULL;
-  const visibleLabels = showCountryStep
-    ? baseLabels
-    : baseLabels.filter((_, i) => i !== 2);
-  // Index of the current step within the visible list:
-  //   - if country step is hidden, step 3 (Method) becomes visible index 2
-  //     and step 4 (Details) becomes visible index 3.
-  const visibleStep = showCountryStep ? step : (step >= 3 ? step - 1 : step);
+  const hidden = new Set();
+  if (skipCategoryStep) hidden.add(1);
+  if (!showCountryStep) hidden.add(2);
+  const visibleLabels = baseLabels.filter((_, i) => !hidden.has(i));
+  // Visible index = number of non-hidden indices at or before `step`, minus 1.
+  const visibleStep = baseLabels
+    .slice(0, step + 1)
+    .filter((_, i) => !hidden.has(i)).length - 1;
   const total = visibleLabels.length;
   return (
     <div className="pm-progress">
@@ -188,8 +189,7 @@ export function AddPMFlow({ methods, meetupEvents = [], onSave, onClose, editDat
   const [selMethodId, setSelMethodId] = useState(editData?.methodId || "");
   const [details, setDetails] = useState(editData?.details || {});
   const [selCurrencies, setSelCurrencies] = useState(editData?.currencies || []);
-  // User-editable nickname ("label"). Optional; falls back to the method name
-  // at save time so the serialized blob always has a non-empty label.
+  // User-editable nickname ("label"). Optional; stored empty when blank.
   const [pmLabel, setPmLabel] = useState(editData?.label || "");
   const [payRefCustom, setPayRefCustom] = useState(editData?.details?.reference ?? "");
   const [errors, setErrors] = useState({});
@@ -246,6 +246,9 @@ export function AddPMFlow({ methods, meetupEvents = [], onSave, onClose, editDat
   const catsForCurrency = selCurrency
     ? [...new Set(Object.values(methods).filter(m => m.currencies.includes(selCurrency)).map(m => m.category))]
     : [];
+  // When a currency has only one applicable category, the Category step is
+  // a one-click dead end — collapse it out of the flow in both directions.
+  const skipCategoryStep = !!selCurrency && catsForCurrency.length === 1;
 
   const isCash = selCategory === "cash";
   const showCountryStep = isCash || (selCategory === "national" && !!nationalGroupFor(selCurrency));
@@ -413,14 +416,28 @@ export function AddPMFlow({ methods, meetupEvents = [], onSave, onClose, editDat
 
   function handleSelectCurrency(c) {
     setSelCurrency(c);
-    setSelCategory("");
     setSelCountry("");
     setSelMethodId("");
     setDetails({});
     setSelCurrencies([]);
     setErrors({});
     setSearchQuery("");
-    setStep(1);
+    // Compute categories inline — `catsForCurrency` reflects the previous
+    // selCurrency until the next render.
+    const cats = [...new Set(
+      Object.values(methods)
+        .filter(m => m.currencies.includes(c))
+        .map(m => m.category)
+    )];
+    if (cats.length === 1) {
+      const cat = cats[0];
+      setSelCategory(cat);
+      const goCountry = cat === "cash" || (cat === "national" && !!nationalGroupFor(c));
+      setStep(goCountry ? 2 : 3);
+    } else {
+      setSelCategory("");
+      setStep(1);
+    }
   }
 
   function handleSelectCategory(cat) {
@@ -493,11 +510,15 @@ export function AddPMFlow({ methods, meetupEvents = [], onSave, onClose, editDat
     handleSelectMeetup(event);
   }
 
-  // Back-button routing: skip the country step on non-national flows.
+  // Back-button routing: skip the country step on non-national flows, and skip
+  // the category step when the chosen currency has only one applicable category.
   function prevStep(s) {
     if (s === 4) return 3;
-    if (s === 3) return showCountryStep ? 2 : 1;
-    if (s === 2) return 1;
+    if (s === 3) {
+      if (showCountryStep) return 2;
+      return skipCategoryStep ? 0 : 1;
+    }
+    if (s === 2) return skipCategoryStep ? 0 : 1;
     if (s === 1) return 0;
     return 0;
   }
@@ -612,7 +633,7 @@ export function AddPMFlow({ methods, meetupEvents = [], onSave, onClose, editDat
       id:         editData?.id || `${selMethodId}-${Date.now()}`,
       methodId:   selMethodId,
       name:       methodName,
-      label:      (pmLabel || "").trim() || methodName,
+      label:      (pmLabel || "").trim(),
       currencies: isMpesaActive ? [...methodCurrencies] : selCurrencies,
       details:    cleanDetails,
     };
@@ -652,7 +673,7 @@ export function AddPMFlow({ methods, meetupEvents = [], onSave, onClose, editDat
 
           {/* Progress bar */}
           <div style={{ padding:"12px 22px 0" }}>
-            <ProgressBar step={step} showCountryStep={showCountryStep} meetupMode={isCash}/>
+            <ProgressBar step={step} showCountryStep={showCountryStep} meetupMode={isCash} skipCategoryStep={skipCategoryStep && step > 0}/>
           </div>
 
           {/* Body */}

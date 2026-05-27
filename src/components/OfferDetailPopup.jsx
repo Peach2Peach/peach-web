@@ -121,7 +121,29 @@ export default function OfferDetailPopup({
   const popupRequestSeenRef = useRef(false);
   const popupRequestMissingRef = useRef(0);
   const notifiedRequestedRef = useRef(false);
+  const autoSelectedForRef = useRef(null);
   useEffect(() => () => { if (pendingTimerRef.current) clearTimeout(pendingTimerRef.current); }, []);
+
+  // Pre-select the only compatible PM (and its currency) when the popup opens
+  // for an offer where the user has exactly one matching PM. Runs once per
+  // distinct offer.id; never overrides an explicit user choice.
+  useEffect(() => {
+    if (!offer || !userPMs.length) return;
+    if (autoSelectedForRef.current === offer.id) return;
+    if (selectedPM !== null) return;
+    const compatible = userPMs.filter(pm =>
+      offer.currencies.some(c => pmWorksForCurrency(offer, pm, c))
+    );
+    if (compatible.length === 1) {
+      const pm = compatible[0];
+      setSelectedPM(pm.id);
+      if (!popupCurrency) {
+        const cur = pickRelevantCurrency(offer, pm, selectedCurrency);
+        if (cur) setPopupCurrency(cur);
+      }
+    }
+    autoSelectedForRef.current = offer.id;
+  }, [offer, userPMs, selectedPM, popupCurrency, selectedCurrency]);
 
   // ── Fetch details + polling (mirrors market-view 183-300) ──
   useEffect(() => {
@@ -227,6 +249,13 @@ export default function OfferDetailPopup({
   function pmWorksForCurrency(offer, pm, currency) {
     const methods = offer._raw?.meansOfPayment?.[currency] ?? [];
     return methods.includes(pm.type) && (pm.currencies ?? []).includes(currency);
+  }
+
+  // Prefer `prefer` if the PM supports it on this offer; otherwise the first
+  // currency in offer.currencies the PM supports. Null when nothing works.
+  function pickRelevantCurrency(offer, pm, prefer) {
+    if (prefer && pmWorksForCurrency(offer, pm, prefer)) return prefer;
+    return offer.currencies.find(c => pmWorksForCurrency(offer, pm, c)) ?? null;
   }
 
   async function resolveCounterpartyKeys(offer) {
@@ -802,9 +831,11 @@ export default function OfferDetailPopup({
                         onClick={() => {
                           if (sel) { setSelectedPM(null); return; }
                           setSelectedPM(pm.id);
-                          if (popupCurrency && !pmWorksForCurrency(offer, pm, popupCurrency)) {
-                            setPopupCurrency(null);
-                          }
+                          // Keep the current currency if it still works with
+                          // the new PM; otherwise auto-pick the most relevant
+                          // (prefers the user's global selectedCurrency).
+                          if (popupCurrency && pmWorksForCurrency(offer, pm, popupCurrency)) return;
+                          setPopupCurrency(pickRelevantCurrency(offer, pm, selectedCurrency));
                         }}>
                         <div className={`popup-pm-radio${sel ? " checked" : ""}`}>
                           {sel && <div className="popup-pm-radio-dot"/>}
