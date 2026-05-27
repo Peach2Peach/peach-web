@@ -43,6 +43,7 @@ import { QRCodeSVG } from "qrcode.react";
 
 // Local sub-components
 import { IconAlert, HistoryTable } from "./components.jsx";
+import StatusChip from "../../components/StatusChip.jsx";
 
 // Matches popup + helpers
 import MatchesPopup, {
@@ -2408,7 +2409,6 @@ export default function TradesDashboard() {
       {offerDetailPopup &&
         (() => {
           const o = offerDetailPopup;
-          const statusCfg = STATUS_CONFIG[o.tradeStatus] || {};
           const isBuy = o.direction === "buy";
 
           const fundingConfs =
@@ -2418,32 +2418,21 @@ export default function TradesDashboard() {
           const fundingApiStatus = offerDetails?.funding?.status ?? null;
 
           let fundingStage; // "needs" | "mempool" | "funded" | "fallback"
-          let derivedStatus;
           if (isBuy) {
             fundingStage = "fallback";
-            derivedStatus = String(
-              statusCfg.label ?? o.tradeStatus ?? "",
-            ).toUpperCase();
           } else if (o.tradeStatus === "fundingAmountDifferent") {
             // Wrong amount funded: the tx may even be confirmed, but the seller
             // must still choose continue-or-refund. Take precedence over "funded"
             // so the choice panel shows instead of the funded "cancel & refund".
             fundingStage = "wrongAmount";
-            derivedStatus = "WRONG AMOUNT FUNDED";
           } else if (fundingApiStatus === "CONFIRMED" || fundingConfs > 0) {
             fundingStage = "funded";
-            derivedStatus = `FUNDED · ${fundingConfs} CONF`;
           } else if (fundingApiStatus === "MEMPOOL") {
             fundingStage = "mempool";
-            derivedStatus = "TRANSACTION IN MEMPOOL";
           } else if (o.tradeStatus === "fundEscrow") {
             fundingStage = "needs";
-            derivedStatus = "NEEDS FUNDING";
           } else {
             fundingStage = "fallback";
-            derivedStatus = String(
-              statusCfg.label ?? o.tradeStatus ?? "",
-            ).toUpperCase();
           }
 
           const criteria =
@@ -2842,7 +2831,16 @@ export default function TradesDashboard() {
                   <div className="offer-detail-row">
                     <span className="offer-detail-label">Status</span>
                     <span className="offer-detail-value">
-                      {odDetailsLoading ? "Loading…" : derivedStatus}
+                      {odDetailsLoading ? (
+                        "Loading…"
+                      ) : (
+                        <StatusChip
+                          status={o.displayStatus ?? o.tradeStatus}
+                          showAction
+                          inline
+                          role={isBuy ? "buyer" : "seller"}
+                        />
+                      )}
                     </span>
                   </div>
                   <div className="offer-detail-row">
