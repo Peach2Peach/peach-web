@@ -881,6 +881,8 @@ export function CollapsibleAddressSection({
   emptyLabel = null,
   mempoolLinkLabel,
   onFirstExpand,
+  warning = null,
+  warningTone = "error",
 }) {
   const [expanded, setExpanded] = useState(false);
   const [hasExpandedOnce, setHasExpandedOnce] = useState(false);
@@ -919,17 +921,6 @@ export function CollapsibleAddressSection({
         }}
       >
         {title}
-        <span
-          style={{
-            color: "var(--error)",
-            fontWeight: 600,
-            textTransform: "none",
-            letterSpacing: 0,
-            fontSize: ".68rem",
-          }}
-        >
-          do not fund
-        </span>
         <svg
           width="10"
           height="10"
@@ -951,6 +942,21 @@ export function CollapsibleAddressSection({
 
       {expanded && (
         <>
+          {warning && (
+            <div
+              style={{
+                color:
+                  warningTone === "success"
+                    ? "var(--success)"
+                    : "var(--error)",
+                fontWeight: 600,
+                fontSize: ".78rem",
+                marginBottom: 8,
+              }}
+            >
+              {warning}
+            </div>
+          )}
           <div
             style={{
               background: "var(--black-5)",

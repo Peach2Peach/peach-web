@@ -2390,6 +2390,15 @@ export default function TradeExecution() {
                     "escrowWaitingForConfirmation",
                   ].includes(status) && (
                     <>
+                      {role === "buyer" && contract.escrow && (
+                        <CollapsibleAddressSection
+                          title="Escrow"
+                          address={contract.escrow}
+                          mempoolLinkLabel="View escrow on mempool.space"
+                          warning="funded"
+                          warningTone="success"
+                        />
+                      )}
                       <div className="panel-section">
                         <div className="panel-section-title">
                           {role === "seller" ? "Buyer" : "Seller"} Payment Details
@@ -3068,6 +3077,7 @@ export default function TradeExecution() {
                         title="Escrow"
                         address={contract.escrow ?? null}
                         mempoolLinkLabel="View escrow on mempool.space"
+                        warning="do not fund"
                       />
                       <CollapsibleAddressSection
                         title="Refund Address"
