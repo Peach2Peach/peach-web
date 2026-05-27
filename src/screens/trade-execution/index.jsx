@@ -428,6 +428,27 @@ const CSS = `
   .chat-mediator-ts{
     font-size:.62rem;color:var(--black-65);opacity:.8;
   }
+  .chat-pm-warning-row{
+    display:flex;flex-direction:column;align-items:center;gap:8px;
+    padding:14px 18px;margin:6px auto;
+    max-width:92%;border-radius:12px;
+    background:var(--warning-soft);
+    border:2px solid var(--warning);
+    text-align:center;
+  }
+  .chat-pm-warning-header{
+    display:inline-flex;align-items:center;gap:8px;
+    font-family:var(--font);font-weight:700;font-size:.95rem;
+    color:var(--warning);
+  }
+  .chat-pm-warning-icon{
+    display:inline-flex;color:var(--warning);
+    transform:scale(1.4);
+  }
+  .chat-pm-warning-text{
+    font-size:.82rem;line-height:1.55;color:var(--black);
+    font-weight:500;white-space:pre-wrap;
+  }
   .chat-input-row{
     display:flex;align-items:flex-end;gap:10px;
     padding:12px 18px;border-top:1px solid var(--black-10);
@@ -956,7 +977,6 @@ export default function TradeExecution() {
     paymentDetailsError: null,
     ownPaymentDetails: null,
   };
-  const messages = liveMessages ?? [];
   const {
     contract,
     counterparty: rawCounterparty,
@@ -967,6 +987,18 @@ export default function TradeExecution() {
     paymentDetailsError,
     ownPaymentDetails,
   } = scenario;
+  const messages = (() => {
+    const base = liveMessages ?? [];
+    if (contract?.method !== "revolut") return base;
+    const warning = {
+      id: "__pm-warning-revolut__",
+      kind: "pm-warning",
+      title: "Security Notice",
+      text: "Sellers using Revtag: should make sure the payment was received ONLY via the announced Revolut tag, and NOT via creditcard or apple pay or any method that allows chargeback",
+      ts: 0,
+    };
+    return [warning, ...base];
+  })();
   const counterparty = rawCounterparty ?? {
     initials: "??",
     color: "var(--black-65)",

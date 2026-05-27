@@ -3986,6 +3986,21 @@ export function ChatPanel({
           </div>
         )}
         {localMsgs.map((msg) => {
+          // Synthetic client-side warning (e.g. Revolut chargeback notice).
+          // Distinct from API system messages — no timestamp, prominent styling.
+          if (msg.kind === "pm-warning") {
+            return (
+              <div key={msg.id} className="chat-pm-warning-row">
+                <div className="chat-pm-warning-header">
+                  <span className="chat-pm-warning-icon">
+                    <IconAlert />
+                  </span>
+                  {msg.title}
+                </div>
+                <div className="chat-pm-warning-text">{msg.text}</div>
+              </div>
+            );
+          }
           // System messages render as a centred notice, not a chat bubble.
           // We trust either the API flag (from === "system") or the i18n key prefix.
           const isSystem =

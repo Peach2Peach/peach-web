@@ -14,7 +14,7 @@ import { BITCOIN_NETWORK } from "../utils/network.js";
 import { getSigningPeachId } from "../utils/format.js";
 import {
   CopyBtn, PrimaryBtn, FieldError, makeBlurHandler,
-  IconCopy, IconTrash, IconCamera,
+  IconCopy, IconTrash,
 } from "../screens/settings/components.jsx";
 
 const IconChevronLeft = () => (
@@ -235,9 +235,6 @@ export default function PayoutAddressWizard({ auth, onClose, onDone, asModal = f
             <button onClick={async () => { try { const t = await navigator.clipboard.readText(); setAddress(t); setErrors(p => ({ ...p, address: null })); const r = validateBtcAddress(t, btcNetwork); if(r.valid) setAddressSet(true); else { setAddressSet(false); setErrors(p => ({ ...p, address: r.error })); } } catch {} }}
               style={{ border:"none", background:"transparent", cursor:"pointer", color:"var(--primary)", padding:4 }}>
               <IconCopy size={16}/>
-            </button>
-            <button style={{ border:"none", background:"transparent", cursor:"pointer", color:"var(--primary)", padding:4 }}>
-              <IconCamera size={16}/>
             </button>
           </div>
         </div>
