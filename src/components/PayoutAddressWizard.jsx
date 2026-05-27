@@ -137,26 +137,15 @@ export default function PayoutAddressWizard({ auth, onClose, onDone, asModal = f
   async function handleConfirm() {
     const sigCheck = validateBIP322Signature(signature);
     if (!sigCheck.valid) { setErrors(p => ({ ...p, sig: sigCheck.error })); return; }
+    if (sigCryptoValid !== true) {
+      setErrors(p => ({ ...p, sig: "Signature does not match this address and message" }));
+      return;
+    }
 
     setSubmitting(true);
     setErrors(p => ({ ...p, sig: null }));
 
     try {
-      // Final cryptographic guard — protects against the user clicking CONFIRM
-      // before the live-verify effect has finished.
-      const { isValidBitcoinSignature } = await import("../utils/bitcoinSignatureVerify.js");
-      const cryptoValid = isValidBitcoinSignature({
-        message: signMessage,
-        address,
-        signature: signature.trim(),
-      });
-      if (!cryptoValid) {
-        setErrors(p => ({ ...p, sig: "Signature does not match this address and message" }));
-        setSigCryptoValid(false);
-        setSubmitting(false);
-        return;
-      }
-
       if (auth) {
         const ok = await syncCustomPayoutAddressToServer(
           {
