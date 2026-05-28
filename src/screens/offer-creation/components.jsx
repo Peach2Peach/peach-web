@@ -63,12 +63,15 @@ export function LivePreview({
   form,
   offerMethods,
   offerCurrencies,
+  activeCurrency,
+  activeBtcPrice,
 }) {
-  // Preview reflects the offer's own denomination (first PM currency), not the
-  // topbar's display currency — so other traders see the offer faithfully.
+  // Preview reflects the offer's own denomination — follow the picked currency
+  // when provided (driven by the currency pills under Payment methods), else
+  // fall back to the first PM currency.
   const { allPrices } = useCurrency();
-  const previewCurrency = offerCurrencies[0] || "EUR";
-  const previewBtcPrice = allPrices?.[previewCurrency] ?? 0;
+  const previewCurrency = activeCurrency ?? offerCurrencies[0] ?? "EUR";
+  const previewBtcPrice = activeBtcPrice ?? allPrices?.[previewCurrency] ?? 0;
 
   const isSell = type === "sell";
   const p = parseFloat(form.premium) || 0;
@@ -172,16 +175,19 @@ export function LivePreview({
 
 // ─── AMOUNT SLIDER (unified buy + sell) ─────────────────────────────────────
 
-export function AmountSlider({ form, setF, btcPrice }) {
+export function AmountSlider({ form, setF, btcPrice, activeCurrency, activeBtcPrice }) {
   // Limit math is sats-based and currency-independent (anchored to CHF live).
-  // Display values follow the topbar's selectedCurrency.
+  // Display values follow the offer's picked currency when provided, otherwise
+  // fall back to the topbar's selectedCurrency.
   const { allPrices, selectedCurrency } = useCurrency();
+  const displayCurrency = activeCurrency ?? selectedCurrency;
+  const displayBtcPrice = activeBtcPrice ?? btcPrice;
   const maxSats = maxSatsAtLimit(allPrices?.CHF);
   const val = form.amtFixed || MIN_SATS;
   const span = Math.max(1, maxSats - MIN_SATS);
   const pct = ((val - MIN_SATS) / span) * 100;
 
-  const currentFiat = satsToFiat(val, btcPrice);
+  const currentFiat = satsToFiat(val, displayBtcPrice);
   const pctOfLimit = maxSats ? val / maxSats : 0;
   const nearLimit = pctOfLimit >= 0.9;
 
@@ -189,8 +195,8 @@ export function AmountSlider({ form, setF, btcPrice }) {
 
   const barColor = pctOfLimit < 0.9 ? "var(--success)" : "var(--warning)";
 
-  const sym = currSym(selectedCurrency);
-  const limitInSel = limitInCurrency(allPrices, selectedCurrency);
+  const sym = currSym(displayCurrency);
+  const limitInSel = limitInCurrency(allPrices, displayCurrency);
 
   // Editable sats input state
   const [inputVal, setInputVal] = useState(String(val));
@@ -415,11 +421,13 @@ export function MultiEscrowFunding({
   navigate,
   reset,
   allFunded,
+  activeCurrency,
 }) {
   const [copiedKey, setCopiedKey] = useState(null); // "addr-0", "uri-2", etc.
   const [taskState, setTaskState] = useState({}); // offerId → 'sending' | 'sent' | 'failed'
   const [qrWithAmount, setQrWithAmount] = useState(true);
   const { selectedCurrency } = useCurrency();
+  const displayCurrency = activeCurrency ?? selectedCurrency;
 
   const validResults = results.filter(
     (r) => r.status !== "failed" && r.escrowAddress,
@@ -543,7 +551,7 @@ export function MultiEscrowFunding({
             <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:12}}>
               <SatsAmount sats={amtFixed} fontSize="1.6rem"/>
               <span style={{fontSize:".88rem",color:"var(--black-65)",fontWeight:600}}>
-                ≈ {currSym(selectedCurrency)}{fmtEur(satsToFiat(amtFixed,effP))}
+                ≈ {currSym(displayCurrency)}{fmtEur(satsToFiat(amtFixed,effP))}
               </span>
             </div>
           </div>

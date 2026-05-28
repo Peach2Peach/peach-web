@@ -480,8 +480,11 @@ body{font-family:var(--font);background:var(--primary-bg);color:var(--black)}
   }
   .sidenav.sidenav-mobile-open{transform:translateX(0);box-shadow:6px 0 28px rgba(43,25,17,.16)}
   .sidenav-mobile-open{transform:translateX(0)}
-  .sidenav-label{opacity:1!important;max-height:none!important;font-size:.8rem;text-transform:none;font-weight:600;letter-spacing:0}
-  .sidenav-item{width:calc(100% - 16px);flex-direction:row;justify-content:flex-start;gap:12px;padding:10px 14px}
+  .sidenav-label{opacity:1!important;max-height:none!important;font-size:1rem;text-transform:none;font-weight:600;letter-spacing:0}
+  .sidenav-item{width:calc(100% - 16px);flex-direction:row;justify-content:flex-start;gap:15px;padding:13px 18px}
+  .sidenav-icon{height:28px}
+  .sidenav-icon svg{width:25px;height:25px}
+  .sidenav-theme-toggle{padding:13px 20px;gap:15px;font-size:1.025rem}
 }
 
 /* ─── OFFER DETAIL POPUP (shared across MARKET and USER PROFILE screens) ─── */

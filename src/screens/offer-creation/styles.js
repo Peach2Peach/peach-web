@@ -42,6 +42,15 @@ export const CSS = `
     min-height:calc(100vh - var(--topbar));margin-top:var(--topbar)}
   .wizard{display:flex;flex-direction:column;padding:36px 48px;
     border-right:1px solid var(--black-10);min-width:0;gap:0}
+  /* Wizard content cap — keeps the column full-width (preserves the
+     border-right divider) while capping each content block to a comfortable
+     reading width centered within it. 720px matches Dev Tools; 680px is also
+     in use across Wallet / PMs. Applies to every step (Configure, Review,
+     Escrow). */
+  .wizard-header,
+  .step-bar,
+  .step-anim,
+  .oc-nav{width:100%;max-width:720px;margin-left:auto;margin-right:auto}
 
   /* Wizard header */
   .wizard-header{display:flex;align-items:center;justify-content:space-between;
@@ -461,6 +470,7 @@ export const CSS = `
     .layout{grid-template-columns:1fr}
     .preview-panel{display:none}
     .wizard{padding:20px 16px}
+    .offer-currency-tabs{justify-content:center}
   }
   @media(max-width:767px){
     .price-pill{display:none}

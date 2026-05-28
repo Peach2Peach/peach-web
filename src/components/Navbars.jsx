@@ -97,7 +97,7 @@ export function SideNav({ active: activeProp, mobileOpen, onClose, onNavigate, m
       <nav className={`sidenav${mobileOpen ? " sidenav-mobile-open" : ""}`}>
         {NAV_ITEMS.map(({ id, label, icon }) => (
           <button key={id} className={`sidenav-item${active === id ? " sidenav-active" : ""}`}
-            onClick={() => { if (onNavigate && NAV_ROUTES[id]) onNavigate(NAV_ROUTES[id]); }}>
+            onClick={() => { if (onNavigate && NAV_ROUTES[id]) onNavigate(NAV_ROUTES[id]); if (onClose) onClose(); }}>
             <span className="sidenav-icon" style={{ position:"relative" }}>
               {icon()}
               {id === "trades" && urgentCount > 0 && <span className="sidenav-badge">{urgentCount > 99 ? "99+" : urgentCount}</span>}
