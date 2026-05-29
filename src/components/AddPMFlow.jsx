@@ -50,6 +50,10 @@ export const CATEGORY_META = {
   cash:          { label: "Cash & Meetups",        icon: IconMeetup,   description: "In-person cash trades at Bitcoin meetups" },
 };
 
+// Methods pinned to the top of the method-selection list (in this order),
+// ahead of the alphabetical remainder. These are the most popular wallets.
+const PRIORITY_METHODS = ["revolut", "wise", "paypal"];
+
 // Cash/meetup methods carry ids like "cash.be.antwerp.belgian-btc-embassy".
 // The trailing dot distinguishes them from unrelated ids beginning with "cash".
 export const isCashId = (id) => typeof id === "string" && id.startsWith("cash.");
@@ -302,7 +306,16 @@ export function AddPMFlow({ methods, meetupEvents = [], onSave, onClose, editDat
         m.currencies.includes(selCurrency) &&
         (!allowed || allowed.has(id))
       )
-      .sort((a, b) => a[1].name.localeCompare(b[1].name));
+      .sort((a, b) => {
+        const pa = PRIORITY_METHODS.indexOf(a[0]);
+        const pb = PRIORITY_METHODS.indexOf(b[0]);
+        if (pa !== -1 || pb !== -1) {
+          if (pa === -1) return 1;
+          if (pb === -1) return -1;
+          return pa - pb;
+        }
+        return a[1].name.localeCompare(b[1].name);
+      });
   })();
 
   // ── Step-1 search results ───────────────────────────────────────────────
