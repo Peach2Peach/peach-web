@@ -31,7 +31,7 @@ import {
 // ─── DISPLAY NAMES ──────────────────────────────────────────────────────────
 export const PM_NAMES = {
   accrue: "Accrue",
-  advcash: "ADV Cash",
+  advcash: "Volet",
   airtelMoney: "Airtel Money",
   alias: "Alias",
   apaym: "Apaym",
