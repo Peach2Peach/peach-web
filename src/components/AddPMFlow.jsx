@@ -36,6 +36,10 @@ export const FieldError = ({ error }) => error
   ? <div style={{ fontSize:".72rem", fontWeight:600, color:"var(--error)", marginTop:4 }}>{error}</div>
   : null;
 
+// Field ids whose value is a social-handle username (always `@`-prefixed).
+// The `@` is rendered as a pinned, non-editable prefix; users type only the body.
+const USERNAME_FIELD_IDS = new Set(["userName", "username"]);
+
 // ── Constants ────────────────────────────────────────────────────────────────
 
 export const CATEGORY_META = {
@@ -1029,6 +1033,36 @@ export function AddPMFlow({ methods, meetupEvents = [], onSave, onClose, editDat
                       );
                     }
 
+                    if (USERNAME_FIELD_IDS.has(fid)) {
+                      const stored = details[fid] || "";
+                      const body = stored.replace(/^@+/, "");
+                      const ph = (meta.placeholder || "").replace(/^@+/, "") || "username";
+                      return (
+                        <div key={fid} style={{ marginBottom:14 }}>
+                          <label className="field-label">
+                            {meta.label}
+                            {isOptional && <span style={{ fontWeight:500, textTransform:"none",
+                              letterSpacing:0, color:"var(--black-25)", marginLeft:4 }}>(optional)</span>}
+                          </label>
+                          <div className="modal-input modal-input-with-prefix"
+                            style={errors[fid] ? { borderColor:"var(--error)" } : {}}>
+                            <span className="modal-input-prefix">@</span>
+                            <input className="modal-input-prefix-body"
+                              placeholder={ph}
+                              value={body}
+                              onChange={(e) => {
+                                const newBody = e.target.value.replace(/^@+/, "");
+                                setDetails((prev) => ({ ...prev, [fid]: newBody ? `@${newBody}` : "" }));
+                                if (errors[fid]) setErrors((p) => ({ ...p, [fid]: null }));
+                              }}
+                              onBlur={hasValidator ? handleFieldBlur : undefined}
+                            />
+                          </div>
+                          <FieldError error={errors[fid]}/>
+                        </div>
+                      );
+                    }
+
                     return (
                       <div key={fid} style={{ marginBottom:14 }}>
                         <label className="field-label">
@@ -1275,6 +1309,14 @@ const ADD_PM_CSS = `
     background:var(--surface);transition:border-color .15s;outline:none}
   .modal-input:focus{border-color:var(--primary)}
   .modal-input::placeholder{color:var(--black-25)}
+
+  .modal-input-with-prefix{display:flex;align-items:stretch;padding:0 14px;cursor:text;gap:8px}
+  .modal-input-with-prefix:focus-within{border-color:var(--primary)}
+  .modal-input-prefix{display:flex;align-items:center;color:var(--black-50);font-weight:700;
+    font-size:.88rem;user-select:none;border-right:1px solid var(--black-10);padding:8px 8px 8px 0}
+  .modal-input-prefix-body{flex:1;min-width:0;border:0;background:transparent;outline:none;
+    padding:10px 0;font-family:var(--font);font-size:.88rem;font-weight:500;color:var(--black)}
+  .modal-input-prefix-body::placeholder{color:var(--black-25)}
 
   .curr-check-grid{display:flex;gap:6px;flex-wrap:wrap}
   .curr-check-btn{border:1.5px solid var(--black-10);border-radius:8px;padding:6px 14px;
