@@ -14,11 +14,14 @@ import ethereum from "./ethereum.svg";
 import eversend from "./eversend.svg";
 import fasterPayments from "./fasterPayments.svg";
 import friends24 from "./friends24.svg";
+import hype from "./logo-hype-icon.svg";
 import keksPay from "./keksPay.svg";
+import krak from "./krak.svg";
 import liquid from "./liquid.svg";
 import lydia from "./lydia.svg";
 import mPesa from "./m-pesa.svg";
 import mbWay from "./mbWay.svg";
+import meru from "./meru-logo.svg";
 import mobilePay from "./mobilePay.svg";
 import moov from "./moov.svg";
 import mtn from "./mtn.svg";
@@ -68,14 +71,17 @@ export const PaymentLogos = {
   eversend,
   fasterPayments,
   friends24,
+  hype,
   instantSepa: sepa,
   iris: placeholder,
   keksPay,
   klasha: placeholder,
+  krak,
   liquid,
   lydia,
   mbWay,
   mercadoPago: placeholder,
+  meru,
   mobilePay,
   moov,
   mtn,

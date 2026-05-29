@@ -68,9 +68,9 @@ export const NATIONAL_OPTIONS = {
   EUR: {
     BE: ["wero"],
     LU: ["wero"],
-    IT: ["satispay", "postePay"],
+    IT: ["satispay", "postePay", "hype"],
     PT: ["mbWay"],
-    ES: ["bizum", "rebellion"],
+    ES: ["bizum", "rebellion", "halcash"],
     FI: ["mobilePay"],
     HR: ["keksPay"],
     FR: ["wero", "lydia", "satispay"],
