@@ -221,7 +221,7 @@ export const CSS = `
   .btn-add-pm:hover{background:var(--primary);color:white}
 
   /* Warning pill — section header (e.g. "Select a payment method") */
-  .pm-warn-wrap{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  .pm-warn-wrap{margin-left:auto;
     display:inline-flex;align-items:center;flex-shrink:0}
   .pm-warn-pill{display:inline-flex;align-items:center;gap:5px;
     padding:4px 12px;border-radius:999px;
@@ -482,7 +482,7 @@ export const CSS = `
       position:static;transform:none;
       flex-basis:100%;width:100%;
       display:flex;justify-content:center;
-      margin-top:8px;
+      margin-top:8px;margin-left:0;
     }
   }
 

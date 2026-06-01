@@ -1135,7 +1135,10 @@ export function AddPMFlow({ methods, meetupEvents = [], onSave, onClose, editDat
 
                 {/* Payment reference */}
                 <div style={{ marginBottom:14 }}>
-                  <label className="field-label">Payment reference</label>
+                  <label className="field-label">
+                    Payment reference
+                    <span style={{ fontWeight:500, textTransform:"none", letterSpacing:0, color:"var(--black-25)", marginLeft:4 }}>(optional)</span>
+                  </label>
                   <input className="modal-input"
                     placeholder="don't mention peach or bitcoin !"
                     value={payRefCustom}
@@ -1147,9 +1150,6 @@ export function AddPMFlow({ methods, meetupEvents = [], onSave, onClose, editDat
                     style={errors.reference ? { borderColor:"var(--error)" } : undefined}
                   />
                   <FieldError error={errors.reference}/>
-                  {!errors.reference && (
-                    <div style={{ fontSize:".66rem", color:"var(--black-25)", fontWeight:500, marginTop:4 }}>(optional)</div>
-                  )}
                 </div>
 
                 <div className="pm-summary-box">
