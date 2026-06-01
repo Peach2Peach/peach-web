@@ -27,7 +27,7 @@ import { getEsploraBaseUrl } from "../../utils/esplora.js";
 import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 import { extractCustomRefundAddressFromProfile } from "../../utils/customRefundAddressSync.js";
 import { fetchSavedCustomPayoutAddress } from "../../utils/customPayoutAddressSync.js";
-import { deriveDisplayStatus, STATUS_CONFIG, FUSED_STATUS_LABEL } from "../../data/statusConfig.js";
+import { deriveDisplayStatus } from "../../data/statusConfig.js";
 import { classifySender } from "../../data/chatSystemMessages.js";
 import Avatar from "../../components/Avatar.jsx";
 import StatusChip from "../../components/StatusChip.jsx";
@@ -1699,20 +1699,11 @@ export default function TradeExecution() {
                   {copiedId ? "✓ Copied" : formatTradeId(contract.id)}
                 </span>
                 <span className="trade-topbar-sep">·</span>
-                {(() => {
-                  const cfg = STATUS_CONFIG[status] ?? { label: "Unknown", bg: "var(--black-5)", color: "var(--black-65)" };
-                  const label = FUSED_STATUS_LABEL[status]?.[contract.direction] ?? cfg.label;
-                  return (
-                    <span style={{
-                      display: "inline-flex", alignItems: "center",
-                      background: cfg.bg, color: cfg.color,
-                      borderRadius: 999, padding: "5px 14px",
-                      fontSize: ".8rem", fontWeight: 700, whiteSpace: "nowrap",
-                    }}>
-                      {label}
-                    </span>
-                  );
-                })()}
+                <span className={role === "buyer" ? "dir-buy" : "dir-sell"}>
+                  {role === "buyer" ? "BUY" : "SELL"}
+                </span>
+                <span className="trade-topbar-sep">·</span>
+                <StatusChip status={status} large role={role} />
                 {(() => {
                   const ts = scenario.lastModified ?? contract?.creationDate;
                   if (!ts) return null;
