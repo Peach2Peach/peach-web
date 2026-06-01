@@ -242,7 +242,9 @@ export default function OfferCreation({ initialType="buy" }) {
       "id", "methodId", "type", "name", "label", "currencies", "hashes",
       "details", "data", "anonymous",
     ]);
-    const shortId = (raw) => raw.replace(/-\d+$/, "");
+    // Strip only the long `-<Date.now()>` suffix (13 digits), not short trailing
+    // numbers that belong to a cash event id (e.g. ...malaga-2140, ...bitcoin-42).
+    const shortId = (raw) => raw.replace(/-\d{10,}$/, "");
     const sweepFields = (obj) => {
       const explicit = obj.data || obj.details || null;
       if (explicit) return explicit;
@@ -682,7 +684,7 @@ export default function OfferCreation({ initialType="buy" }) {
   async function buildPaymentPayload(serverPGPKey){
     const meansOfPayment = {};
     for(const pm of selectedSaved){
-      const methodType = (pm.methodId||"").replace(/-\d+$/, "");
+      const methodType = (pm.methodId||"").replace(/-\d{10,}$/, "");
       for(const cur of (pm.currencies||[])){
         if(!meansOfPayment[cur]) meansOfPayment[cur] = [];
         if(!meansOfPayment[cur].includes(methodType)) meansOfPayment[cur].push(methodType);
@@ -690,12 +692,17 @@ export default function OfferCreation({ initialType="buy" }) {
     }
     const paymentData = {};
     for(const pm of selectedSaved){
-      const methodType = (pm.methodId||"").replace(/-\d+$/, "");
+      const methodType = (pm.methodId||"").replace(/-\d{10,}$/, "");
       if(paymentData[methodType]) continue;
       const rawDetails = pm.details || {};
       const details = {};
       for (const [k, v] of Object.entries(rawDetails)) {
         if (!k.startsWith("_")) details[k] = v;
+      }
+      // Cash/meetup PMs must carry `country` in paymentData (server rejects it otherwise).
+      // Older stored cash PMs may have lost it; derive from the id, e.g. cash.gr.* → "GR".
+      if (methodType.startsWith("cash.") && !details.country) {
+        details.country = (methodType.split(".")[1] || "").toUpperCase();
       }
       const hashed = await hashPaymentFields(methodType, details, details.country);
       Object.assign(paymentData, hashed);

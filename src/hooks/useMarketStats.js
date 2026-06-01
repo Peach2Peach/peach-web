@@ -19,7 +19,9 @@ import { useApi } from "./useApi.js";
 import { fetchWithSessionCheck } from "../utils/sessionGuard.js";
 
 function stripDisambiguator(methodId) {
-  return (methodId || "").replace(/-\d+$/, "");
+  // Strip only the long `-<Date.now()>` suffix (13 digits), not short trailing
+  // numbers that belong to a cash event id (e.g. ...malaga-2140, ...bitcoin-42).
+  return (methodId || "").replace(/-\d{10,}$/, "");
 }
 
 // Build the combined meansOfPayment object — used only for the avg-premium-of-

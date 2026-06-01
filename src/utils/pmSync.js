@@ -24,9 +24,11 @@ export function serializePMs(pms) {
     for (const [k, v] of Object.entries(details)) {
       if (!k.startsWith("_")) apiDetails[k] = v;
     }
-    // methodId may carry a "-<n>" suffix when the user adds multiple PMs of the
-    // same type; the wire-format `type` field should be the bare type id.
-    const type = String(pm.methodId || "").replace(/-\d+$/, "");
+    // The wire-format `type` field must be the bare method id. Strip only the
+    // long `-<Date.now()>` uniqueness suffix (13 digits) — NOT short trailing
+    // numbers that are part of a cash event id (e.g. cash.es.malaga.malaga-2140,
+    // cash.fr.saintetienne.bitcoin-42), which would otherwise be corrupted.
+    const type = String(pm.methodId || "").replace(/-\d{10,}$/, "");
     // Preserve the user-editable label as-typed (empty if the user left it blank).
     const label = String(pm.label || "").trim();
     map[pm.id] = {

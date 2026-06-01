@@ -1887,7 +1887,7 @@ export default function TradesDashboard() {
           ? userPMs.map((pm) => [pm.id || pm.type, pm])
           : Object.entries(userPMs);
         for (const [key, val] of entries) {
-          const pmType = (key || "").replace(/-\d+$/, "");
+          const pmType = (key || "").replace(/-\d{10,}$/, "");
           if (
             pmType === paymentMethod &&
             (val?.currencies ?? []).includes(currency)
@@ -1898,7 +1898,7 @@ export default function TradesDashboard() {
         }
         if (!pmData) {
           for (const [key, val] of entries) {
-            const pmType = (key || "").replace(/-\d+$/, "");
+            const pmType = (key || "").replace(/-\d{10,}$/, "");
             if (pmType === paymentMethod) {
               pmData = val;
               break;

@@ -83,11 +83,18 @@ export default function PeachPaymentMethods() {
       setSavedMethods([]);
       return;
     }
+    // `country` is intentionally NOT structural — it's a legitimate per-PM detail
+    // (cash/meetup country, SEPA IBAN country) that must survive into pm.details so
+    // it round-trips back to the server. Including it here silently dropped it on
+    // reload, which corrupted cash PMs (offer creation then sent paymentData with no
+    // country → FORM_INVALID). Matches the same set in offer-creation/index.jsx.
     const STRUCTURAL = new Set([
       "id", "methodId", "type", "name", "label", "currencies", "hashes",
-      "details", "data", "country", "anonymous",
+      "details", "data", "anonymous",
     ]);
-    const shortMethodId = (raw) => raw.replace(/-\d+$/, "");
+    // Strip only the long `-<Date.now()>` suffix (13 digits), not short trailing
+    // numbers that belong to a cash event id (e.g. ...malaga-2140, ...bitcoin-42).
+    const shortMethodId = (raw) => raw.replace(/-\d{10,}$/, "");
     const sweepDetails = (obj) => {
       const explicit = obj?.details || obj?.data || null;
       if (explicit) return explicit;

@@ -46,7 +46,9 @@ function normalizeUserPMs(pmsRaw) {
     "id", "methodId", "type", "name", "label", "currencies", "hashes",
     "details", "data", "anonymous",
   ]);
-  const shortId = (raw) => raw.replace(/-\d+$/, "");
+  // Strip only the long `-<Date.now()>` suffix (13 digits), not short trailing
+  // numbers that belong to a cash event id (e.g. ...malaga-2140, ...bitcoin-42).
+  const shortId = (raw) => raw.replace(/-\d{10,}$/, "");
   const sweepFields = (obj) => {
     const explicit = obj.data || obj.details || null;
     if (explicit) return explicit;
