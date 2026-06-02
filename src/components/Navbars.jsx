@@ -5,8 +5,11 @@ import { useUnread } from "../hooks/useUnread.js";
 import { useUrgentCount } from "../hooks/useUrgentCount.js";
 import { useSessionTimer } from "../hooks/useSessionTimer.js";
 import { useNotifications } from "../hooks/useNotifications.js";
+import { useServerNotifications } from "../hooks/useServerNotifications.js";
 import { useTheme } from "../hooks/useTheme.js";
 import NotificationPanel from "./NotificationPanel.jsx";
+import ServerNotificationPanel from "./ServerNotificationPanel.jsx";
+import { getNotifTarget } from "../data/notificationConfig.js";
 import Avatar from "./Avatar.jsx";
 import peachLogo from "../assets/PEACH WEB-LOGO.svg";
 
@@ -225,6 +228,13 @@ export function Topbar({
 }) {
   const { total: unreadTotal } = useUnread();
   const { notifications, unreadCount: unreadNotifs, readIds, markAllRead, markRead } = useNotifications();
+  const {
+    notifications: serverNotifs,
+    unreadCount: serverUnread,
+    readDisplayIds,
+    onPanelOpen: onServerPanelOpen,
+    onPanelClose: onServerPanelClose,
+  } = useServerNotifications();
   const { theme, toggleTheme } = useTheme();
   const session = useSessionTimer();
   const [showNotifPanel, setShowNotifPanel] = useState(false);
@@ -248,6 +258,21 @@ export function Topbar({
     document.addEventListener("keydown", esc);
     return () => { document.removeEventListener("click", close); document.removeEventListener("keydown", esc); };
   }, [showNotifPanel]);
+
+  // While the panel is open, mark unread notifications as read on the server but
+  // keep their unread colour frozen; on close (toggle, outside click, Escape)
+  // release the freeze so they render as read.
+  useEffect(() => {
+    if (!showNotifPanel) return;
+    onServerPanelOpen();
+    return () => onServerPanelClose();
+  }, [showNotifPanel, onServerPanelOpen, onServerPanelClose]);
+
+  const handleServerNotifNavigate = (n) => {
+    setShowNotifPanel(false);
+    const target = getNotifTarget(n);
+    if (target?.to) navigate(target.to, target.state ? { state: target.state } : undefined);
+  };
 
   const openNotifPanel = (e) => {
     e.stopPropagation();
@@ -324,7 +349,10 @@ export function Topbar({
       </div>
 
       <div className="topbar-right">
-        {isLoggedIn && (
+        {/* Legacy "derived" notification bell — hidden while the new server-driven
+            notification system is built. The useNotifications() engine still runs
+            (subscribed below) so wrong-amount popups and the unread badge keep working. */}
+        {false && isLoggedIn && (
           <div className="notif-panel-wrap" style={{position:"relative"}}>
             <button className="notif-bell-btn" onClick={openNotifPanel}>
               <IconBell/>
@@ -337,6 +365,21 @@ export function Topbar({
                 onMarkAllRead={markAllRead}
                 onMarkRead={markRead}
                 onNavigate={handleNotifNavigate}
+              />
+            )}
+          </div>
+        )}
+        {isLoggedIn && (
+          <div className="notif-panel-wrap" style={{position:"relative"}}>
+            <button className="notif-bell-btn" onClick={openNotifPanel}>
+              <IconBell/>
+              {serverUnread > 0 && <span className="notif-bell-badge">{serverUnread > 99 ? "99+" : serverUnread}</span>}
+            </button>
+            {showNotifPanel && (
+              <ServerNotificationPanel
+                notifications={serverNotifs}
+                readDisplayIds={readDisplayIds}
+                onNavigate={handleServerNotifNavigate}
               />
             )}
           </div>

@@ -5,6 +5,7 @@ import TamperDetectedModal from './components/TamperDetectedModal.jsx'
 import OfferPublishedPopup from './components/OfferPublishedPopup.jsx'
 import WrongFundingAmountPopup from './components/WrongFundingAmountPopup.jsx'
 import WrongAmountRefundPopup from './components/WrongAmountRefundPopup.jsx'
+import NotificationToasts from './components/NotificationToasts.jsx'
 import { clearCache } from './hooks/useApi.js'
 import { invalidateUserPMs } from './hooks/useUserPMs.js'
 import { resetSessionExpiredFlag, isTokenExpired } from './utils/sessionGuard.js'
@@ -182,6 +183,7 @@ export default function App() {
             onClose={() => setContractWrongAmount(null)}
           />
         )}
+        <NotificationToasts />
       </HashRouter>
       {sessionExpired && <SessionExpiredModal onReauth={handleReauth} />}
       {tamperedFields && (
