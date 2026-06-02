@@ -303,6 +303,7 @@ export default function PeachPaymentMethods() {
         <AddPMFlow
           methods={methodsCatalogue}
           meetupEvents={meetupEvents}
+          existingPMs={savedMethods}
           onSave={handleSavePM}
           onClose={() => { setShowAddFlow(false); setEditPM(null); }}
           editData={editPM}

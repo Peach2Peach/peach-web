@@ -185,9 +185,29 @@ function ProgressBar({ step, showCountryStep, meetupMode, skipCategoryStep }) {
   );
 }
 
+// When a PM is saved with a blank label, fall back to the method's display name,
+// disambiguated with a "#N" suffix. A bare name counts as #1, so the first
+// duplicate becomes "#2"; the suffix tracks the highest existing number rather
+// than the count (e.g. "Revolut #4" + "Revolut #7" → "Revolut #8").
+export function nextPMLabel(typeName, existingPMs = [], excludeId) {
+  const base = (typeName || "").trim();
+  if (!base) return base;
+  const esc = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`^${esc}(?: #(\\d+))?$`, "i");
+  let maxNum = 0;
+  for (const pm of existingPMs) {
+    if (!pm || pm.id === excludeId) continue;
+    const m = re.exec((pm.label || "").trim());
+    if (!m) continue;
+    const n = m[1] ? Number(m[1]) : 1;
+    if (n > maxNum) maxNum = n;
+  }
+  return maxNum === 0 ? base : `${base} #${maxNum + 1}`;
+}
+
 // ── AddPMFlow ────────────────────────────────────────────────────────────────
 
-export function AddPMFlow({ methods, meetupEvents = [], onSave, onClose, editData, error, onRetry }) {
+export function AddPMFlow({ methods, meetupEvents = [], existingPMs = [], onSave, onClose, editData, error, onRetry }) {
   const isEdit = !!editData;
   const [step, setStep] = useState(isEdit ? 4 : 0);
 
@@ -646,11 +666,12 @@ export function AddPMFlow({ methods, meetupEvents = [], onSave, onClose, editDat
     }
 
     const methodName = selMethod?.name || selMethodId;
+    const trimmedLabel = (pmLabel || "").trim();
     const pm = {
       id:         editData?.id || `${selMethodId}-${Date.now()}`,
       methodId:   selMethodId,
       name:       methodName,
-      label:      (pmLabel || "").trim(),
+      label:      trimmedLabel || nextPMLabel(methodName, existingPMs, editData?.id),
       currencies: isMpesaActive ? [...methodCurrencies] : selCurrencies,
       details:    cleanDetails,
     };

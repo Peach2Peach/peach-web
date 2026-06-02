@@ -1172,12 +1172,12 @@ export default function OfferCreation({ initialType="buy" }) {
     <>
       <style>{CSS}</style>
       {showAddModal&&(
-        <AddPMFlow methods={methodsCatalogue} meetupEvents={meetupEvents} onSave={handleSavePM}
+        <AddPMFlow methods={methodsCatalogue} meetupEvents={meetupEvents} existingPMs={savedMethods} onSave={handleSavePM}
           onClose={()=>setShowAddModal(false)}
           error={catalogueError} onRetry={fetchCatalogue}/>
       )}
       {editingPM&&(
-        <AddPMFlow methods={methodsCatalogue} meetupEvents={meetupEvents} editData={editingPM}
+        <AddPMFlow methods={methodsCatalogue} meetupEvents={meetupEvents} existingPMs={savedMethods} editData={editingPM}
           onSave={handleSavePM} onClose={()=>setEditingPM(null)}
           error={catalogueError} onRetry={fetchCatalogue}/>
       )}
