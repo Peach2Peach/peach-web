@@ -36,9 +36,13 @@ async function _poll(auth, base) {
     _notify();
     return;
   }
-  // Use shared contracts data from useNotifications if fresh (< 10s)
+  // Reuse the contracts data useNotifications already fetched. Its window is
+  // just over that poller's 15s cadence so we ride on it every tick instead of
+  // racing it — in steady state useUnread issues no /contracts/summary of its
+  // own. The fetch below stays as a fallback for first load (before the
+  // notifications poll has written) or if that poller stalls (>16s stale).
   const shared = window.__PEACH_CONTRACTS__;
-  if (shared && (Date.now() - shared.ts) < 10_000) {
+  if (shared && (Date.now() - shared.ts) < 16_000) {
     _processContracts(shared.data);
     return;
   }
