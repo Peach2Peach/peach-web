@@ -17,6 +17,26 @@
 let _fired = false;
 let _probePromise = null;
 
+// ── In-flight GET de-duplication ─────────────────────────────────────
+// Collapse concurrent identical GET requests into a single network call.
+// React.StrictMode (dev) double-invokes mount effects, and fast remounts /
+// two components reading the same endpoint can fire overlapping fetches; all
+// of those resolve from one request instead of N. In-flight only — once a
+// request resolves its entry is dropped, so a later navigation still refetches
+// (no stale caching). Mutations (POST/PATCH/PUT/DELETE) are never de-duped.
+const _inflightGets = new Map(); // key -> Promise<Response>
+
+function _isIdempotent(options) {
+  const method = (options?.method ?? 'GET').toUpperCase();
+  return method === 'GET' || method === 'HEAD';
+}
+
+function _dedupKey(url, options) {
+  const method = (options?.method ?? 'GET').toUpperCase();
+  const auth = options?.headers?.Authorization ?? '';
+  return `${method} ${url} ${auth}`;
+}
+
 // ── JWT helpers ──────────────────────────────────────────────────────
 
 /** Decode JWT payload without verification (we only need `exp`). */
@@ -98,6 +118,30 @@ export async function fetchWithSessionCheck(url, options) {
     });
   }
 
+  // Join an already in-flight identical GET rather than issuing a second one.
+  // Each caller gets its own clone so bodies can be read independently.
+  if (_isIdempotent(options)) {
+    const key = _dedupKey(url, options);
+    const existing = _inflightGets.get(key);
+    if (existing) {
+      const shared = await existing;
+      return shared.clone();
+    }
+    const promise = _fetchWithSessionCheck(url, options);
+    _inflightGets.set(key, promise);
+    try {
+      const res = await promise;
+      return res.clone();
+    } finally {
+      _inflightGets.delete(key);
+    }
+  }
+
+  return _fetchWithSessionCheck(url, options);
+}
+
+/** Underlying fetch + 401 session-expiry handling (no de-duplication). */
+async function _fetchWithSessionCheck(url, options) {
   const res = await fetch(url, options);
 
   if (res.status === 401) {

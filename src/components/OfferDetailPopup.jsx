@@ -14,7 +14,6 @@ import { SatsAmount } from "./BitcoinAmount.jsx";
 import { useApi } from "../hooks/useApi.js";
 import { useCurrency } from "./AppLayout.jsx";
 import { useUserPMs } from "../hooks/useUserPMs.js";
-import { markSentRequestCreated } from "../hooks/useNotifications.js";
 import { fetchWithSessionCheck } from "../utils/sessionGuard.js";
 import {
   generateSymmetricKey, encryptForRecipients, encryptSymmetric,
@@ -421,7 +420,6 @@ export default function OfferDetailPopup({
       });
 
       if (res.ok) {
-        markSentRequestCreated(offer.id, offerType);
         setRequestAnim(true);
         setLocalJustRequested(true);
         onLocalRequestedChange(offer.id, true);

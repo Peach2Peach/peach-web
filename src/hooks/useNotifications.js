@@ -4,7 +4,6 @@ import { fetchWithSessionCheck } from "../utils/sessionGuard.js";
 import { API_V1 } from "../utils/network.js";
 import { getCached, setCache } from "./useApi.js";
 import { normalizeOffer, normalizeContract } from "../utils/tradesNormalize.js";
-import { hasOfferTurnedToMyContract } from "../utils/peach069.js";
 
 // ── Seller-specific overrides (keyed by status) ─────────────────────────────
 const SELLER_OVERRIDE = {
@@ -133,17 +132,6 @@ function loadBaseline(peachId) {
       tradeRequestCount: _stringKeyMap(obj.tradeRequestCount ?? []),
       matchCounts:      _stringKeyMap(obj.matchCounts      ?? []),
       offerUnread:      _stringKeyMap(obj.offerUnread       ?? []),
-      sentRequests:     _stringKeyMap(obj.sentRequests     ?? []),
-      rejectionCandidates: (() => {
-        const v = obj.rejectionCandidates ?? [];
-        // Migrate old format (array of bare offerId strings) to Map(offerId → offerType).
-        // Old-format candidates lose their offerType — they're re-evaluated on
-        // the next rejection tick once _prevSentRequests has the full info.
-        if (v.length > 0 && typeof v[0] === "string") {
-          return new Map(v.map(id => [id, null]));
-        }
-        return new Map(v);
-      })(),
     };
   } catch { return null; }
 }
@@ -157,8 +145,6 @@ function saveBaseline() {
       tradeRequestCount: [..._prevTradeRequestCount.entries()],
       matchCounts:      [..._prevMatchCounts.entries()],
       offerUnread:      [..._prevOfferUnread.entries()],
-      sentRequests:     [..._prevSentRequests.entries()],
-      rejectionCandidates: [..._rejectionCandidates.entries()],
     };
     localStorage.setItem(k, JSON.stringify(obj));
   } catch { /* quota or other — silently skip */ }
@@ -252,9 +238,6 @@ let _prevOffers    = new Map();   // id → tradeStatus
 let _prevTradeRequestCount = new Map(); // offerId → totalTradeRequests (open incoming trade-request counter, populated for both buy and sell offers)
 let _prevMatchCounts = new Map();  // buyOfferId → totalMatches (track additional matches arriving on hasMatchesAvailable offers)
 let _prevOfferUnread = new Map();  // offerId → boolean; sourced from offer.unreadMessages (number, hidden when 0)
-let _prevSentRequests = new Map(); // offerId → offerType ("buyOffer" | "sellOffer") — outbound trade requests, used to detect rejection by offer owner
-let _rejectionCandidates = new Map(); // offerId → offerType ("buyOffer" | "sellOffer") — outbound requests suspected of rejection; only emitted on the second consecutive confirmation tick (race protection)
-let _pollTick      = 0;            // incremented every poll; chat layer runs only on even ticks (~16s cadence)
 let _isFirstPoll   = true;
 let _hydratedPeachId = null;
 
@@ -279,8 +262,6 @@ function _hydrateForUser(peachId) {
     _prevTradeRequestCount  = baseline.tradeRequestCount ?? new Map();
     _prevMatchCounts        = baseline.matchCounts;
     _prevOfferUnread        = baseline.offerUnread ?? new Map();
-    _prevSentRequests       = baseline.sentRequests;
-    _rejectionCandidates    = baseline.rejectionCandidates ?? new Map();
     _isFirstPoll            = false;
   } else {
     _prevContracts          = new Map();
@@ -288,8 +269,6 @@ function _hydrateForUser(peachId) {
     _prevTradeRequestCount  = new Map();
     _prevMatchCounts        = new Map();
     _prevOfferUnread        = new Map();
-    _prevSentRequests       = new Map();
-    _rejectionCandidates    = new Map();
     _isFirstPoll            = true;
   }
   _updateTitle();
@@ -348,7 +327,6 @@ async function _poll(auth, base) {
   // Defensive: hydrate (or re-hydrate if user changed mid-session)
   _hydrateForUser(window.__PEACH_AUTH__.peachId);
 
-  _pollTick++;
   const hdrs = { Authorization: `Bearer ${auth.token}` };
   const v069Base = base.replace(/\/v1$/, "/v069");
 
@@ -367,45 +345,10 @@ async function _poll(auth, base) {
     // Share contracts with useUnread to avoid duplicate API calls
     window.__PEACH_CONTRACTS__ = { data: contracts, ts: Date.now() };
 
-    // Auto-dismiss stale tradeRequest notifications: once a contract has been
-    // created from an offer, the original "Trade request received" notification
-    // is no longer actionable — clicking it would reopen an empty popup.
-    // Authoritative linkage via /v069/{buyOffer|sellOffer}/:id/hasTurnedToMyContract:
-    // v069 numeric ids and v1 contract.id parts live in different namespaces,
-    // so the only reliable "did this offer become a contract for me" signal is
-    // the dedicated endpoint. Notifs persisted before offerType existed are
-    // skipped here and age out via MAX_NOTIFS / markRead.
-    {
-      const candidates = _state.notifications.filter(
-        n => n.type === "tradeRequest"
-          && n.offerId
-          && n.offerType
-          && !_state.readIds.has(n.id)
-      );
-      if (candidates.length > 0) {
-        const checks = await Promise.all(
-          candidates.map(n =>
-            hasOfferTurnedToMyContract(n.offerId, n.offerType, auth)
-              .then(r => ({ n, accepted: r.accepted }))
-          )
-        );
-        const readIds = new Set(_state.readIds);
-        let dismissedAny = false;
-        for (const { n, accepted } of checks) {
-          if (accepted === true && !readIds.has(n.id)) {
-            readIds.add(n.id);
-            dismissedAny = true;
-          }
-        }
-        if (dismissedAny) {
-          const unreadCount = _state.notifications.filter(n => !readIds.has(n.id)).length;
-          _state = { ..._state, readIds, unreadCount };
-          saveReadIds(_state.readIds, _state.notifications);
-          _updateTitle();
-          _notify();
-        }
-      }
-    }
+    // (Removed: per-poll hasTurnedToMyContract probing that auto-dismissed stale
+    // "Trade request received" notifications once their offer became a contract.
+    // Push notifications now drive the trade-request lifecycle; these local
+    // notifications age out via MAX_NOTIFS / markRead instead.)
 
     const buyOffers  = buyRes  ? (Array.isArray(buyRes)  ? buyRes  : (buyRes.offers ?? []))  : [];
     const offersArr  = offersSummaryRes
@@ -467,47 +410,6 @@ async function _poll(auth, base) {
     const events = [];
     const now = Date.now();
 
-    // ── Detect acceptance of outbound trade requests ──
-    // Positive signal, parallel to the rejection detector below. When the
-    // hasTurnedToMyContract endpoint definitively returns accepted=true for
-    // an offer the user sent a request to, fire an explicit "Its a match!"
-    // and suppress the contract diff's first-sighting notification for the
-    // same contract on this tick.
-    //
-    // Why this exists: on regtest (and any fast environment) the contract
-    // can advance through fundEscrow → paymentRequired between two polls,
-    // so the contract diff's brand-new branch only ever sees the downstream
-    // state. The user then gets "Payment required" instead of the acceptance
-    // milestone. Running this check pre-diff with same-tick suppression
-    // guarantees the acceptance signal lands first, regardless of cadence.
-    const acceptedContractIds = new Set();
-    if (_prevSentRequests.size > 0) {
-      const sentEntries = [..._prevSentRequests.entries()];
-      const checks = await Promise.all(
-        sentEntries.map(([offerId, offerType]) =>
-          offerType
-            ? hasOfferTurnedToMyContract(offerId, offerType, auth)
-            : Promise.resolve({ accepted: null, contractId: null })
-        )
-      );
-      sentEntries.forEach(([offerId], i) => {
-        const { accepted, contractId } = checks[i];
-        if (accepted !== true || !contractId) return;
-        const cid = String(contractId);
-        const notifId = `o-${offerId}-accepted-${cid}`;
-        if (_state.notifications.some(n => n.id === notifId)) return;
-        acceptedContractIds.add(cid);
-        events.push(_makeNotif(
-          notifId, "statusChange",
-          "Its a match!",
-          "Your trade request was accepted.",
-          cid, offerId
-        ));
-        _prevSentRequests.delete(offerId);
-        _rejectionCandidates.delete(offerId);
-      });
-    }
-
     // ── Diff contracts ──
     for (const c of contracts) {
       const prev = _prevContracts.get(c.id);
@@ -517,7 +419,6 @@ async function _poll(auth, base) {
       const isBuyer  = rawType === "bid" || rawType === "buy" || (c.buyer?.id ?? c.buyerId) === peachId;
       const isSeller = !isBuyer;
       const sellerOv = isSeller ? SELLER_OVERRIDE[status] : null;
-      const suppressEmit = acceptedContractIds.has(String(c.id));
 
       if (prev) {
         // Seller granted more time after the buyer missed the payment window:
@@ -530,7 +431,7 @@ async function _poll(auth, base) {
             "the seller gave you more time to make the payment. Proceed as soon as possible.",
             c.id, null
           ));
-        } else if (prev.tradeStatus !== status && STATUS_NOTIF[status] && !suppressEmit) {
+        } else if (prev.tradeStatus !== status && STATUS_NOTIF[status]) {
           const sn = STATUS_NOTIF[status];
           events.push(_makeNotif(
             `c-${c.id}-${status}-${now}`, sn.type,
@@ -547,9 +448,8 @@ async function _poll(auth, base) {
           ));
         }
       } else {
-        // Brand new contract since last poll — notify if it has an interesting status,
-        // unless the acceptance emitter already fired for this contract on this tick.
-        if (STATUS_NOTIF[status] && !suppressEmit) {
+        // Brand new contract since last poll — notify if it has an interesting status.
+        if (STATUS_NOTIF[status]) {
           const sn = STATUS_NOTIF[status];
           events.push(_makeNotif(
             `c-${c.id}-${status}-${now}`, sn.type,
@@ -675,109 +575,9 @@ async function _poll(auth, base) {
       if (!currentMatchAvailIds.has(id)) _prevMatchCounts.delete(id);
     }
 
-    // ── Diff outbound trade requests for rejection (every 2nd tick ≈ 16s) ──
-    // Detects when an offer owner rejects our sent trade request:
-    //   hasPerformedTradeRequest flips true → false on the offer in browse lists.
-    // Acceptance (contract created) and self-cancel ("Undo request") also flip
-    // the flag — we filter both out: contracts via the contracts list, self-cancel
-    // via markSentRequestSelfCancelled() which pre-empties the baseline entry.
-    if (_pollTick % 2 === 0) {
-      const [browseBuyRes, browseSellRes] = await Promise.all([
-        fetchWithSessionCheck(`${v069Base}/buyOffer?ownOffers=false`, { headers: hdrs })
-          .then(r => r.ok ? r.json() : null).catch(() => null),
-        fetchWithSessionCheck(`${v069Base}/sellOffer?ownOffers=false`, { headers: hdrs })
-          .then(r => r.ok ? r.json() : null).catch(() => null),
-      ]);
-
-      // Skip diff if either list failed — avoid mass-emitting rejections on a transient error
-      if (browseBuyRes && browseSellRes) {
-        const browseBuyArr  = Array.isArray(browseBuyRes)  ? browseBuyRes  : (browseBuyRes.offers  ?? []);
-        const browseSellArr = Array.isArray(browseSellRes) ? browseSellRes : (browseSellRes.offers ?? []);
-
-        const currentSent = new Map(); // offerId → offerType
-        for (const o of browseBuyArr)  if (o.hasPerformedTradeRequest) currentSent.set(String(o.id), "buyOffer");
-        for (const o of browseSellArr) if (o.hasPerformedTradeRequest) currentSent.set(String(o.id), "sellOffer");
-
-        // Authoritative "did this v069 offer become my contract?" check via
-        // /v069/{buyOffer|sellOffer}/:id/hasTurnedToMyContract. Mirrors mobile
-        // (ExpressBuyTradeRequestToSellOffer.tsx). Replaces the earlier attempt
-        // to derive linkage from /contracts/summary — v069 numeric offer ids
-        // and v1 contract.id parts live in different namespaces, so dash-split
-        // and c.offerId checks were unreliable and produced false rejections.
-        //
-        // Tri-state result (true | false | null):
-        //   true  → accepted into a contract; never emit rejection
-        //   false → endpoint says no contract; eligible for rejection (still
-        //           gated by the two-tick confirmation below)
-        //   null  → endpoint error; treat as unknown, recheck next tick
-        const candidateMap = new Map(); // offerId → offerType
-        for (const [offerId, offerType] of _rejectionCandidates) {
-          if (!currentSent.has(offerId)) candidateMap.set(offerId, offerType);
-        }
-        for (const [offerId, offerType] of _prevSentRequests) {
-          if (!currentSent.has(offerId) && !candidateMap.has(offerId)) {
-            candidateMap.set(offerId, offerType);
-          }
-        }
-
-        const acceptanceMap = new Map(); // offerId → (true | false | null)
-        if (candidateMap.size > 0) {
-          const entries = [...candidateMap.entries()];
-          const results = await Promise.all(
-            entries.map(([id, type]) =>
-              type
-                ? hasOfferTurnedToMyContract(id, type, auth).then(r => r.accepted)
-                : Promise.resolve(null)
-            )
-          );
-          entries.forEach(([id], i) => acceptanceMap.set(id, results[i]));
-        }
-
-        // Two-tick confirmation: only emit "declined" when the offer is missing
-        // AND hasTurnedToMyContract definitively returned `false` on this
-        // (second) tick. Race protection against transient endpoint errors and
-        // brief windows where browse-list updates faster than the contract is
-        // visible to the endpoint.
-        const confirmedRejections = new Set();
-        for (const [offerId] of _rejectionCandidates) {
-          if (currentSent.has(offerId)) continue;             // came back — false alarm
-          if (acceptanceMap.get(offerId) === true) continue;  // accepted into contract
-          if (acceptanceMap.get(offerId) !== false) continue; // null/undefined → unknown
-          confirmedRejections.add(offerId);
-        }
-        for (const offerId of confirmedRejections) {
-          events.push({
-            ..._makeNotif(
-              `o-${offerId}-tradeReqRejected-${now}`, "tradeRequest",
-              "Trade request declined",
-              "The offer owner rejected your request.",
-              null, offerId
-            ),
-            noNavigate: true,
-          });
-        }
-
-        // Carry forward unresolved candidates (missing AND not confirmed
-        // accepted). Stored with offerType so the next rejection tick can
-        // re-check via hasTurnedToMyContract even after _prevSentRequests rotates.
-        const nextCandidates = new Map();
-        for (const [offerId, offerType] of _prevSentRequests) {
-          if (currentSent.has(offerId)) continue;
-          if (acceptanceMap.get(offerId) === true) continue;
-          if (confirmedRejections.has(offerId)) continue;
-          nextCandidates.set(offerId, offerType);
-        }
-        for (const [offerId, offerType] of _rejectionCandidates) {
-          if (currentSent.has(offerId)) continue;
-          if (acceptanceMap.get(offerId) === true) continue;
-          if (confirmedRejections.has(offerId)) continue;
-          if (!nextCandidates.has(offerId)) nextCandidates.set(offerId, offerType);
-        }
-        _rejectionCandidates = nextCandidates;
-
-        _prevSentRequests = currentSent;
-      }
-    }
+    // Accept/reject of the user's outbound trade requests is delivered by push
+    // notifications now, so the poller no longer browses for sent requests or
+    // probes hasTurnedToMyContract to synthesise "Its a match!" / "declined".
 
     // ── Check pending escrow funding ──
     // `/offer/:id/escrow` reports the on-chain funding result. FUNDED → published;
@@ -921,24 +721,6 @@ function _markRead(notifId) {
   _notify();
 }
 
-// Pre-empties the outbound trade-request from the diff baseline so a self-cancel
-// ("Undo request") doesn't get misread as a rejection on the next poll.
-export function markSentRequestSelfCancelled(offerId) {
-  if (offerId == null) return;
-  _prevSentRequests.delete(String(offerId));
-  _rejectionCandidates.delete(String(offerId));
-  saveBaseline();
-}
-
-// Eagerly seed the diff baseline when the user just sent a new trade request,
-// so a fast rejection is detected on the next poll without waiting for the
-// periodic browse-list bootstrap.
-export function markSentRequestCreated(offerId, offerType) {
-  if (offerId == null || !offerType) return;
-  _prevSentRequests.set(String(offerId), offerType);
-  _rejectionCandidates.delete(String(offerId));
-  saveBaseline();
-}
 
 // ── React hook ───────────────────────────────────────────────────────────────
 export function useNotifications() {

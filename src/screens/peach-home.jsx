@@ -13,6 +13,7 @@ import Avatar from "../components/Avatar.jsx";
 import { RefreshIndicator } from "../components/RefreshIndicator.jsx";
 import { AttentionStrip, AttentionPill } from "../components/AttentionIndicators.jsx";
 import { API_V1 } from "../utils/network.js";
+import { fetchWithSessionCheck } from "../utils/sessionGuard.js";
 import { useCurrency } from "../components/AppLayout.jsx";
 import { BadgesInfoPopup } from "../components/InfoPopup.jsx";
 
@@ -396,7 +397,7 @@ export default function PeachHome() {
   useEffect(() => {
     async function fetchAth() {
       try {
-        const res = await fetch(`${API_V1}/market/tradePricePeaks`);
+        const res = await fetchWithSessionCheck(`${API_V1}/market/tradePricePeaks`);
         if (res.ok) {
           const data = await res.json();
           if (data?.tradePeaks) setAthData(data);
@@ -496,8 +497,8 @@ export default function PeachHome() {
         const v069Base = auth.baseUrl.replace(/\/v1$/, "/v069");
         const headers = { Authorization: `Bearer ${auth.token}` };
         const [buyRes, sellRes] = await Promise.all([
-          fetch(`${v069Base}/buyOffer?ownOffers=false`, { headers }).catch(() => null),
-          fetch(`${v069Base}/sellOffer?ownOffers=false`, { headers }).catch(() => null),
+          fetchWithSessionCheck(`${v069Base}/buyOffer?ownOffers=false`, { headers }).catch(() => null),
+          fetchWithSessionCheck(`${v069Base}/sellOffer?ownOffers=false`, { headers }).catch(() => null),
         ]);
         const parse = async (r) => {
           if (!r || !r.ok) return [];

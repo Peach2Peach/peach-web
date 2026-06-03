@@ -636,29 +636,34 @@ export default function TradesDashboard() {
   // ── NORMALIZE HELPERS (stable across renders — only depend on auth.peachId) ──
   const peachId = auth?.peachId;
 
-  function normalizeSentRequest(o, offerType) {
+  // Maps one item from GET /v069/selfUser/sentTradeRequests into a pending-list
+  // "sentRequest" row. The endpoint carries the offer's display fields plus the
+  // offer-owner unread count, so no per-request follow-up fetches are needed.
+  function normalizeSentRequest(item) {
+    const offerType = item.offerType === "sellOffer" ? "sellOffer" : "buyOffer";
     const userDirection = offerType === "buyOffer" ? "sell" : "buy";
-    const mop = o.meansOfPayment ?? {};
+    const mop = item.meansOfPayment ?? {};
     const offerCurrencies = Object.keys(mop);
     const offerMethods = [...new Set(Object.values(mop).flat())];
+    const offerId = item.offerId ?? item.id;
     const amt =
-      o.amountSats ?? (Array.isArray(o.amount) ? o.amount[0] : (o.amount ?? 0));
+      item.amountSats ?? (Array.isArray(item.amount) ? item.amount[0] : (item.amount ?? 0));
     return {
-      id: o.id,
-      tradeId: formatTradeId(o.id, "offer"),
+      id: offerId,
+      tradeId: formatTradeId(offerId, "offer"),
       kind: "sentRequest",
       direction: userDirection,
       amount: amt,
-      premium: o.premium ?? 0,
+      premium: item.premium ?? 0,
       fiatAmount: "—",
       currency: offerCurrencies[0] ?? "",
       tradeStatus: "tradeRequestSent",
-      createdAt: new Date(o.creationDate ?? Date.now()),
+      createdAt: new Date(item.creationDate ?? Date.now()),
       methods: offerMethods,
       currencies: offerCurrencies,
+      unread: item.unreadCount ?? item.unread ?? 0,
       _offerType: offerType,
-      _offerId: o.id,
-      _tradeRequestData: null,
+      _offerId: offerId,
     };
   }
 
@@ -822,69 +827,29 @@ export default function TradesDashboard() {
         if (limitData) setLiveLimit(limitData);
       }
 
-      // ── Browse marketplace for sent trade requests ──
+      // ── Sent trade requests (requests the user made on others' offers) ──
+      // One dedicated endpoint returns every sent request with the row's
+      // display fields and the offer-owner unread count, replacing the old
+      // "browse the whole marketplace, filter by hasPerformedTradeRequest,
+      // then fetch detail + chat per request" fan-out.
+      let sentRequests = [];
       try {
-        const [browseBuyRes, browseSellRes] = await Promise.all([
-          fetchWithSessionCheck(`${v069Base}/buyOffer?ownOffers=false`, {
-            headers: hdrs,
-          }),
-          fetchWithSessionCheck(`${v069Base}/sellOffer?ownOffers=false`, {
-            headers: hdrs,
-          }),
-        ]);
-        const [browseBuyData, browseSellData] = await Promise.all([
-          browseBuyRes.ok ? browseBuyRes.json() : [],
-          browseSellRes.ok ? browseSellRes.json() : [],
-        ]);
-        const browseBuyArr = Array.isArray(browseBuyData)
-          ? browseBuyData
-          : (browseBuyData?.offers ?? []);
-        const browseSellArr = Array.isArray(browseSellData)
-          ? browseSellData
-          : (browseSellData?.offers ?? []);
-        const sentBuy = browseBuyArr
-          .filter((o) => o.hasPerformedTradeRequest)
-          .map((o) => normalizeSentRequest(o, "buyOffer"));
-        const sentSell = browseSellArr
-          .filter((o) => o.hasPerformedTradeRequest)
-          .map((o) => normalizeSentRequest(o, "sellOffer"));
-        const sentRequests = [...sentBuy, ...sentSell];
-
-        // Fetch trade request details + unread for each sent request
-        if (sentRequests.length > 0) {
-          await Promise.all(
-            sentRequests.map(async (sr) => {
-              try {
-                const detailRes = await fetchWithSessionCheck(
-                  `${v069Base}/${sr._offerType}/${sr._offerId}/tradeRequestPerformed/`,
-                  { headers: hdrs },
-                );
-                if (detailRes.ok) {
-                  const detailData = await detailRes.json();
-                  sr._tradeRequestData = Array.isArray(detailData)
-                    ? detailData[0]
-                    : detailData;
-                }
-                const chatRes = await fetchWithSessionCheck(
-                  `${v069Base}/${sr._offerType}/${sr._offerId}/tradeRequestPerformed/chat`,
-                  { headers: hdrs },
-                );
-                if (chatRes.ok) {
-                  const chatData = await chatRes.json();
-                  const msgs = Array.isArray(chatData)
-                    ? chatData
-                    : (chatData.messages ?? chatData.data ?? []);
-                  sr.unread = msgs.filter(
-                    (m) => m.sender === "offerOwner" && m.seen === false,
-                  ).length;
-                }
-              } catch {
-                /* silent */
-              }
-            }),
-          );
+        const sentRes = await fetchWithSessionCheck(
+          `${v069Base}/selfUser/sentTradeRequests`,
+          { headers: hdrs },
+        );
+        if (sentRes.ok) {
+          const sentData = await sentRes.json();
+          const sentArr = Array.isArray(sentData)
+            ? sentData
+            : (sentData?.sentTradeRequests ?? sentData?.requests ?? sentData?.offers ?? []);
+          sentRequests = sentArr.map(normalizeSentRequest);
         }
+      } catch {
+        /* sent requests stay empty on failure; pending offers still render */
+      }
 
+      try {
         // ── Fetch matches/trade requests for matchable pending offers ──
         // Read current pending state to find matchable offers
         setLivePending((prev) => {

@@ -5,6 +5,7 @@ import TamperDetectedModal from './components/TamperDetectedModal.jsx'
 import OfferPublishedPopup from './components/OfferPublishedPopup.jsx'
 import WrongFundingAmountPopup from './components/WrongFundingAmountPopup.jsx'
 import WrongAmountRefundPopup from './components/WrongAmountRefundPopup.jsx'
+import MatchPopup from './components/MatchPopup.jsx'
 import NotificationToasts from './components/NotificationToasts.jsx'
 import { clearCache } from './hooks/useApi.js'
 import { invalidateUserPMs } from './hooks/useUserPMs.js'
@@ -79,6 +80,7 @@ export default function App() {
   const [publishedOffer, setPublishedOffer] = useState(null);
   const [fundingAlert, setFundingAlert] = useState(null);
   const [contractWrongAmount, setContractWrongAmount] = useState(null);
+  const [matchPopup, setMatchPopup] = useState(null);
 
   useEffect(() => {
     const handleExpired = () => setSessionExpired(true);
@@ -120,6 +122,12 @@ export default function App() {
     };
     window.addEventListener('peach:contract-wrong-amount', handler);
     return () => window.removeEventListener('peach:contract-wrong-amount', handler);
+  }, []);
+
+  useEffect(() => {
+    const handler = (e) => setMatchPopup(e?.detail ?? null);
+    window.addEventListener('peach:match-popup', handler);
+    return () => window.removeEventListener('peach:match-popup', handler);
   }, []);
 
   function handleReauth() {
@@ -181,6 +189,14 @@ export default function App() {
             contractId={contractWrongAmount.contractId}
             role={contractWrongAmount.role}
             onClose={() => setContractWrongAmount(null)}
+          />
+        )}
+        {matchPopup && (
+          <MatchPopup
+            contractId={matchPopup.contractId}
+            title={matchPopup.title}
+            body={matchPopup.body}
+            onClose={() => setMatchPopup(null)}
           />
         )}
         <NotificationToasts />

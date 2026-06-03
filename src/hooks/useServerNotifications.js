@@ -24,6 +24,17 @@
 import { useSyncExternalStore } from "react";
 import { fetchWithSessionCheck } from "../utils/sessionGuard.js";
 import { API_V1 } from "../utils/network.js";
+import { describeNotif } from "../data/notificationConfig.js";
+
+// "Surprise" matches: a contract appeared WITHOUT the user initiating it —
+// someone instant-traded against the user's standing offer. The `.instantTrade`
+// variants are the initiator's own notification (not a surprise), and
+// contract.contractCreated is deprecated, so these two are the only types that
+// should raise the celebratory MatchPopup (App.jsx).
+const _SURPRISE_MATCH_TYPES = new Set([
+  "contract.contractCreatedFromExpressSell.seller", // your sell offer got instant-bought
+  "contract.contractCreatedFromExpressBuy.buyer",   // your buy offer got instant-sold
+]);
 
 const POLL_MS = 7_000;
 const MAX_TOASTS = 4;
@@ -103,6 +114,20 @@ async function _poll() {
         if (_effectiveRead(n) || _toasted.has(n.id)) continue;
         _toasted.add(n.id);
         newToasts.push(n);
+        // Freshly-arrived (post-seed, unread, first sighting) "surprise match"
+        // notification → celebratory match popup. The _seeded guard means a page
+        // refresh re-seeds the backlog without re-firing the popup, and _toasted
+        // dedups so each one pops at most once per session. Require a contractId
+        // so there's a trade to open.
+        if (_SURPRISE_MATCH_TYPES.has(n.type)) {
+          const contractId = n?.data?.contractId ?? null;
+          if (contractId != null) {
+            const { title, body } = describeNotif(n);
+            window.dispatchEvent(new CustomEvent("peach:match-popup", {
+              detail: { contractId, title, body, notifId: n.id },
+            }));
+          }
+        }
       }
     }
     const toasts = newToasts.length
