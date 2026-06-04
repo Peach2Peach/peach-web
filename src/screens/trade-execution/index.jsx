@@ -1019,6 +1019,57 @@ export default function TradeExecution() {
     status === "createEscrow" ||
     status === "waitingForFunding";
 
+  // Cancel the contract via POST /contract/:id/cancel. Shared by ActionPanel's
+  // onAction("cancel_trade") (paymentTooLate seller + buyer paths) and the
+  // seller's funding-stage Cancel button (EscrowFundingCard). Re-fetches to get
+  // the real status and flips liveContract to canceled.
+  async function cancelTrade() {
+    if (!contract?.id) return;
+    try {
+      const res = await post("/contract/" + contract.id + "/cancel");
+      if (res.ok) {
+        // Cancel is immediate — re-fetch to get real status
+        const fresh = await get("/contract/" + contract.id);
+        if (fresh.ok) {
+          const c = await fresh.json();
+          setLiveContract((prev) => {
+            if (!prev) return prev;
+            const nextStatus =
+              deriveDisplayStatus({
+                tradeStatus: c.tradeStatus,
+                direction: prev.contract?.direction,
+                escrowFundingTimeLimitExpired: c.escrowFundingTimeLimitExpired,
+              }) ?? "tradeCanceled";
+            return { ...prev, canceled: true, tradeStatus: nextStatus };
+          });
+        } else {
+          setLiveContract((prev) => {
+            if (!prev) return prev;
+            const nextStatus =
+              deriveDisplayStatus({
+                tradeStatus: "tradeCanceled",
+                direction: prev.contract?.direction,
+                escrowFundingTimeLimitExpired: prev.escrowFundingTimeLimitExpired,
+              }) ?? "tradeCanceled";
+            return { ...prev, canceled: true, tradeStatus: nextStatus };
+          });
+        }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        const msg = "Cancel trade failed: " + (err.error || res.status);
+        setActionError(msg);
+        setToast(msg);
+        setToastTone("error");
+        setTimeout(() => { setToast(null); setToastTone("default"); }, 4000);
+      }
+    } catch (e) {
+      console.warn("[Trade] Cancel trade error:", e.message);
+      setToast("Cancel trade failed: " + e.message);
+      setToastTone("error");
+      setTimeout(() => { setToast(null); setToastTone("default"); }, 4000);
+    }
+  }
+
   useEffect(() => {
     if (!contract?.id) return;
     if (status === "rateUser" && contract.id !== celebrationDismissed) {
@@ -2525,6 +2576,7 @@ export default function TradeExecution() {
                         address={contract.escrow}
                         sats={contract.amount}
                         btcPrice={btcPrice}
+                        onCancelTrade={cancelTrade}
                         fundLoading={fundEscrowLoading}
                         fundActionId={
                           // mobileActionFundEscrowWasTriggered is now an integer id.
@@ -2801,60 +2853,7 @@ export default function TradeExecution() {
                               );
                             }
                           } else if (action === "cancel_trade") {
-                            try {
-                              const res = await post(
-                                "/contract/" + contract.id + "/cancel",
-                              );
-                              if (res.ok) {
-                                // Cancel is immediate — re-fetch to get real status
-                                const fresh = await get(
-                                  "/contract/" + contract.id,
-                                );
-                                if (fresh.ok) {
-                                  const c = await fresh.json();
-                                  setLiveContract((prev) => {
-                                    if (!prev) return prev;
-                                    const nextStatus =
-                                      deriveDisplayStatus({
-                                        tradeStatus: c.tradeStatus,
-                                        direction: prev.contract?.direction,
-                                        escrowFundingTimeLimitExpired: c.escrowFundingTimeLimitExpired,
-                                      }) ?? "tradeCanceled";
-                                    return {
-                                      ...prev,
-                                      canceled: true,
-                                      tradeStatus: nextStatus,
-                                    };
-                                  });
-                                } else {
-                                  setLiveContract((prev) => {
-                                    if (!prev) return prev;
-                                    const nextStatus =
-                                      deriveDisplayStatus({
-                                        tradeStatus: "tradeCanceled",
-                                        direction: prev.contract?.direction,
-                                        escrowFundingTimeLimitExpired: prev.escrowFundingTimeLimitExpired,
-                                      }) ?? "tradeCanceled";
-                                    return {
-                                      ...prev,
-                                      canceled: true,
-                                      tradeStatus: nextStatus,
-                                    };
-                                  });
-                                }
-                              } else {
-                                const err = await res.json().catch(() => ({}));
-                                setActionError(
-                                  "Cancel trade failed: " +
-                                    (err.error || res.status),
-                                );
-                              }
-                            } catch (e) {
-                              console.warn(
-                                "[Trade] Cancel trade error:",
-                                e.message,
-                              );
-                            }
+                            await cancelTrade();
                           } else if (action === "republish_offer") {
                             setActionError(null);
                             try {

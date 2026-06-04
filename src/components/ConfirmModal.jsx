@@ -3,7 +3,7 @@ import { IconAlert } from "../screens/trade-execution/components.jsx";
 // Shared confirmation modal. Used by trade-execution (cancel trade, confirm
 // payment received) and RequestedOfferPopup (undo sent trade request).
 // Keyframes `modalIn` live in src/styles/global.css so it animates anywhere.
-export default function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel, tone = "danger" }) {
+export default function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel, tone = "danger", cancelLabel = "Cancel" }) {
   const isSuccess = tone === "success";
   const confirmBg = isSuccess ? "var(--success)" : "var(--error)";
   const confirmShadow = isSuccess
@@ -80,7 +80,7 @@ export default function ConfirmModal({ title, body, confirmLabel, onConfirm, onC
             onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--black-10)")}
             onClick={onCancel}
           >
-            Cancel
+            {cancelLabel}
           </button>
           <button
             style={{

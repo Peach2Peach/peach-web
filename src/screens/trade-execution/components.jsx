@@ -1754,6 +1754,9 @@ export function EscrowFundingCard({
   sats,
   btcPrice,
   onFundViaMobile,
+  // Cancel the contract from the funding stage (seller still allowed to cancel
+  // before funding, with a reputation penalty). Opens a confirmation popup.
+  onCancelTrade,
   // Pending-action id from server (number when triggered, true as fallback,
   // null/undefined when not yet triggered). On phone with a numeric id, we
   // render an "Open Peach App" deep-link instead of the request-sent text.
@@ -1764,6 +1767,7 @@ export function EscrowFundingCard({
   const [withAmount, setWithAmount] = useState(true);
   const [copiedAddr, setCopiedAddr] = useState(false);
   const [copiedAmt, setCopiedAmt] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   const btcAmount = (sats / 100_000_000).toFixed(8);
   // BIP21 URI: bitcoin:<address>?amount=<btc> when withAmount, else just address
@@ -2127,6 +2131,49 @@ export function EscrowFundingCard({
             </div>
           )}
         </div>
+      )}
+
+      {/* Discrete cancel — seller may still cancel before funding (reputation
+          penalty). Sits just under "Fund via mobile app", styled grey/low-key. */}
+      {onCancelTrade && (
+        <div
+          style={{
+            padding: "12px 16px 14px",
+            borderTop: "1px solid var(--black-5)",
+          }}
+        >
+          <button
+            onClick={() => setShowCancelConfirm(true)}
+            style={{
+              width: "100%",
+              padding: "10px 14px",
+              borderRadius: 999,
+              border: "1px solid var(--black-10)",
+              background: "var(--surface-2)",
+              color: "var(--black-65)",
+              fontFamily: "Baloo 2, cursive",
+              fontSize: ".82rem",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Cancel trade
+          </button>
+        </div>
+      )}
+
+      {showCancelConfirm && (
+        <ConfirmModal
+          title="Cancel trade?"
+          body="Are you sure? Canceling now, after accepting the trade, will negatively impact your reputation."
+          confirmLabel="Yes, cancel"
+          cancelLabel="Keep trade"
+          onConfirm={() => {
+            setShowCancelConfirm(false);
+            onCancelTrade();
+          }}
+          onCancel={() => setShowCancelConfirm(false)}
+        />
       )}
     </div>
   );
