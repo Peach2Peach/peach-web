@@ -1783,6 +1783,90 @@ export default function TradesDashboard() {
     return trade.matches || [];
   }
 
+  // Fetch the received trade requests for a single offer — same v069/v1 shape
+  // the popup-open path uses. Returns { ok, matches }; ok=false on a failed or
+  // aborted request so callers don't act on transient errors (e.g. by falsely
+  // concluding there are zero requests).
+  async function fetchReceivedRequests(trade) {
+    if (!auth) return { ok: false, matches: [] };
+    const useV069 =
+      trade.tradeStatus === "acceptTradeRequest" || trade.direction === "sell";
+    try {
+      if (useV069) {
+        const v069Base = auth.baseUrl.replace(/\/v1$/, "/v069");
+        const offerType = trade.direction === "buy" ? "buyOffer" : "sellOffer";
+        const res = await fetchWithSessionCheck(
+          `${v069Base}/${offerType}/${trade.id}/tradeRequestReceived/`,
+          { headers: { Authorization: `Bearer ${auth.token}` } },
+        );
+        if (!res.ok) return { ok: false, matches: [] };
+        const data = await res.json();
+        const requests = Array.isArray(data)
+          ? data
+          : (data?.tradeRequests ?? []);
+        const userProfiles = await Promise.all(
+          requests.map((tr) =>
+            tr.userId
+              ? get(`/user/${tr.userId}`)
+                  .then((r) => (r.ok ? r.json() : null))
+                  .catch(() => null)
+              : Promise.resolve(null),
+          ),
+        );
+        return {
+          ok: true,
+          matches: requests.map((tr, i) =>
+            transformTradeRequest(tr, trade, userProfiles[i]),
+          ),
+        };
+      }
+      const res = await get(
+        `/offer/${trade.id}/matches?page=0&size=21&sortBy=bestReputation`,
+      );
+      if (!res.ok) return { ok: false, matches: [] };
+      const data = await res.json();
+      return { ok: true, matches: (data.matches ?? []).map(transformMatch) };
+    } catch {
+      return { ok: false, matches: [] };
+    }
+  }
+
+  // Keep the open matches popup in sync with the server. The slow-tier poll
+  // skips sells and never reconciles `localMatches`, so without this a request
+  // the counterparty cancels would linger in the open popup until manual reopen.
+  // While the popup is open we refetch that one offer on an interval and: when
+  // some requests remain, refresh the cached list; when none remain, switch to
+  // the offer-detail popup — the same swap the on-demand open path does at
+  // handleTradeSelect when a stale status turns out to have no requests.
+  useEffect(() => {
+    const trade = matchesPopup;
+    if (!trade || !auth) return;
+    let cancelled = false;
+    async function syncOpenRequests() {
+      // Don't yank the list out from under an in-progress accept confirmation.
+      if (matchConfirm) return;
+      const { ok, matches } = await fetchReceivedRequests(trade);
+      if (cancelled || !ok) return;
+      if (matches.length === 0) {
+        setLocalMatches((prev) => {
+          const next = { ...prev };
+          delete next[trade.id];
+          return next;
+        });
+        setMatchDetail(null);
+        setMatchesPopup(null);
+        openOfferDetail(trade);
+      } else {
+        setLocalMatches((prev) => ({ ...prev, [trade.id]: matches }));
+      }
+    }
+    const iv = setInterval(syncOpenRequests, 12_000);
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+    };
+  }, [matchesPopup?.id, matchConfirm, auth]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function handleSkipMatch(trade, match) {
     setMatchError(null);
     // Save current state for rollback
@@ -1828,7 +1912,13 @@ export default function TradesDashboard() {
     );
     setLocalMatches((prev) => ({ ...prev, [trade.id]: remaining }));
     setMatchDetail(null);
-    if (remaining.length === 0) setMatchesPopup(null);
+    // When the last received request is rejected, the offer has no more trade
+    // requests — switch from the matches popup to the offer detail popup
+    // ("Offer without trade requests") instead of leaving an empty list.
+    if (remaining.length === 0) {
+      setMatchesPopup(null);
+      openOfferDetail(trade);
+    }
 
     if (auth) {
       try {
@@ -1844,6 +1934,7 @@ export default function TradesDashboard() {
         );
         if (!res.ok) {
           setLocalMatches((prev) => ({ ...prev, [trade.id]: previousMatches }));
+          if (remaining.length === 0) setOfferDetailPopup(null);
           setMatchesPopup(trade);
           setMatchError("Could not reject this request. Please try again.");
         } else {
@@ -1855,6 +1946,7 @@ export default function TradesDashboard() {
         }
       } catch {
         setLocalMatches((prev) => ({ ...prev, [trade.id]: previousMatches }));
+        if (remaining.length === 0) setOfferDetailPopup(null);
         setMatchesPopup(trade);
         setMatchError("Network error — could not reject this request.");
       }
