@@ -48,10 +48,10 @@ const META = {
 
   // ── Contracts ─────────────────────────────────────────────────────────────────
   "contract.contractCreated":                                  { title: "Trade started", body: "Your trade has started.", icon: "match" },
-  "contract.contractCreatedFromExpressSell.buyer.instantTrade":{ title: "It's a match!", body: "Your trade has started.", icon: "match" },
-  "contract.contractCreatedFromExpressSell.seller":            { title: "Trade started", body: "Your trade has started.", icon: "match" },
-  "contract.contractCreatedFromExpressBuy.seller.instantTrade":{ title: "It's a match!", body: "Your trade has started.", icon: "match" },
-  "contract.contractCreatedFromExpressBuy.buyer":              { title: "Trade started", body: "Your trade has started.", icon: "match" },
+  "contract.contractCreatedFromExpressSell.buyer.instantTrade":{ title: "Trade started", body: "It's the seller's turn to fund the escrow", icon: "match" },
+  "contract.contractCreatedFromExpressSell.seller":            { title: "Trade started", body: "You must now fund the escrow", icon: "match" },
+  "contract.contractCreatedFromExpressBuy.seller.instantTrade":{ title: "Trade started", body: "It's the buyer's turn to send the payment", icon: "match" },
+  "contract.contractCreatedFromExpressBuy.buyer":              { title: "Trade started", body: "Time for you to send the payment", icon: "match" },
   "contract.seller.instantTrade":                              { title: "Instant trade", body: "An instant trade has started.", icon: "match" },
   "contract.escrowFunded":        { title: "Escrow funded", body: "The escrow has been funded.", icon: "statusChange" },
   "contract.escrowFunded.buyer":  { title: "Escrow funded", body: "The seller funded the escrow.", icon: "statusChange" },
