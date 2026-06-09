@@ -680,8 +680,14 @@ export default function OfferCreation({ initialType="buy" }) {
   }
 
   // Build meansOfPayment + paymentData from selected PMs (shared by buy & sell)
-  // When serverPGPKey is provided (instant trade), encrypts PM details for the server
-  async function buildPaymentPayload(serverPGPKey){
+  // When serverPGPKey is provided (instant trade), encrypts PM details for the server.
+  // When requireInstant is true, throws rather than publishing an instant offer whose
+  // payment details were never encrypted to Peach's key (which would leave a taker
+  // unable to receive the seller's PM data).
+  async function buildPaymentPayload(serverPGPKey, { requireInstant = false } = {}){
+    if (requireInstant && (!serverPGPKey || !auth?.pgpPrivKey)) {
+      throw new Error("Couldn't reach Peach to secure this instant offer's payment details. Please try again.");
+    }
     const meansOfPayment = {};
     for(const pm of selectedSaved){
       const methodType = (pm.methodId||"").replace(/-\d{10,}$/, "");
@@ -733,6 +739,8 @@ export default function OfferCreation({ initialType="buy" }) {
           if (encrypted && signature) {
             paymentData[methodType].encrypted = encrypted;
             paymentData[methodType].signature = signature;
+          } else if (requireInstant) {
+            throw new Error("Couldn't encrypt payment details for instant trading. Please try again.");
           }
         }
       }
@@ -771,7 +779,7 @@ export default function OfferCreation({ initialType="buy" }) {
               console.warn("[OfferCreation] Failed to fetch server PGP key:", e.message);
             }
           }
-          const { meansOfPayment, paymentData } = await buildPaymentPayload(serverPGPKey);
+          const { meansOfPayment, paymentData } = await buildPaymentPayload(serverPGPKey, { requireInstant: form.instantMatch });
 
           // 1. Derive base return address index — count only past offers whose returnAddress was derived from this xpub.
           // External-address offers don't consume an `m/84'/.../1/N` slot, so they shouldn't bump the counter.
@@ -918,7 +926,7 @@ export default function OfferCreation({ initialType="buy" }) {
             console.warn("[OfferCreation] Failed to fetch server PGP key:", e.message);
           }
         }
-        const { meansOfPayment, paymentData } = await buildPaymentPayload(buyServerPGPKey);
+        const { meansOfPayment, paymentData } = await buildPaymentPayload(buyServerPGPKey, { requireInstant: form.instantMatch });
 
         const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
         const buyBody = JSON.stringify({
@@ -998,7 +1006,14 @@ export default function OfferCreation({ initialType="buy" }) {
         buyServerPGPKey = infoData?.peach?.pgpPublicKey ?? null;
       } catch(e){}
     }
-    const { meansOfPayment, paymentData } = await buildPaymentPayload(buyServerPGPKey);
+    let meansOfPayment, paymentData;
+    try {
+      ({ meansOfPayment, paymentData } = await buildPaymentPayload(buyServerPGPKey, { requireInstant: form.instantMatch }));
+    } catch (e) {
+      setPublishing(false);
+      setPublishError(e.message || "Couldn't prepare instant offer");
+      return;
+    }
     const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
     const buyBody = JSON.stringify({
       amount: form.amtFixed, meansOfPayment, paymentData,
@@ -1052,7 +1067,14 @@ export default function OfferCreation({ initialType="buy" }) {
     if (form.instantMatch) {
       try { const r = await get('/info'); const d = await r.json().catch(()=>null); serverPGPKey=d?.peach?.pgpPublicKey??null; } catch(e){}
     }
-    const { meansOfPayment, paymentData } = await buildPaymentPayload(serverPGPKey);
+    let meansOfPayment, paymentData;
+    try {
+      ({ meansOfPayment, paymentData } = await buildPaymentPayload(serverPGPKey, { requireInstant: form.instantMatch }));
+    } catch (e) {
+      setPublishing(false);
+      setPublishError(e.message || "Couldn't prepare instant offer");
+      return;
+    }
     // Re-derive base index — count existing offers now (which includes the ones that succeeded earlier)
     const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
     const hdrs = { Authorization: `Bearer ${auth.token}` };
