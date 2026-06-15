@@ -31,20 +31,26 @@ function stripPmIndex(id) { return String(id || "").replace(/[-_]\d+$/, ""); }
 
 // ─── CONSTANTS (shared with index.jsx) ──────────────────────────────────────
 
-// Daily trading limit is regulatory and denominated in CHF. The cap in any
-// other currency is derived live from /market/prices (CHF → target).
-export const LIMIT_CHF = 1000;
-export const MIN_SATS = 20_000;
+// Offer amounts are bounded by a fixed CHF band (regulatory, denominated in
+// CHF). Both ends are derived live from the BTC/CHF market price and rounded
+// *inward* to the nearest 10k sats — the floor ceils up, the cap floors down —
+// so the realised range never falls outside [MIN_CHF, MAX_CHF]. The cap in any
+// other currency is derived from /market/prices (CHF → target).
+export const MIN_CHF = 10;
+export const MAX_CHF = 800;
+export const SATS_STEP = 10_000;
 // Falls back to BTC_PRICE_FALLBACK (EUR-like, within ~5% of CHF) during the
 // brief window before /market/prices resolves, so the slider and form
 // validation stay usable on first render.
+export const minSatsAtLimit = (chfPrice) =>
+  Math.ceil((MIN_CHF / (chfPrice || BTC_PRICE_FALLBACK)) * SAT / SATS_STEP) * SATS_STEP;
 export const maxSatsAtLimit = (chfPrice) =>
-  Math.floor((LIMIT_CHF / (chfPrice || BTC_PRICE_FALLBACK)) * SAT);
+  Math.floor((MAX_CHF / (chfPrice || BTC_PRICE_FALLBACK)) * SAT / SATS_STEP) * SATS_STEP;
 export const limitInCurrency = (allPrices, currency) => {
   const chf = allPrices?.CHF;
   const target = allPrices?.[currency];
   if (!chf || !target) return null;
-  return LIMIT_CHF * (target / chf);
+  return MAX_CHF * (target / chf);
 };
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
@@ -182,16 +188,14 @@ export function AmountSlider({ form, setF, btcPrice, activeCurrency, activeBtcPr
   const { allPrices, selectedCurrency } = useCurrency();
   const displayCurrency = activeCurrency ?? selectedCurrency;
   const displayBtcPrice = activeBtcPrice ?? btcPrice;
+  const minSats = minSatsAtLimit(allPrices?.CHF);
   const maxSats = maxSatsAtLimit(allPrices?.CHF);
-  const val = form.amtFixed || MIN_SATS;
-  const span = Math.max(1, maxSats - MIN_SATS);
-  const pct = ((val - MIN_SATS) / span) * 100;
+  const val = form.amtFixed || minSats;
+  const span = Math.max(1, maxSats - minSats);
+  const pct = ((val - minSats) / span) * 100;
 
   const currentFiat = satsToFiat(val, displayBtcPrice);
   const pctOfLimit = maxSats ? val / maxSats : 0;
-  const nearLimit = pctOfLimit >= 0.9;
-
-  const pctRiseToLimit = nearLimit && val ? (maxSats / val - 1) * 100 : null;
 
   const barColor = pctOfLimit < 0.9 ? "var(--success)" : "var(--warning)";
 
@@ -218,7 +222,7 @@ export function AmountSlider({ form, setF, btcPrice, activeCurrency, activeBtcPr
     const raw = e.target.value.replace(/[^0-9]/g, "");
     setInputVal(raw);
     const n = parseInt(raw, 10);
-    if (!isNaN(n) && n >= MIN_SATS && n <= maxSats) {
+    if (!isNaN(n) && n >= minSats && n <= maxSats) {
       setF("amtFixed", n);
     }
   }
@@ -226,7 +230,7 @@ export function AmountSlider({ form, setF, btcPrice, activeCurrency, activeBtcPr
   function handleBlur() {
     setFocused(false);
     let n = parseInt(inputVal, 10);
-    if (isNaN(n) || n < MIN_SATS) n = MIN_SATS;
+    if (isNaN(n) || n < minSats) n = minSats;
     if (n > maxSats) n = maxSats;
     setInputVal(String(n));
     setF("amtFixed", n);
@@ -283,9 +287,9 @@ export function AmountSlider({ form, setF, btcPrice, activeCurrency, activeBtcPr
         <input
           type="range"
           className="amt-slider"
-          min={MIN_SATS}
+          min={minSats}
           max={maxSats}
-          step={1}
+          step={SATS_STEP}
           value={val}
           onChange={(e) => setF("amtFixed", +e.target.value)}
         />
@@ -293,8 +297,8 @@ export function AmountSlider({ form, setF, btcPrice, activeCurrency, activeBtcPr
 
       {/* Labels */}
       <div className="amt-labels">
-        <span>{fmt(MIN_SATS)} sats</span>
-        <span style={{ color: "var(--black-25)" }}>≤ 1 000 CHF limit</span>
+        <span>{fmt(minSats)} sats</span>
+        <span style={{ color: "var(--black-25)" }}>{MIN_CHF}–{MAX_CHF} CHF band</span>
         <span>{fmt(maxSats)} sats</span>
       </div>
 
@@ -321,18 +325,6 @@ export function AmountSlider({ form, setF, btcPrice, activeCurrency, activeBtcPr
           />
         </div>
       </div>
-
-      {/* Near-limit warning */}
-      {nearLimit && (
-        <div className="limit-warn">
-          <span style={{ fontSize: "1rem", flexShrink: 0 }}>⚠️</span>
-          <span>
-            Careful — this offer will be withdrawn from the market if the
-            Bitcoin price rises by <strong>{pctRiseToLimit.toFixed(1)}%</strong>
-            .
-          </span>
-        </div>
-      )}
     </>
   );
 }

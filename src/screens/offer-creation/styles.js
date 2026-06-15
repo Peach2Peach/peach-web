@@ -171,10 +171,6 @@ export const CSS = `
   .amt-pill-fiat{font-size:.82rem;color:var(--black-65);font-weight:600;
     white-space:nowrap}
 
-  /* Limit warning */
-  .limit-warn{display:flex;gap:9px;align-items:flex-start;background:var(--warning-soft);
-    border:1px solid var(--warning);border-radius:10px;padding:10px 12px;
-    font-size:.76rem;font-weight:600;color:var(--warning);line-height:1.55;margin-top:10px}
 
   /* Limit bar */
   .limit-bar-wrap{margin-top:10px}

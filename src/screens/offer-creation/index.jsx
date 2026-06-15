@@ -24,7 +24,7 @@ import PayoutAddressWizard from "../../components/PayoutAddressWizard.jsx";
 import { BITCOIN_NETWORK } from "../../utils/network.js";
 import { CSS } from "./styles.js";
 import {
-  MIN_SATS, maxSatsAtLimit, currSym,
+  minSatsAtLimit, maxSatsAtLimit, currSym,
   getSteps, LivePreview, AmountSlider,
   MultiOfferControl, MultiEscrowFunding, ReviewPills,
 } from "./components.jsx";
@@ -294,7 +294,7 @@ export default function OfferCreation({ initialType="buy" }) {
     });
   }, [pmsRaw]);
 
-  const initForm = (selectedMethodIds=[])=>({amtFixed:MIN_SATS,
+  const initForm = (selectedMethodIds=[])=>({amtFixed:minSatsAtLimit(allPrices?.CHF),
     selectedMethodIds,premium:"0",instantMatch:false,noNewUsers:false,
     minReputation:false,instantMatchBadges:[],experienceLevel:"",
     releaseMode:"peach",
@@ -653,10 +653,9 @@ export default function OfferCreation({ initialType="buy" }) {
   }
 
   // Validation for Configure step
+  const minS   = minSatsAtLimit(allPrices?.CHF);
   const maxS   = maxSatsAtLimit(allPrices?.CHF);
-  const amtOk  = isSell
-    ? form.amtFixed>=MIN_SATS&&form.amtFixed<=maxS
-    : form.amtFixed>=MIN_SATS&&form.amtFixed<=maxS;
+  const amtOk  = form.amtFixed>=minS&&form.amtFixed<=maxS;
   const payOk  = form.selectedMethodIds.length > 0;
   const premOk = form.premium!=="";
   const refundOk = !isSell || form.refundChoices.every(c =>
