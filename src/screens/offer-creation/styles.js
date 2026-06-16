@@ -58,6 +58,7 @@ export const CSS = `
   .wizard-title{font-size:1.5rem;font-weight:800;letter-spacing:-.025em;color:var(--black)}
 
   /* Type toggle */
+  .type-toggle-sentinel{display:block;height:0}
   .type-toggle{display:flex;gap:2px;background:var(--black-5);
     padding:3px;border-radius:10px}
   .type-btn{padding:7px 22px;border-radius:8px;font-size:.85rem;font-weight:800;
@@ -473,6 +474,21 @@ export const CSS = `
     .layout{margin-left:0!important}
   }
   @media(max-width:600px){
+    /* The header's single child shrink-wraps under space-between, so stretch it
+       (and the inner title row) to full width — otherwise the toggle centres
+       against a narrow left-aligned block instead of the card. */
+    .wizard-header > div{width:100%}
+    /* Wrapper takes its own full-width line and reserves the pill's height so
+       nothing jumps when the pill detaches (position:fixed) on scroll. */
+    .type-toggle-wrap{flex-basis:100%;min-height:50px}
+    /* Centered toggle filling 90% of width (5% margin each side); each button half. */
+    .type-toggle{max-width:90%;margin-left:auto;margin-right:auto}
+    .type-btn{flex:1;padding:12px 0;font-size:1.02rem}
+    /* Pinned just below the topbar while scrolling. Identical look to the resting
+       pill: same background (inherited) and same width — the left/right insets
+       reproduce the resting 5% margin (16px wizard pad + 5% of the content box). */
+    .type-toggle.stuck{position:fixed;top:calc(var(--topbar) + 6px);
+      left:calc(5vw + 14.4px);right:calc(5vw + 14.4px);z-index:140}
     .section-header{flex-wrap:wrap}
     .pm-warn-wrap{
       position:static;transform:none;

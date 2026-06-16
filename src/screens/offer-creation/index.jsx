@@ -95,16 +95,17 @@ const INFO_COPY = {
 };
 
 
-// ─── PM SELECTION PERSISTENCE ───────────────────────────────────────────────
-// Selected PMs survive Buy↔Sell tab switches and screen navigation within the
-// same browser tab. sessionStorage clears on tab close.
-const PM_SELECTION_KEY = "peach_offer_creation_pm_selection";
-function readPersistedPMSelection() {
-  try {
-    const raw = sessionStorage.getItem(PM_SELECTION_KEY);
-    const parsed = raw ? JSON.parse(raw) : null;
-    return Array.isArray(parsed) ? parsed.filter(x => typeof x === "string") : [];
-  } catch { return []; }
+// ─── OFFER STATE PERSISTENCE ────────────────────────────────────────────────
+// Tab choice + shared form params (amount, premium, advanced options, PMs)
+// persist in localStorage so the screen reopens exactly as the user left it,
+// surviving Buy↔Sell switches, reloads, tab close and browser restart (until
+// the cache is cleared). Shared across both directions — one set of values.
+const OFFER_STATE_KEY = "peach_offer_creation_state";
+const SHARED_FORM_KEYS = ["amtFixed","premium","instantMatch","noNewUsers",
+  "minReputation","instantMatchBadges","experienceLevel","selectedMethodIds"];
+function readPersistedState() {
+  try { return JSON.parse(localStorage.getItem(OFFER_STATE_KEY)) || {}; }
+  catch { return {}; }
 }
 
 // ─── Address display with copy + explorer link ─────────────────────────────
@@ -182,7 +183,13 @@ function MarketStatPills({ marketStats, isSell, onInfo }) {
 export default function OfferCreation({ initialType="buy" }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const typeFromUrl = searchParams.get("type") === "sell" ? "sell" : initialType;
+  // Explicit ?type= URL param wins (home/market CTAs pass ?type=buy|sell);
+  // otherwise restore the persisted tab; otherwise fall back to initialType.
+  const persisted = readPersistedState();
+  const urlType = searchParams.get("type");
+  const typeFromUrl = urlType === "sell" || urlType === "buy"
+    ? urlType
+    : (persisted.type === "sell" || persisted.type === "buy" ? persisted.type : initialType);
   const [type,         setType]         = useState(typeFromUrl);
   const [step,         setStep]         = useState(0);
   // Currency state lives in AppLayout. Read btcPrice + selectedCurrency for offer math.
@@ -299,7 +306,11 @@ export default function OfferCreation({ initialType="buy" }) {
     minReputation:false,instantMatchBadges:[],experienceLevel:"",
     releaseMode:"peach",
     refundChoices:[{ mode:"peach", address:"" }]});
-  const [form, setForm] = useState(()=>initForm(readPersistedPMSelection()));
+  const [form, setForm] = useState(() => {
+    const base = initForm(Array.isArray(persisted.selectedMethodIds) ? persisted.selectedMethodIds : []);
+    for (const k of SHARED_FORM_KEYS) if (persisted[k] !== undefined) base[k] = persisted[k];
+    return base;
+  });
   const [refundErrors, setRefundErrors] = useState({});
   const [refundExpanded, setRefundExpanded] = useState(false);
   const [advancedExpanded, setAdvancedExpanded] = useState(false);
@@ -308,6 +319,28 @@ export default function OfferCreation({ initialType="buy" }) {
   const [editingPremiumInline, setEditingPremiumInline] = useState(false);
   const [showPayoutModal, setShowPayoutModal] = useState(false);
   const userTouchedRefundRef = useRef(false);
+
+  // Mobile only: pin the Buy/Sell toggle just below the topbar once it scrolls
+  // up past it. A zero-height sentinel marks the pill's resting position; the
+  // observer flips `pillStuck` when that point crosses under the topbar.
+  const [pillStuck, setPillStuck] = useState(false);
+  const pillSentinelRef = useRef(null);
+  useEffect(() => {
+    const el = pillSentinelRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const TOPBAR = 56; // --topbar
+    const mq = window.matchMedia("(max-width:600px)");
+    const obs = new IntersectionObserver(
+      ([entry]) => setPillStuck(
+        mq.matches && !entry.isIntersecting && entry.boundingClientRect.top < TOPBAR
+      ),
+      { root: null, rootMargin: `-${TOPBAR}px 0px 0px 0px`, threshold: 0 }
+    );
+    obs.observe(el);
+    const onMq = () => { if (!mq.matches) setPillStuck(false); };
+    mq.addEventListener("change", onMq);
+    return () => { obs.disconnect(); mq.removeEventListener("change", onMq); };
+  }, []);
 
   // Fetch the user's saved refund address from /v069/selfUser on mount.
   // If absent, decryption fails, signature is invalid, or the address is on
@@ -351,13 +384,16 @@ export default function OfferCreation({ initialType="buy" }) {
     return () => { cancelled = true; };
   }, [auth?.token, auth?.pgpPrivKey, auth?.baseUrl, type]);
 
-  // Persist PM selection so it survives Buy↔Sell tab switches and screen
-  // navigation within the same browser tab.
+  // Persist the tab choice + shared form params so the screen reopens exactly
+  // as the user left it (survives switches, reloads, tab close, restart).
   useEffect(() => {
     try {
-      sessionStorage.setItem(PM_SELECTION_KEY, JSON.stringify(form.selectedMethodIds));
+      const slice = { type };
+      for (const k of SHARED_FORM_KEYS) slice[k] = form[k];
+      localStorage.setItem(OFFER_STATE_KEY, JSON.stringify(slice));
     } catch {}
-  }, [form.selectedMethodIds]);
+  }, [type, form.amtFixed, form.premium, form.instantMatch, form.noNewUsers,
+      form.minReputation, form.instantMatchBadges, form.experienceLevel, form.selectedMethodIds]);
 
   const isSell = type==="sell";
   const STEPS  = getSteps(type);
@@ -581,8 +617,10 @@ export default function OfferCreation({ initialType="buy" }) {
   }, [savedRefund?.address, isSell]);
   function reset(){
     setStep(0);setDone(false);setEscrowFunded(false);setFundingStatus(null);setFundingAmounts(null);setPublishError(null);setEscrowAddress(null);setSellOfferId(null);
-    // Preserve PM selection across resets so Buy↔Sell tab switches don't lose it.
-    setForm(f=>initForm(f.selectedMethodIds));
+    // Preserve shared params (amount, premium, advanced options, PMs) across
+    // resets so Buy↔Sell switches and post-publish resets don't lose them.
+    setForm(f => { const base = initForm(f.selectedMethodIds);
+      for (const k of SHARED_FORM_KEYS) base[k] = f[k]; return base; });
     setMultiEnabled(false);setMultiCount(2);setMultiResults(null);setSelectedEscrowIdx(0);setMultiPublishProgress(null);
     setFundMobileLoading(false);setFundMobileActionId(null);setFundMobileError(null);
     setRefundErrors({});
@@ -1247,11 +1285,14 @@ export default function OfferCreation({ initialType="buy" }) {
                 <div className="wizard-title">
                   {step===0?"Create your offer":step===1?"Review & publish":"Fund escrow"}
                 </div>
-                <div className="type-toggle" style={step===1?{opacity:0.45,pointerEvents:"none"}:{}}>
-                  <button className={`type-btn${!isSell?" buy-on":""}`}
-                    onClick={()=>switchType("buy")}>Buy BTC</button>
-                  <button className={`type-btn${isSell?" sell-on":""}`}
-                    onClick={()=>switchType("sell")}>Sell BTC</button>
+                <div className="type-toggle-wrap">
+                  <span ref={pillSentinelRef} className="type-toggle-sentinel" aria-hidden="true" />
+                  <div className={`type-toggle${pillStuck?" stuck":""}`} style={step===1?{opacity:0.45,pointerEvents:"none"}:{}}>
+                    <button className={`type-btn${!isSell?" buy-on":""}`}
+                      onClick={()=>switchType("buy")}>Buy BTC</button>
+                    <button className={`type-btn${isSell?" sell-on":""}`}
+                      onClick={()=>switchType("sell")}>Sell BTC</button>
+                  </div>
                 </div>
               </div>
             </div>
