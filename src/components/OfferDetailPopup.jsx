@@ -18,7 +18,7 @@ import { markSentRequestCreated } from "../hooks/useNotifications.js";
 import { fetchWithSessionCheck } from "../utils/sessionGuard.js";
 import {
   generateSymmetricKey, encryptForRecipients, encryptSymmetric,
-  encryptForPublicKey, signPGPMessage, hashPaymentFields,
+  signPGPMessage, hashPaymentFields,
 } from "../utils/pgp.js";
 import { fmtFiat } from "../utils/format.js";
 import PeachRating from "./PeachRating.jsx";
@@ -465,11 +465,6 @@ export default function OfferDetailPopup({
     let paymentDataHashed = null;
 
     try {
-      const infoRes = await get('/info');
-      const infoData = await infoRes.json().catch(() => null);
-      const serverPGPKey = infoData?.peach?.pgpPublicKey ?? null;
-      console.log("[InstantTrade] Server PGP key:", serverPGPKey ? "fetched" : "MISSING");
-
       const symmetricKey = generateSymmetricKey();
       const counterpartyKeys = await resolveCounterpartyKeys(offer);
       console.log("[InstantTrade] counterpartyKeys count:", counterpartyKeys.length);
@@ -488,14 +483,11 @@ export default function OfferDetailPopup({
 
       if (Object.keys(cleanData).length > 0 && symmetricKey) {
         const pmJson = JSON.stringify(cleanData);
-        if (serverPGPKey) {
-          paymentDataEncrypted = await encryptForPublicKey(pmJson, serverPGPKey);
-          console.log("[InstantTrade] encryptForPublicKey result:", paymentDataEncrypted ? "OK" : "FAILED (null)");
-        }
-        if (!paymentDataEncrypted) {
-          console.warn("[InstantTrade] Falling back to symmetric encryption");
-          paymentDataEncrypted = await encryptSymmetric(pmJson, symmetricKey);
-        }
+        // Payment data is encrypted with the per-trade symmetric key (which is
+        // PGP-wrapped to both buyer and seller in symmetricKeyEncrypted), NOT the
+        // server key — otherwise neither party can decrypt it. Must stay identical
+        // to the regular trade-request flow (executeRequestTrade).
+        paymentDataEncrypted = await encryptSymmetric(pmJson, symmetricKey);
         paymentDataSignature = await signPGPMessage(pmJson, auth.pgpPrivKey);
         paymentDataHashed = await hashPaymentFields(pmObj.type, cleanData, pmDetails.country || undefined);
       }
