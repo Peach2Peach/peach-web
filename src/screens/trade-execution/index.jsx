@@ -419,14 +419,14 @@ const CSS = `
     display:flex;flex-direction:column;align-items:center;gap:4px;
     padding:10px 14px;margin:4px auto;
     max-width:78%;border-radius:10px;
-    background:rgba(245,101,34,.10);
-    border:1px solid rgba(245,101,34,.45);
+    background:#D7F2FE;
+    border:1px solid rgba(3,125,181,.35);
     text-align:center;
   }
   .chat-mediator-label{
     display:inline-flex;align-items:center;gap:5px;
     font-size:.62rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
-    color:var(--primary-dark);
+    color:#037DB5;
   }
   .chat-mediator-text{
     font-size:.8rem;line-height:1.5;color:var(--black);white-space:pre-wrap;
