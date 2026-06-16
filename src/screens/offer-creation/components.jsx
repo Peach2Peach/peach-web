@@ -33,12 +33,12 @@ function stripPmIndex(id) { return String(id || "").replace(/[-_]\d+$/, ""); }
 
 // Offer amounts are bounded by a fixed CHF band (regulatory, denominated in
 // CHF). Both ends are derived live from the BTC/CHF market price and rounded
-// *inward* to the nearest 10k sats — the floor ceils up, the cap floors down —
+// *inward* to the nearest sat — the floor ceils up, the cap floors down —
 // so the realised range never falls outside [MIN_CHF, MAX_CHF]. The cap in any
 // other currency is derived from /market/prices (CHF → target).
 export const MIN_CHF = 10;
 export const MAX_CHF = 800;
-export const SATS_STEP = 10_000;
+export const SATS_STEP = 1;
 // Falls back to BTC_PRICE_FALLBACK (EUR-like, within ~5% of CHF) during the
 // brief window before /market/prices resolves, so the slider and form
 // validation stay usable on first render.
