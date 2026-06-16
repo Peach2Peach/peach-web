@@ -179,6 +179,73 @@ function MarketStatPills({ marketStats, isSell, onInfo }) {
   );
 }
 
+// ─── PREMIUM SLIDER ─────────────────────────────────────────────────────────
+// Editable big number + −/+ steppers + range slider. Used in the Configure
+// step and the Review step's inline editor. `value` is the form.premium string;
+// `onChange` stores a new premium string; `isSell` flips the green/red sign.
+const PREM_LIMIT = 35;   // premium range: ±35%
+const PREM_STEP  = 0.5;  // −/+ button nudge (slider drag stays at 0.1)
+const clampPrem  = n => Math.max(-PREM_LIMIT, Math.min(PREM_LIMIT, n));
+
+function PremiumSlider({ value, onChange, isSell }) {
+  const prem = parseFloat(value) || 0;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const inputRef = useRef(null);
+
+  const color = prem === 0 ? "var(--black-65)"
+    : isSell ? (prem > 0 ? "var(--success)" : "var(--error)")
+             : (prem < 0 ? "var(--success)" : "var(--error)");
+  const pct = ((prem + PREM_LIMIT) / (PREM_LIMIT * 2)) * 100;
+  const sliderBg = `linear-gradient(to right,var(--primary) 0%,var(--primary) ${pct}%,var(--black-10) ${pct}%,var(--black-10) 100%)`;
+
+  const startEdit = () => { setDraft(prem === 0 ? "0" : prem.toFixed(1)); setEditing(true); };
+  useEffect(() => { if (editing && inputRef.current) inputRef.current.select(); }, [editing]);
+
+  const commit = () => {
+    setEditing(false);
+    if (draft === "" || draft === "-") { onChange("0"); return; }
+    const n = parseFloat(draft);
+    if (!isNaN(n)) onChange(clampPrem(n).toFixed(1));
+  };
+  const nudge = d => onChange(clampPrem(prem + d).toFixed(1));
+
+  return (
+    <>
+      {editing ? (
+        <input ref={inputRef} className="slider-val slider-val-edit" type="text"
+          inputMode="decimal" value={draft} style={{ color }}
+          onChange={e => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={e => {
+            if (e.key === "Enter") commit();
+            else if (e.key === "Escape") setEditing(false);
+          }} />
+      ) : (
+        <div className="slider-val slider-val-click" style={{ color }}
+          onClick={startEdit} title="Click to edit">
+          {prem > 0 ? "+" : ""}{prem.toFixed(1)}%
+        </div>
+      )}
+
+      <div className="prem-row">
+        <button type="button" className="prem-step" onClick={() => nudge(-PREM_STEP)}
+          disabled={prem <= -PREM_LIMIT} aria-label="Decrease premium">−</button>
+        <div className="prem-slider-wrap">
+          <input type="range" className="prem-slider" min={-PREM_LIMIT} max={PREM_LIMIT} step={0.1}
+            value={prem} style={{ background: sliderBg }}
+            onChange={e => onChange(parseFloat(e.target.value).toFixed(1))} />
+          <div className="slider-labels">
+            <span>−{PREM_LIMIT}%</span><span>0%</span><span>+{PREM_LIMIT}%</span>
+          </div>
+        </div>
+        <button type="button" className="prem-step" onClick={() => nudge(PREM_STEP)}
+          disabled={prem >= PREM_LIMIT} aria-label="Increase premium">+</button>
+      </div>
+    </>
+  );
+}
+
 // ─── MAIN ───────────────────────────────────────────────────────────────────
 export default function OfferCreation({ initialType="buy" }) {
   const navigate = useNavigate();
@@ -1181,8 +1248,6 @@ export default function OfferCreation({ initialType="buy" }) {
     setStep(s => s - 1);
   }
 
-  const sliderBg=`linear-gradient(to right,var(--primary) 0%,var(--primary) ${((prem+21)/42)*100}%,var(--black-10) ${((prem+21)/42)*100}%,var(--black-10) 100%)`;
-
   // ── BUY SUCCESS ────────────────────────────────────────────────────────────
   if(done&&!isSell) return (
     <>
@@ -1486,33 +1551,7 @@ export default function OfferCreation({ initialType="buy" }) {
                   )}
                 </div>
 
-                <div className="slider-val" style={{color:prem===0?"var(--black-65)":
-                  isSell?(prem>0?"var(--success)":"var(--error)"):(prem<0?"var(--success)":"var(--error)")}}>
-                  {prem>0?"+":""}{prem.toFixed(1)}%
-                </div>
-
-                <div className="prem-row">
-                  <div className="prem-slider-wrap">
-                    <input type="range" className="prem-slider" min={-21} max={21} step={0.1}
-                      value={prem} style={{background:sliderBg}}
-                      onChange={e=>setF("premium",parseFloat(e.target.value).toFixed(1))}/>
-                    <div className="slider-labels">
-                      <span>−21%</span><span>0%</span><span>+21%</span>
-                    </div>
-                  </div>
-                  <div className="prem-input-wrap">
-                    <input className="prem-input" type="number" step="0.1" min="-21" max="21"
-                      value={form.premium}
-                      onChange={e=>{
-                        const v=e.target.value;
-                        if(v===""||v==="-"){setF("premium",v);return;}
-                        const n=parseFloat(v);
-                        if(!isNaN(n))setF("premium",Math.max(-21,Math.min(21,n)).toFixed(1));
-                      }}/>
-                    <div style={{fontSize:".65rem",color:"var(--black-65)",fontWeight:600,
-                      textAlign:"center",marginTop:4}}>manual</div>
-                  </div>
-                </div>
+                <PremiumSlider value={form.premium} onChange={v=>setF("premium",v)} isSell={isSell}/>
 
                 {/* Effective price */}
                 <div style={{display:"flex",gap:12,marginTop:14,
@@ -1978,26 +2017,7 @@ export default function OfferCreation({ initialType="buy" }) {
 
               {editingPremiumInline && (
                 <div className="review-inline-editor">
-                  <div className="prem-row">
-                    <div className="prem-slider-wrap">
-                      <input type="range" className="prem-slider" min={-21} max={21} step={0.1}
-                        value={prem} style={{background:sliderBg}}
-                        onChange={e=>setF("premium",parseFloat(e.target.value).toFixed(1))}/>
-                      <div className="slider-labels">
-                        <span>−21%</span><span>0%</span><span>+21%</span>
-                      </div>
-                    </div>
-                    <div className="prem-input-wrap">
-                      <input className="prem-input" type="number" step="0.1" min="-21" max="21"
-                        value={form.premium}
-                        onChange={e=>{
-                          const v=e.target.value;
-                          if(v===""||v==="-"){setF("premium",v);return;}
-                          const n=parseFloat(v);
-                          if(!isNaN(n))setF("premium",Math.max(-21,Math.min(21,n)).toFixed(1));
-                        }}/>
-                    </div>
-                  </div>
+                  <PremiumSlider value={form.premium} onChange={v=>setF("premium",v)} isSell={isSell}/>
                   <div style={{display:"flex",gap:12,marginTop:14,
                     background:"var(--bg)",borderRadius:8,padding:"8px 12px",
                     border:"1px solid var(--black-10)"}}>

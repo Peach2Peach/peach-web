@@ -236,16 +236,22 @@ export const CSS = `
     color:var(--black-65);font-weight:600;margin-top:5px}
   .slider-val{font-size:1.5rem;font-weight:800;letter-spacing:-.02em;
     text-align:center;margin-bottom:6px;transition:color .2s}
+  .slider-val-click{cursor:pointer;border-bottom:1.5px dashed transparent;
+    width:fit-content;margin-left:auto;margin-right:auto;padding:0 4px;
+    transition:border-color .15s,color .2s}
+  .slider-val-click:hover{border-bottom-color:var(--black-10)}
+  .slider-val-edit{font-family:var(--font);width:100%;border:none;outline:none;
+    background:transparent;padding:0}
 
-  /* Sub-row for slider + type input */
-  .prem-row{display:flex;gap:16px;align-items:flex-start}
+  /* Sub-row: [−] slider [+] */
+  .prem-row{display:flex;gap:12px;align-items:center}
   .prem-slider-wrap{flex:1;padding-top:4px}
-  .prem-input-wrap{width:90px;flex-shrink:0}
-  .prem-input{width:100%;font-family:var(--font);font-size:.95rem;font-weight:800;
-    padding:10px 10px;border:2px solid var(--black-10);border-radius:10px;
-    background:var(--bg);color:var(--black);outline:none;text-align:center;
-    transition:border-color .15s}
-  .prem-input:focus{border-color:var(--primary)}
+  .prem-step{width:34px;height:34px;flex-shrink:0;border-radius:50%;
+    border:none;background:var(--primary);color:white;font-size:1.25rem;font-weight:800;
+    line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;
+    box-shadow:0 2px 8px rgba(245,101,34,.3);transition:transform .1s,opacity .15s}
+  .prem-step:hover:not(:disabled){transform:scale(1.08)}
+  .prem-step:disabled{opacity:.35;cursor:not-allowed;box-shadow:none}
 
   /* Escrow callout */
   .callout{border-radius:12px;padding:12px 14px;
