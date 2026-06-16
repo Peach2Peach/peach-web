@@ -311,11 +311,7 @@ export default function PeachHome() {
   const [athData, setAthData]       = useState(null);
   const [athPeriod, setAthPeriod]   = useState("24h");
   const [athCurrency, setAthCurrency] = useState("EUR");
-  const [news, setNews] = useState([
-    { text: "Lorem ipsum dolor sit amet, consectetur adipiscing elit.", shareText: "", url: "https://peachbitcoin.com" },
-    { text: "Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.", shareText: "", url: "https://peachbitcoin.com" },
-    { text: "Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.", shareText: "", url: "https://peachbitcoin.com" },
-  ]);
+  const [news, setNews] = useState([]);
 
   // AppLayout owns Topbar/SideNav state (avatar menu, mobile drawer, currency).
   // Home only needs auth/isLoggedIn for profile + attention-strip, and
