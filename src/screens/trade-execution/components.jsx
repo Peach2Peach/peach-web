@@ -3121,7 +3121,8 @@ export function ActionPanel({
         <ConfirmModal
           title="cancel trade"
           body="Are you sure? The seller has already accepted your trade request, so canceling now will impact your reputation in a major way."
-          confirmLabel="cancel trade"
+          confirmLabel="Cancel trade"
+          cancelLabel="Don't cancel"
           onConfirm={() => {
             setShowCancelConfirm(false);
             onAction("cancel_trade");
