@@ -2647,42 +2647,6 @@ export function DisputeBanner({ scenario, onAction }) {
         <strong style={{ color: "var(--error)" }}>Dispute resolved</strong>
         <br />
         {OUTCOME_LABELS[disputeOutcome] ?? "The dispute has been resolved."}
-        <div style={{ marginTop: 10 }}>
-          <button
-            disabled={submitting}
-            onClick={async () => {
-              setSubmitting(true);
-              setError(null);
-              const ok = await onAction?.("dispute_ack_outcome");
-              if (ok) setAcked(true);
-              else setError("Failed to acknowledge. Please try again.");
-              setSubmitting(false);
-            }}
-            style={{
-              background: "var(--primary)",
-              color: "var(--surface)",
-              border: "none",
-              borderRadius: 8,
-              padding: "8px 20px",
-              fontWeight: 700,
-              fontSize: ".82rem",
-              cursor: "pointer",
-            }}
-          >
-            {submitting ? "SUBMITTING…" : "ACKNOWLEDGE"}
-          </button>
-          {error && (
-            <div
-              style={{
-                color: "var(--error)",
-                fontSize: ".78rem",
-                marginTop: 6,
-              }}
-            >
-              {error}
-            </div>
-          )}
-        </div>
       </div>
     );
   }

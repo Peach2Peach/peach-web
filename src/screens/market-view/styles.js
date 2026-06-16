@@ -285,6 +285,11 @@ export const CSS = `
   }
   .refresh-btn:hover{border-color:var(--primary);color:var(--primary-dark)}
   .refresh-btn:disabled{cursor:not-allowed}
+  .refresh-btn-labeled{width:auto;height:auto;padding:7px 14px;gap:6px;
+    font-size:.85rem;font-weight:700;letter-spacing:.02em;margin-left:auto;white-space:nowrap}
+
+  /* ── DESKTOP FILTERS ROW ── */
+  .filters-row{flex-basis:100%;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 
   /* ── MOBILE FILTERS / SORT PILL BUTTONS ── */
   .filters-btn,.sort-btn{

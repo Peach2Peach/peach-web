@@ -50,6 +50,8 @@ export default function PeachMarket() {
 
   const [showMyOffers,        setShowMyOffers]        = useState(() => getCached("market-show-my-offers")?.data ?? false);
   useEffect(() => { setCache("market-show-my-offers", showMyOffers); }, [showMyOffers]);
+  const [showInstantOnly,     setShowInstantOnly]     = useState(() => getCached("market-show-instant-only")?.data ?? false);
+  useEffect(() => { setCache("market-show-instant-only", showInstantOnly); }, [showInstantOnly]);
   const [showMyOffersInfo,    setShowMyOffersInfo]    = useState(false);
   const infoRef = useRef(null);
   // Currency state lives in AppLayout. Read btcPrice + selectedCurrency
@@ -524,6 +526,7 @@ export default function PeachMarket() {
   const filtered = marketOffers
     .filter(o => o.type === offerType)
     .filter(o => showMyOffers || !o.isOwn)
+    .filter(o => !showInstantOnly || o.auto)
     .filter(o => selCurrencies.length === 0 || selCurrencies.some(c => o.currencies.includes(c)))
     .filter(o => selMethods.length === 0 || selMethods.some(displayName => {
       const apiId = METHOD_ID_BY_DISPLAY[displayName] || displayName;
@@ -690,9 +693,90 @@ export default function PeachMarket() {
               </div>
             )}
 
-            {/* Filters — desktop inline row (hidden on mobile via isMobile gate) */}
+            {/* Filters + Sort — mobile pill buttons (open bottom sheets) */}
+            {isMobile && (
+              <div className="mobile-filter-row">
+                <button className="filters-btn" onClick={() => setFiltersOpen(true)}>
+                  <span>Filters</span>
+                  {activeFilterCount > 0 && <span className="filters-btn-count">{activeFilterCount}</span>}
+                  <span className="filters-btn-arrow">▼</span>
+                </button>
+                <button className="sort-btn" onClick={() => setSortOpen(true)}>
+                  <span>Sort: {sortLabelMap[sortKey]} {sortDisplayAsc ? "↑" : "↓"}</span>
+                  <span className="sort-btn-arrow">▼</span>
+                </button>
+              </div>
+            )}
+
+            {isMobile && (
+              <div className="my-offers-wrap" ref={infoRef}>
+                <label className={`my-offers-check${!isLoggedIn ? " my-offers-check-disabled" : ""}`}>
+                  <input
+                    type="checkbox"
+                    checked={showMyOffers}
+                    onChange={() => isLoggedIn && setShowMyOffers(v => !v)}
+                    disabled={!isLoggedIn}
+                  />
+                  <span className="my-offers-check-box"/>
+                  Show my offers
+                  <span
+                    className="info-dot"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowMyOffersInfo(v => !v); }}
+                    title="What is this?"
+                  >i</span>
+                </label>
+                {showMyOffersInfo && (
+                  <div className="info-popup">
+                    <strong>Why are my offers in the other tab?</strong>
+                    <p>Your offers appear where counterparties will find them:</p>
+                    <ul>
+                      <li><b>Buy BTC</b> tab shows sell offers — including yours</li>
+                      <li><b>Sell BTC</b> tab shows buy offers — including yours</li>
+                    </ul>
+                    <p>This way, the people you want to trade with can see and accept your offer.</p>
+                  </div>
+                )}
+              </div>
+            )}
+            {isMobile && (
+              <label className="my-offers-check">
+                <input
+                  type="checkbox"
+                  checked={showInstantOnly}
+                  onChange={() => setShowInstantOnly(v => !v)}
+                />
+                <span className="my-offers-check-box"/>
+                Show only instant trades
+              </label>
+            )}
+            {isMobile && (
+              <button
+                className="refresh-btn"
+                onClick={handleRefreshOffers}
+                title="Refresh offers"
+                disabled={offersLoading}
+                style={{opacity:offersLoading?0.5:1}}
+              >
+                ↻
+              </button>
+            )}
+            <div className="cta-wrap">
+              {isLoggedIn
+                ? <button className="cta-btn" onClick={() => navigate(isSellTab ? "/offer/new?type=sell" : "/offer/new")}>+ Create Offer</button>
+                : <button className="cta-btn-disabled">+ Create Offer</button>
+              }
+              <span className="how-to-start">How to start</span>
+            </div>
+
+            {/* Filters — desktop dedicated row (hidden on mobile via isMobile gate) */}
             {!isMobile && (
-              <>
+              <div className="filters-row">
+                <input
+                  className="search-inp"
+                  placeholder="Search offers…"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                />
                 <MultiSelect
                   label="Currency"
                   options={currencyOptions}
@@ -715,74 +799,54 @@ export default function PeachMarket() {
                   searchable
                   searchPlaceholder="Search payment methods…"
                 />
-                <input
-                  className="search-inp"
-                  placeholder="Search offers…"
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                />
-              </>
-            )}
-
-            {/* Filters + Sort — mobile pill buttons (open bottom sheets) */}
-            {isMobile && (
-              <div className="mobile-filter-row">
-                <button className="filters-btn" onClick={() => setFiltersOpen(true)}>
-                  <span>Filters</span>
-                  {activeFilterCount > 0 && <span className="filters-btn-count">{activeFilterCount}</span>}
-                  <span className="filters-btn-arrow">▼</span>
-                </button>
-                <button className="sort-btn" onClick={() => setSortOpen(true)}>
-                  <span>Sort: {sortLabelMap[sortKey]} {sortDisplayAsc ? "↑" : "↓"}</span>
-                  <span className="sort-btn-arrow">▼</span>
+                <div className="my-offers-wrap" ref={infoRef}>
+                  <label className={`my-offers-check${!isLoggedIn ? " my-offers-check-disabled" : ""}`}>
+                    <input
+                      type="checkbox"
+                      checked={showMyOffers}
+                      onChange={() => isLoggedIn && setShowMyOffers(v => !v)}
+                      disabled={!isLoggedIn}
+                    />
+                    <span className="my-offers-check-box"/>
+                    Show my offers
+                    <span
+                      className="info-dot"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowMyOffersInfo(v => !v); }}
+                      title="What is this?"
+                    >i</span>
+                  </label>
+                  {showMyOffersInfo && (
+                    <div className="info-popup">
+                      <strong>Why are my offers in the other tab?</strong>
+                      <p>Your offers appear where counterparties will find them:</p>
+                      <ul>
+                        <li><b>Buy BTC</b> tab shows sell offers — including yours</li>
+                        <li><b>Sell BTC</b> tab shows buy offers — including yours</li>
+                      </ul>
+                      <p>This way, the people you want to trade with can see and accept your offer.</p>
+                    </div>
+                  )}
+                </div>
+                <label className="my-offers-check">
+                  <input
+                    type="checkbox"
+                    checked={showInstantOnly}
+                    onChange={() => setShowInstantOnly(v => !v)}
+                  />
+                  <span className="my-offers-check-box"/>
+                  Show only instant trades
+                </label>
+                <button
+                  className="refresh-btn refresh-btn-labeled"
+                  onClick={handleRefreshOffers}
+                  title="Refresh offers"
+                  disabled={offersLoading}
+                  style={{opacity:offersLoading?0.5:1}}
+                >
+                  ↻ Reload
                 </button>
               </div>
             )}
-
-            <div className="my-offers-wrap" ref={infoRef}>
-              <label className={`my-offers-check${!isLoggedIn ? " my-offers-check-disabled" : ""}`}>
-                <input
-                  type="checkbox"
-                  checked={showMyOffers}
-                  onChange={() => isLoggedIn && setShowMyOffers(v => !v)}
-                  disabled={!isLoggedIn}
-                />
-                <span className="my-offers-check-box"/>
-                Show my offers
-              </label>
-              <span
-                className="info-dot"
-                onClick={(e) => { e.stopPropagation(); setShowMyOffersInfo(v => !v); }}
-                title="What is this?"
-              >i</span>
-              {showMyOffersInfo && (
-                <div className="info-popup">
-                  <strong>Why are my offers in the other tab?</strong>
-                  <p>Your offers appear where counterparties will find them:</p>
-                  <ul>
-                    <li><b>Buy BTC</b> tab shows sell offers — including yours</li>
-                    <li><b>Sell BTC</b> tab shows buy offers — including yours</li>
-                  </ul>
-                  <p>This way, the people you want to trade with can see and accept your offer.</p>
-                </div>
-              )}
-            </div>
-            <button
-              className="refresh-btn"
-              onClick={handleRefreshOffers}
-              title="Refresh offers"
-              disabled={offersLoading}
-              style={{opacity:offersLoading?0.5:1}}
-            >
-              ↻
-            </button>
-            <div className="cta-wrap">
-              {isLoggedIn
-                ? <button className="cta-btn" onClick={() => navigate(isSellTab ? "/offer/new?type=sell" : "/offer/new")}>+ Create Offer</button>
-                : <button className="cta-btn-disabled">+ Create Offer</button>
-              }
-              <span className="how-to-start">How to start</span>
-            </div>
             </div>
           </div>
 
