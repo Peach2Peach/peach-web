@@ -47,11 +47,6 @@ const css = `
   /* ── STAT CARDS ── */
   .stat-big{font-size:2rem;font-weight:800;color:var(--black);line-height:1;letter-spacing:-.02em}
   .stat-sub{font-size:.78rem;font-weight:500;color:var(--black-65);margin-top:4px}
-  .stat-change{display:inline-flex;align-items:center;gap:3px;font-size:.72rem;font-weight:700;
-    padding:2px 8px;border-radius:999px;margin-top:8px}
-  .stat-change.pos{background:var(--success-bg);color:var(--success)}
-  .stat-change.neg{background:var(--error-bg);color:var(--error)}
-  .stat-change.neu{background:var(--black-5);color:var(--black-65)}
   .stat-icon{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;
     justify-content:center;font-size:1.1rem;flex-shrink:0}
 
@@ -307,6 +302,7 @@ export default function PeachHome() {
   const navigate = useNavigate();
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const [marketStats, setMarketStats] = useState(null);
+  const [tradeStats, setTradeStats] = useState(null);
   const [contractsData, setContractsData] = useState([]);
   // Market-wide PM + currency breakdown (counts of outstanding offers).
   // Fetched once on home mount from /v069/{buyOffer,sellOffer}?ownOffers=false.
@@ -373,6 +369,22 @@ export default function PeachHome() {
     }
     fetchMarketStats();
     const iv = setInterval(fetchMarketStats, 60000);
+    return () => clearInterval(iv);
+  }, []);
+
+  // ── SUCCESSFUL TRADES (public, last 24h) ──
+  useEffect(() => {
+    async function fetchTradeStats() {
+      try {
+        const res = await get('/info/successfulTrades');
+        if (res.ok) {
+          const data = await res.json();
+          if (data) setTradeStats(data);
+        }
+      } catch {}
+    }
+    fetchTradeStats();
+    const iv = setInterval(fetchTradeStats, 60000);
     return () => clearInterval(iv);
   }, []);
 
@@ -539,6 +551,13 @@ export default function PeachHome() {
   const athAvailCurrencies = Object.keys(athPeaks?.[athPeriod] ?? {}).sort();
   const athPrice = athPeaks?.[athPeriod]?.[athCurrency] ?? null;
   const kycPrice = allPrices?.[athCurrency] ?? null;
+
+  // ── 24h trade stats (public /info/successfulTrades) ──
+  const tradesTotalSats = tradeStats?.totalSats ?? 0;
+  const tradesTotalContracts = tradeStats?.totalContracts ?? 0;
+  const tradesEur = allPrices?.EUR != null
+    ? (tradesTotalSats / 1e8) * allPrices.EUR
+    : null;
 
   return (
     <>
@@ -796,9 +815,8 @@ export default function PeachHome() {
                   {/* 24h Volume — full width when narrow */}
                   <div className="stats-vol" style={{display:"flex",flexDirection:"column",gap:4}}>
                     <span style={{fontSize:".72rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--black-65)"}}>24h Volume</span>
-                    <div className="stat-big"><SatsAmount sats={0} fontSize="1.1rem"/></div>
-                    <div className="stat-sub">≈ €0 · today</div>
-                    <span className="stat-change neu">—</span>
+                    <div className="stat-big"><SatsAmount sats={tradesTotalSats} fontSize="1.1rem"/></div>
+                    <div className="stat-sub">≈ €{tradesEur != null ? Math.round(tradesEur).toLocaleString("fr-FR") : "—"} · last 24h</div>
                   </div>
 
                   {/* Bottom 2 cols wrapper — only used at narrow widths */}
@@ -807,9 +825,8 @@ export default function PeachHome() {
                     {/* Trades Today */}
                     <div style={{display:"flex",flexDirection:"column",gap:4}}>
                       <span style={{fontSize:".72rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"var(--black-65)"}}>Trades Today</span>
-                      <div className="stat-big">0</div>
-                      <div className="stat-sub">completed trades · today</div>
-                      <span className="stat-change neu">—</span>
+                      <div className="stat-big">{tradesTotalContracts.toLocaleString("fr-FR")}</div>
+                      <div className="stat-sub">completed trades · last 24h</div>
                     </div>
 
                   </div>{/* end stats-bottom */}
