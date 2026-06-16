@@ -232,8 +232,8 @@ export function Topbar({
     notifications: serverNotifs,
     unreadCount: serverUnread,
     readDisplayIds,
-    onPanelOpen: onServerPanelOpen,
-    onPanelClose: onServerPanelClose,
+    markRead: markServerRead,
+    markAllRead: markServerAllRead,
   } = useServerNotifications();
   const { theme, toggleTheme } = useTheme();
   const session = useSessionTimer();
@@ -260,16 +260,8 @@ export function Topbar({
     return () => { document.removeEventListener("click", close); document.removeEventListener("keydown", esc); };
   }, [showNotifPanel]);
 
-  // While the panel is open, mark unread notifications as read on the server but
-  // keep their unread colour frozen; on close (toggle, outside click, Escape)
-  // release the freeze so they render as read.
-  useEffect(() => {
-    if (!showNotifPanel) return;
-    onServerPanelOpen();
-    return () => onServerPanelClose();
-  }, [showNotifPanel, onServerPanelOpen, onServerPanelClose]);
-
   const handleServerNotifNavigate = (n) => {
+    markServerRead(n.id);
     setShowNotifPanel(false);
     const target = getNotifTarget(n);
     if (target?.to) navigate(target.to, target.state ? { state: target.state } : undefined);
@@ -379,6 +371,8 @@ export function Topbar({
                 notifications={serverNotifs}
                 readDisplayIds={readDisplayIds}
                 onNavigate={handleServerNotifNavigate}
+                onMarkRead={markServerRead}
+                onMarkAllRead={markServerAllRead}
               />
             )}
           </div>

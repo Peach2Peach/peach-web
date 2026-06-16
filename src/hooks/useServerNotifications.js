@@ -4,13 +4,11 @@
  * Polls GET /v069/selfUser/notifications/ every 7 seconds and exposes the list,
  * the unread count (for the bell badge), and a per-item "display as read" set.
  *
- * Read/colour model (matches the product spec):
- *   - When the user opens the panel we mark every currently-unread notification
- *     as read on the server (POST /v069/selfUser/notifications/read) AND remember
- *     them locally as read — but we DON'T drop their unread colour yet. They stay
- *     "frozen" as unread until the panel closes, so the user can still see what
- *     was new while it's open.
- *   - On close we clear the frozen set and the items render as read.
+ * Read/colour model (manual):
+ *   - Notifications stay unread (and keep counting toward the badge) until the
+ *     user explicitly marks them read — either per-item or via "mark all read".
+ *   - Marking read POSTs the ids to the server (POST /v069/selfUser/notifications/read),
+ *     remembers them locally, and flips their colour to read immediately.
  *
  * Toasts:
  *   - On the first successful poll we seed the "already toasted" set with the
@@ -34,7 +32,6 @@ let _listeners = new Set();
 let _interval = null;
 
 let _locallyRead = new Set();   // ids POSTed as read this session (optimistic)
-let _frozenUnread = new Set();  // ids held as unread-coloured while the panel is open
 let _toasted = new Set();       // ids we've already shown a toast for
 let _seeded = false;            // has the first poll seeded the toast backlog?
 let _currentPeachId = null;
@@ -51,7 +48,7 @@ function _recompute(notifications) {
   for (const n of list) {
     const read = _effectiveRead(n);
     if (!read) unreadCount++;
-    if (read && !_frozenUnread.has(n.id)) readDisplayIds.add(n.id);
+    if (read) readDisplayIds.add(n.id);
   }
   _state = { ..._state, notifications: list, unreadCount, readDisplayIds };
 }
@@ -63,7 +60,6 @@ function _notify() {
 function _resetForUser(peachId) {
   _currentPeachId = peachId;
   _locallyRead = new Set();
-  _frozenUnread = new Set();
   _toasted = new Set();
   _seeded = false;
   _state = { notifications: [], unreadCount: 0, readDisplayIds: new Set(), toasts: [] };
@@ -142,33 +138,36 @@ function _subscribe(cb) {
 function _getSnapshot() { return _state; }
 
 // ── Public actions ────────────────────────────────────────────────────────────
-// Opening the panel: mark everything currently unread as read on the server and
-// locally, but freeze their unread colour until the panel closes.
-function _onPanelOpen() {
-  const unreadIds = _state.notifications.filter(n => !_effectiveRead(n)).map(n => n.id);
-  if (unreadIds.length === 0) return;
-
-  _frozenUnread = new Set(unreadIds);
-  unreadIds.forEach(id => _locallyRead.add(id));
-  _recompute();
-  _notify();
-
+// POST the given ids to the server as read. Fire-and-forget: the next poll
+// reconciles if it fails, and we've already updated locally.
+function _postRead(ids) {
   const auth = window.__PEACH_AUTH__;
-  if (!auth) return;
+  if (!auth || ids.length === 0) return;
   const v069Base = (auth.baseUrl ?? API_V1).replace(/\/v1$/, "/v069");
   fetchWithSessionCheck(`${v069Base}/selfUser/notifications/read`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${auth.token}` },
-    body: JSON.stringify({ ids: unreadIds }),
+    body: JSON.stringify({ ids }),
   }).catch(() => { /* server stays the source of truth; next poll reconciles */ });
 }
 
-// Closing the panel: drop the freeze so read items render as read.
-function _onPanelClose() {
-  if (_frozenUnread.size === 0) return;
-  _frozenUnread = new Set();
+// Mark a single notification read.
+function _markRead(id) {
+  if (_locallyRead.has(id)) return;
+  _locallyRead.add(id);
   _recompute();
   _notify();
+  _postRead([id]);
+}
+
+// Mark every currently-unread notification read.
+function _markAllRead() {
+  const unreadIds = _state.notifications.filter(n => !_effectiveRead(n)).map(n => n.id);
+  if (unreadIds.length === 0) return;
+  unreadIds.forEach(id => _locallyRead.add(id));
+  _recompute();
+  _notify();
+  _postRead(unreadIds);
 }
 
 function _dismissToast(id) {
@@ -185,8 +184,8 @@ export function useServerNotifications() {
     unreadCount: state.unreadCount,
     readDisplayIds: state.readDisplayIds,
     toasts: state.toasts,
-    onPanelOpen: _onPanelOpen,
-    onPanelClose: _onPanelClose,
+    markRead: _markRead,
+    markAllRead: _markAllRead,
     dismissToast: _dismissToast,
   };
 }

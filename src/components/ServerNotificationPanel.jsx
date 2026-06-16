@@ -56,11 +56,15 @@ function toMs(ts) {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
-export default function ServerNotificationPanel({ notifications, readDisplayIds, onNavigate }) {
+export default function ServerNotificationPanel({ notifications, readDisplayIds, onNavigate, onMarkRead, onMarkAllRead }) {
+  const hasUnread = notifications.some(n => !readDisplayIds.has(n.id));
   return (
     <div className="notif-panel" onClick={e => e.stopPropagation()}>
       <div className="notif-panel-header">
         <span className="notif-panel-title">Notifications</span>
+        {hasUnread && (
+          <button className="notif-mark-read" onClick={onMarkAllRead}>Mark all read</button>
+        )}
       </div>
       <div className="notif-panel-list">
         {notifications.length === 0 ? (
@@ -84,6 +88,19 @@ export default function ServerNotificationPanel({ notifications, readDisplayIds,
                 ? `offer ${formatTradeId(offerId, "offer")}`
                 : null;
             const ms = toMs(n.timestamp);
+            const markReadBtn = isUnread && (
+              <button
+                className="notif-mark-one"
+                aria-label="Mark as read"
+                title="Mark as read"
+                onClick={e => { e.stopPropagation(); onMarkRead(n.id); }}
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3,9 6.5,12.5 13,4"/>
+                </svg>
+                <span>mark as read</span>
+              </button>
+            );
             return (
               <div
                 key={n.id}
@@ -93,6 +110,7 @@ export default function ServerNotificationPanel({ notifications, readDisplayIds,
                 {idLabel && (
                   <div className="notif-item-header-row">
                     <span className="notif-item-id">{idLabel}:</span>
+                    {markReadBtn}
                   </div>
                 )}
                 <div className="notif-item-main">
@@ -103,6 +121,7 @@ export default function ServerNotificationPanel({ notifications, readDisplayIds,
                     <div className="notif-item-title">{title}</div>
                     {body && <div className="notif-item-desc">{body}</div>}
                   </div>
+                  {!idLabel && markReadBtn}
                 </div>
                 {ms != null && <div className="notif-item-time">{relTime(ms)}</div>}
               </div>
