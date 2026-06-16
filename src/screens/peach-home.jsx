@@ -625,6 +625,37 @@ export default function PeachHome() {
 
             {/* ── ATH WIDGET + OPEN OFFERS ROW ── */}
             <div className="cards-row ath-offers-row" style={{display:"flex",gap:18,alignItems:"flex-start",flexWrap:"wrap"}}>
+            {/* ── OPEN OFFERS CARD ── */}
+            <div className="card open-offers-card" style={{flex:"1 1 360px",minWidth:0,width:"auto"}}>
+              <span className="open-offers-badge">OPEN OFFERS</span>
+              <div className="open-offers-cols">
+                {/* buy column */}
+                <div className="oo-col">
+                  <div className="oo-count-row">
+                    <span className="oo-count oo-count-buy">{marketStats?.buy?.open ?? "—"}</span>
+                    <span className="oo-label">buy offers</span>
+                  </div>
+                  <span className="oo-premium">average premium of completed trades: {fmtPremium(marketStats?.buy?.avgPremium)}</span>
+                  <span className="oo-market-link" onClick={() => navigate("/market", { state: { marketTab: "sell" } })}>See market →</span>
+                </div>
+                <div className="oo-divider" />
+                {/* sell column */}
+                <div className="oo-col">
+                  <div className="oo-count-row">
+                    <span className="oo-count oo-count-sell">{marketStats?.sell?.open ?? "—"}</span>
+                    <span className="oo-label">sell offers</span>
+                  </div>
+                  <span className="oo-premium">average premium of completed trades: {fmtPremium(marketStats?.sell?.avgPremium)}</span>
+                  <span className="oo-market-link" onClick={() => navigate("/market", { state: { marketTab: "buy" } })}>See market →</span>
+                </div>
+              </div>
+              <div className="oo-hr" />
+              <div className="oo-actions">
+                <button className="oo-btn oo-btn-buy"  onClick={() => navigate("/offer/new?type=buy")}>CREATE BUY OFFER</button>
+                <button className="oo-btn oo-btn-sell" onClick={() => navigate("/offer/new?type=sell")}>CREATE SELL OFFER</button>
+              </div>
+            </div>
+
             <div className="card" style={{flex:"1 1 360px",minWidth:0,width:"auto"}}>
               <div className="ath-header">
                 <IcoBtc size={20}/>
@@ -674,37 +705,6 @@ export default function PeachHome() {
                     </div>
                   </div>
                 )}
-              </div>
-            </div>
-
-            {/* ── OPEN OFFERS CARD ── */}
-            <div className="card open-offers-card" style={{flex:"1 1 360px",minWidth:0,width:"auto"}}>
-              <span className="open-offers-badge">OPEN OFFERS</span>
-              <div className="open-offers-cols">
-                {/* buy column */}
-                <div className="oo-col">
-                  <div className="oo-count-row">
-                    <span className="oo-count oo-count-buy">{marketStats?.buy?.open ?? "—"}</span>
-                    <span className="oo-label">buy offers</span>
-                  </div>
-                  <span className="oo-premium">average premium of completed trades: {fmtPremium(marketStats?.buy?.avgPremium)}</span>
-                  <span className="oo-market-link" onClick={() => navigate("/market", { state: { marketTab: "sell" } })}>See market →</span>
-                </div>
-                <div className="oo-divider" />
-                {/* sell column */}
-                <div className="oo-col">
-                  <div className="oo-count-row">
-                    <span className="oo-count oo-count-sell">{marketStats?.sell?.open ?? "—"}</span>
-                    <span className="oo-label">sell offers</span>
-                  </div>
-                  <span className="oo-premium">average premium of completed trades: {fmtPremium(marketStats?.sell?.avgPremium)}</span>
-                  <span className="oo-market-link" onClick={() => navigate("/market", { state: { marketTab: "buy" } })}>See market →</span>
-                </div>
-              </div>
-              <div className="oo-hr" />
-              <div className="oo-actions">
-                <button className="oo-btn oo-btn-buy"  onClick={() => navigate("/offer/new?type=buy")}>CREATE BUY OFFER</button>
-                <button className="oo-btn oo-btn-sell" onClick={() => navigate("/offer/new?type=sell")}>CREATE SELL OFFER</button>
               </div>
             </div>
             </div>

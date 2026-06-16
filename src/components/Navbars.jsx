@@ -248,6 +248,7 @@ export function Topbar({
     const loggedIn = !!window.__PEACH_AUTH__;
     navigate(loggedIn ? "/home" : "/");
   };
+  const logoHref = `#/${window.__PEACH_AUTH__ ? "home" : ""}`;
 
   // Close notification panel on outside click or Escape
   useEffect(() => {
@@ -315,25 +316,23 @@ export function Topbar({
     <header className="topbar">
       <div className="topbar-left">
         <button className="burger-btn" onClick={onBurgerClick}><IconBurger/></button>
-        <button
-          type="button"
-          className="topbar-logo-btn"
-          onClick={handleLogoClick}
+        <a
+          href={logoHref}
+          className="topbar-logo-btn topbar-logo-desktop"
+          style={{ backgroundImage: `url(${peachLogo})` }}
+          onClick={(e) => { e.preventDefault(); handleLogoClick(); }}
           aria-label="Go to homepage"
-        >
-          <img src={peachLogo} alt="Peach" className="topbar-logo-desktop" />
-        </button>
+        />
       </div>
 
       <div className="topbar-center">
-        <button
-          type="button"
-          className="topbar-logo-btn"
-          onClick={handleLogoClick}
+        <a
+          href={logoHref}
+          className="topbar-logo-btn topbar-logo-mobile"
+          style={{ backgroundImage: `url(${peachLogo})` }}
+          onClick={(e) => { e.preventDefault(); handleLogoClick(); }}
           aria-label="Go to homepage"
-        >
-          <img src={peachLogo} alt="Peach" className="topbar-logo-mobile" />
-        </button>
+        />
         {showPrice && (
           <div className="topbar-price">
             <IcoBtc size={18}/>
