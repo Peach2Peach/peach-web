@@ -70,6 +70,7 @@ const INFO_COPY = {
         <p className="ip-text">You can select some criteria to allow the instant trade to happen.</p>
         <p className="ip-text">"no new users " will still allow new users to request to trade, but they will require your confirmation.</p>
         <p className="ip-text">To completely avoid new users, use the "experience level" option below.</p>
+        <p className="ip-text" style={{ fontWeight: 700, color: "var(--text)" }}>Attention: the Payment Details of this Offer will be shared with Peach with Instant Trade. If you want to share them only with the counterparty of the trade, you cannot use Instant Trade.</p>
       </>
     ),
   },
