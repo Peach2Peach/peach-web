@@ -324,7 +324,7 @@ export default function OtherUserPage() {
                           style={{ cursor:"pointer" }}
                           onClick={() => setBadgesHelpOpen(true)}
                         >
-                          {b}
+                          {b === "ambassador" ? "early adopter" : b}
                         </span>
                       ))}
                       <RepeatTraderBadge userId={userId} />

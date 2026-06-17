@@ -156,7 +156,7 @@ export function ProfileSubScreen({ onBack }) {
                   style={{ cursor:"pointer" }}
                   onClick={() => setBadgesHelpOpen(true)}
                 >
-                  {b}
+                  {b === "ambassador" ? "early adopter" : b}
                 </span>
               ))}
             </div>

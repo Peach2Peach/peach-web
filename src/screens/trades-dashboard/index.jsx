@@ -2543,6 +2543,7 @@ export default function TradesDashboard() {
           const BADGE_LABELS = {
             fastTrader: "Fast trader",
             superTrader: "Super trader",
+            ambassador: "Early adopter",
           };
           const attrChips = [];
           if (instantTradeOn) attrChips.push("⚡ Instant trade");

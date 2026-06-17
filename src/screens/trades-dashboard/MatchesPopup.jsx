@@ -1030,6 +1030,7 @@ export default function MatchesPopup({
           const BADGE_LABELS = {
             fastTrader: "Fast trader",
             superTrader: "Super trader",
+            ambassador: "Early adopter",
           };
           const attrChips = [];
           if (instantTradeOn) attrChips.push("⚡ Instant trade");
