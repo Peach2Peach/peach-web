@@ -39,11 +39,19 @@ function stripPmIndex(id) { return String(id || "").replace(/[-_]\d+$/, ""); }
 export const MIN_CHF = 10;
 export const MAX_CHF = 800;
 export const SATS_STEP = 1;
+// The minimum is rounded up to the nearest 10k sats, then clamped to the hard
+// 20 000-sat floor the server enforces regardless of the CHF band, so the live
+// floor can never dip under a value the server would reject.
+export const MIN_SATS_STEP = 10_000;
+export const SERVER_MIN_SATS = 20_000;
 // Falls back to BTC_PRICE_FALLBACK (EUR-like, within ~5% of CHF) during the
 // brief window before /market/prices resolves, so the slider and form
 // validation stay usable on first render.
 export const minSatsAtLimit = (chfPrice) =>
-  Math.ceil((MIN_CHF / (chfPrice || BTC_PRICE_FALLBACK)) * SAT / SATS_STEP) * SATS_STEP;
+  Math.max(
+    SERVER_MIN_SATS,
+    Math.ceil((MIN_CHF / (chfPrice || BTC_PRICE_FALLBACK)) * SAT / MIN_SATS_STEP) * MIN_SATS_STEP,
+  );
 export const maxSatsAtLimit = (chfPrice) =>
   Math.floor((MAX_CHF / (chfPrice || BTC_PRICE_FALLBACK)) * SAT / SATS_STEP) * SATS_STEP;
 export const limitInCurrency = (allPrices, currency) => {
