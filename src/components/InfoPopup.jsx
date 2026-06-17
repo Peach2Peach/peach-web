@@ -117,6 +117,7 @@ export function TradingLimitsInfoPopup({ onClose }) {
         Monthly (anonymous methods: cash or online gift cards): up to 1,000 CHF<br/>
         Yearly: up to 100,000 CHF in bitcoin
       </p>
+      <p className="ip-text">Verified (KYC) accounts are not subject to these limits.</p>
     </InfoPopup>
   );
 }

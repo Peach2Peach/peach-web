@@ -87,6 +87,9 @@ const CSS = `
   .limit-bar-fill-annual{background:linear-gradient(90deg,#9B5CFF,#7C3AED)}
   .limit-anon-dot{width:6px;height:6px;border-radius:50%;background:#037DB5;
     display:inline-block;flex-shrink:0}
+  .limit-verified{display:flex;align-items:center;gap:8px;font-size:.78rem;font-weight:700;color:var(--black-65)}
+  .limit-verified-badge{display:inline-flex;align-items:center;gap:4px;font-weight:800;color:var(--primary);
+    background:var(--black-10);border-radius:999px;padding:3px 10px;font-size:.7rem;white-space:nowrap}
 
   /* CTA button */
   .btn-cta{background:var(--grad);color:white;border:none;border-radius:999px;
@@ -1188,6 +1191,8 @@ export default function TradesDashboard() {
         : 1;
     return Math.round(chf * rate);
   };
+  // KYC-verified accounts are not subject to trading limits
+  const kycVerified = !!auth?.profile?.kyc;
   const LIMIT_TOTAL = liveLimit?.daily ?? 1000;
   const LIMIT_USED = liveLimit?.dailyAmount ?? 0;
   const ANON_TOTAL = liveLimit?.monthlyAnonymous ?? 1000;
@@ -2213,6 +2218,13 @@ export default function TradesDashboard() {
               position: "relative",
             }}
           >
+            {kycVerified ? (
+              <div className="limit-verified">
+                <span className="limit-verified-badge">✓ Verified</span>
+                <span>No trading limits</span>
+              </div>
+            ) : (
+            <>
             {/* Daily */}
             <div className="limit-bar-top">
               <span className="limit-bar-label">
@@ -2270,6 +2282,8 @@ export default function TradesDashboard() {
                 style={{ width: `${annualPct}%` }}
               />
             </div>
+            </>
+            )}
           </div>
         </div>
 

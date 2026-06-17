@@ -68,6 +68,8 @@ const PROFILE_CSS = `
   .mp-bar-track{height:4px;background:var(--black-10);border-radius:999px;margin-bottom:5px;overflow:hidden}
   .mp-bar-fill{height:100%;background:var(--primary);border-radius:999px}
   .mp-bar-lbl{font-size:.78rem;color:var(--black-65)}
+  .mp-limits-verified{display:flex;align-items:center;gap:10px;font-size:.85rem;color:var(--black-65)}
+  .mp-verified-badge{display:inline-flex;align-items:center;gap:4px;font-weight:800;color:var(--primary);background:var(--black-10);border-radius:999px;padding:3px 10px;font-size:.78rem;white-space:nowrap}
 
   @media(max-width:767px){
     .mp-header{flex-wrap:wrap}
@@ -91,6 +93,8 @@ export function ProfileSubScreen({ onBack }) {
   const openedTrades = isLoggedIn ? (liveProfile?.openedTrades ?? 0) : 0;
   const canceledTrades = isLoggedIn ? (liveProfile?.canceledTrades ?? 0) : 0;
   const linkedIdsCount = isLoggedIn ? (liveProfile?.linkedIds?.length ?? 0) : 0;
+  // KYC-verified accounts are not subject to trading limits
+  const kycVerified = isLoggedIn && !!liveProfile?.kyc;
 
   // ── Disputes — API returns number or object ──
   const rawDisputes = liveProfile?.disputes;
@@ -229,6 +233,12 @@ export function ProfileSubScreen({ onBack }) {
             <InfoDot ariaLabel="About trading limits" onClick={() => setLimitsHelpOpen(true)} />
           </div>
           <div className="mp-card-title">Trading Limits</div>
+          {kycVerified ? (
+            <div className="mp-limits-verified">
+              <span className="mp-verified-badge">✓ Verified</span>
+              <span>No trading limits apply to your account.</span>
+            </div>
+          ) : (
           <div className="mp-limits">
             {volumes.map(v => {
               const pct = Math.min(100, v.max > 0 ? (v.current / v.max) * 100 : 0);
@@ -247,6 +257,7 @@ export function ProfileSubScreen({ onBack }) {
               );
             })}
           </div>
+          )}
         </div>
 
         {/* Account */}
