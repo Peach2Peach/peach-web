@@ -765,7 +765,7 @@ export default function PeachMarket() {
                 ? <button className="cta-btn" onClick={() => navigate(isSellTab ? "/offer/new?type=sell" : "/offer/new")}>+ Create Offer</button>
                 : <button className="cta-btn-disabled">+ Create Offer</button>
               }
-              <span className="how-to-start">How to start</span>
+              <a className="how-to-start" href="https://peachbitcoin.com/support/" target="_blank" rel="noopener noreferrer">How to start</a>
             </div>
 
             {/* Filters — desktop dedicated row (hidden on mobile via isMobile gate) */}
