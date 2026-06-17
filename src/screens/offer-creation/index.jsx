@@ -815,6 +815,15 @@ export default function OfferCreation({ initialType="buy" }) {
       if (methodType.startsWith("cash.") && !details.country) {
         details.country = (methodType.split(".")[1] || "").toUpperCase();
       }
+      // Cash/meetup PMs are anonymous (no payment fields), so they hash to [].
+      // The server's buy-offer validation (paymentDataIsValid) rejects empty
+      // hashes. Mobile's meetup PaymentData carries userId = the user's public
+      // key, which yields exactly one hash. Mirror that so cash buy offers
+      // validate. auth.peachId is the public key (same value the API uses at
+      // /user/:id/offers, == mobile account.publicKey).
+      if (methodType.startsWith("cash.") && !details.userId && auth?.peachId) {
+        details.userId = auth.peachId;
+      }
       const hashed = await hashPaymentFields(methodType, details, details.country);
       Object.assign(paymentData, hashed);
 
