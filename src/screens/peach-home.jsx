@@ -617,9 +617,9 @@ export default function PeachHome() {
                     <>
                       <span className="profile-strip-sep">·</span>
                       <span className="profile-strip-badges" onClick={() => setBadgesHelpOpen(true)} title="View badges">
-                        {user.badges.includes("superTrader") && <span>🏆</span>}
+                        {user.badges.includes("superTrader") && <span>★</span>}
                         {user.badges.includes("fastTrader") && <span>⚡</span>}
-                        {user.badges.includes("ambassador") && <span>🎖️</span>}
+                        {user.badges.includes("ambassador") && <span>🏅</span>}
                       </span>
                     </>
                   )}
