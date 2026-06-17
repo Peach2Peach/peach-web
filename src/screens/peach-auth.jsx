@@ -41,7 +41,7 @@ const QRDisplay = ({ qrPayload, size = 189 }) => {
     <QRCodeSVG
       value={qrPayload}
       size={size}
-      level="M"
+      level="L"
       bgColor="#ffffff"
       fgColor="#2B1911"
     />
@@ -726,6 +726,18 @@ export default function PeachAuth() {
                           />
                         )}
                         <QRDisplay qrPayload={qrPayload} size={mobileQrSize} />
+                      </div>
+                    )}
+                    {mobileShowQR && (
+                      <div
+                        style={{
+                          fontSize: ".73rem",
+                          fontWeight: 700,
+                          color: "var(--primary)",
+                          textAlign: "center",
+                        }}
+                      >
+                        On Android, get your camera really close!
                       </div>
                     )}
                   </div>
@@ -1684,6 +1696,19 @@ export default function PeachAuth() {
                   </div>
                 </div>
 
+                {qrPhase !== "error" && (
+                  <div
+                    style={{
+                      fontSize: ".73rem",
+                      fontWeight: 700,
+                      color: "var(--primary)",
+                      textAlign: "center",
+                    }}
+                  >
+                    On Android, get your camera really close!
+                  </div>
+                )}
+
                 {qrPhase === "error" ? (
                   <div
                     style={{
@@ -1757,7 +1782,7 @@ export default function PeachAuth() {
                         background: "#ffffff",
                       }}
                     >
-                      <QRDisplay qrPayload={qrPayload} size={288} />
+                      <QRDisplay qrPayload={qrPayload} size={300} />
                       {phase === "scanning" && (
                         <div
                           style={{
