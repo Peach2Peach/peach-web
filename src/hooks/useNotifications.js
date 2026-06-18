@@ -783,7 +783,28 @@ async function _poll(auth, base) {
     // `/offer/:id/escrow` reports the on-chain funding result. FUNDED → published;
     // WRONG_FUNDING_AMOUNT → the seller funded a different amount than the offer
     // was made for, so we fire the global wrong-amount popup (App.jsx mounts it).
-    const pendingEscrows = loadEscrowPending(peachId);
+    //
+    // The poll list is the de-duplicated union of:
+    //   • localStorage `pendingEscrows` — drives the FUNDED → published path for
+    //     offers funded in this browser;
+    //   • own sell offers from /offers/summary still in the escrow-funding window.
+    // Seeding from the summary makes wrong-amount detection universal (independent
+    // of localStorage). The escrow endpoint stays the detection signal because it
+    // is the only mempool-timely source — the summary's tradeStatus only flips to
+    // `fundingAmountDifferent` after on-chain confirmation.
+    const ESCROW_FUNDING_WINDOW = ["fundEscrow", "escrowWaitingForConfirmation", "fundingAmountDifferent"];
+    const pendingEscrows = (() => {
+      const byId = new Map();
+      for (const e of loadEscrowPending(peachId)) {
+        byId.set(String(e.offerId), { offerId: String(e.offerId), amount: e.amount });
+      }
+      for (const o of sellOffers) {
+        if (!ESCROW_FUNDING_WINDOW.includes(o.tradeStatus)) continue;
+        const oid = String(o.id);
+        if (!byId.has(oid)) byId.set(oid, { offerId: oid, amount: o.amount });
+      }
+      return Array.from(byId.values());
+    })();
     if (pendingEscrows.length > 0) {
       const checks = await Promise.all(
         pendingEscrows.map(({ offerId, amount }) =>

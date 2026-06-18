@@ -44,11 +44,13 @@ const css = `
   background:var(--grad);color:white;
   box-shadow:0 2px 12px rgba(245,101,34,.3);
 }
-.war-btn-outline{
-  background:var(--surface);color:var(--black);
-  border:1.5px solid var(--black-10);font-weight:700;
-}
 .war-btn:not(:disabled):hover{filter:brightness(.96)}
+.war-see{
+  background:none;border:none;cursor:pointer;align-self:center;
+  font-family:var(--font);font-size:.84rem;font-weight:700;
+  color:var(--primary-dark);padding:4px;
+}
+.war-see:hover{text-decoration:underline}
 `;
 
 export default function WrongAmountRefundPopup({ contractId, role, onClose }) {
@@ -110,33 +112,21 @@ export default function WrongAmountRefundPopup({ contractId, role, onClose }) {
 
           {error && <div className="war-err">{error}</div>}
 
-          <div className="war-btns">
-            {isSeller ? (
-              <>
-                <button
-                  className="war-btn war-btn-outline"
-                  onClick={goToContract}
-                  disabled={busy}
-                >
-                  See contract
-                </button>
-                <button
-                  className="war-btn war-btn-refund"
-                  onClick={handleRefund}
-                  disabled={busy}
-                >
-                  Refund
-                </button>
-              </>
-            ) : (
+          {isSeller && (
+            <div className="war-btns">
               <button
                 className="war-btn war-btn-refund"
-                onClick={goToContract}
+                onClick={handleRefund}
+                disabled={busy}
               >
-                See contract
+                Refund
               </button>
-            )}
-          </div>
+            </div>
+          )}
+
+          <button className="war-see" onClick={goToContract}>
+            See contract
+          </button>
         </div>
       </div>
     </>
