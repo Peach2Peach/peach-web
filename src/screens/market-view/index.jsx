@@ -733,7 +733,7 @@ export default function PeachMarket() {
                       <li><b>Buy BTC</b> tab shows sell offers — including yours</li>
                       <li><b>Sell BTC</b> tab shows buy offers — including yours</li>
                     </ul>
-                    <p>This way, the people you want to trade with can see and accept your offer.</p>
+                    <p>This way, the people you you can easily compare your offers with other peoples'.</p>
                   </div>
                 )}
               </div>
@@ -823,7 +823,7 @@ export default function PeachMarket() {
                         <li><b>Buy BTC</b> tab shows sell offers — including yours</li>
                         <li><b>Sell BTC</b> tab shows buy offers — including yours</li>
                       </ul>
-                      <p>This way, the people you want to trade with can see and accept your offer.</p>
+                      <p>This way, the people you you can easily compare your offers with other peoples'.</p>
                     </div>
                   )}
                 </div>
