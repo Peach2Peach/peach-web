@@ -13,6 +13,7 @@ import Avatar from "../components/Avatar.jsx";
 import { RefreshIndicator } from "../components/RefreshIndicator.jsx";
 import { AttentionStrip, AttentionPill } from "../components/AttentionIndicators.jsx";
 import { API_V1 } from "../utils/network.js";
+import { useActiveDisputes } from "../hooks/useActiveDisputes.js";
 import { useCurrency } from "../components/AppLayout.jsx";
 import { BadgesInfoPopup } from "../components/InfoPopup.jsx";
 
@@ -21,7 +22,10 @@ const ATTENTION_DISMISS_KEY = "peach.attention.dismissed";
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const css = `
   /* ── WELCOME HEADER ── */
-  .welcome-block{display:flex;flex-direction:column;gap:8px}
+  /* position+z-index lifts the whole welcome subtree (incl. the disputes
+     dropdown) above later .content children, which each form their own
+     stacking context via the slideUp transform animation below. */
+  .welcome-block{display:flex;flex-direction:column;gap:8px;position:relative;z-index:20}
   .welcome-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
   .welcome-text h1{font-size:1.35rem;font-weight:800;color:var(--black);line-height:1.2}
   .welcome-text p{font-size:.82rem;font-weight:500;color:var(--black-65);margin-top:2px}
@@ -135,8 +139,8 @@ const css = `
   .profile-strip-disputes{position:relative;display:inline-flex}
   .profile-strip-disputes-toggle{cursor:pointer}
   .profile-strip-caret{font-size:.7rem;margin-left:1px}
-  .disputes-dropdown{position:absolute;top:calc(100% + 4px);left:0;z-index:30;display:flex;flex-direction:column;min-width:120px;padding:4px;background:var(--card-bg,#fff);border:1px solid var(--black-10);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.14)}
-  .disputes-dropdown-item{display:block;width:100%;text-align:left;padding:6px 10px;border:none;background:none;border-radius:6px;font-size:.82rem;font-weight:700;letter-spacing:.03em;color:var(--black);cursor:pointer}
+  .disputes-dropdown{position:absolute;top:calc(100% + 4px);left:0;z-index:30;display:flex;flex-direction:column;gap:6px;min-width:120px;padding:6px;background:var(--card-bg,#fff);border:1px solid var(--black-10);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.14)}
+  .disputes-dropdown-item{display:block;width:100%;text-align:left;padding:11px 12px;border:none;background:none;border-radius:6px;font-size:.82rem;font-weight:700;letter-spacing:.03em;color:var(--black);cursor:pointer}
   .disputes-dropdown-item:hover{background:var(--black-5);color:var(--primary)}
   .profile-methods{display:flex;gap:5px;flex-wrap:wrap}
   .pref-chip{padding:3px 9px;border-radius:999px;font-size:.72rem;font-weight:600;
@@ -329,12 +333,10 @@ export default function PeachHome() {
   // Build user profile — live data when logged in, empty defaults when logged out.
   // Some fields (preferredMethods, totalVolumeBtc, etc.) are not yet returned by
   // the API, so we show "—" / empty defaults.
-  // Active disputes come straight from selfUser's activeDisputeContractIds — an
-  // array of contract ids currently in dispute. Count = array length.
-  const activeDisputeIds = Array.isArray(liveProfile?.activeDisputeContractIds)
-    ? liveProfile.activeDisputeContractIds
-    : [];
-  const disputesTotal = activeDisputeIds.length;
+  // Active disputes (contract ids currently in dispute) come from the shared
+  // useActiveDisputes store, which polls /v069/selfUser every 20s. The field
+  // lives on selfUser, not on /v1/user/me (which populates auth.profile).
+  const { contractIds: activeDisputeIds, count: disputesTotal } = useActiveDisputes();
   const user = auth ? {
     peachId:             auth.peachId ? formatPeachId(auth.peachId) : "—",
     memberSince:         liveProfile?.creationDate
