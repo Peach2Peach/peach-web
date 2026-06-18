@@ -659,6 +659,15 @@ export default function OfferDetailPopup({
   return (
     <div className="popup-overlay" onClick={onClose}>
       <div className="popup-card" onClick={e => e.stopPropagation()}>
+        <style>{`
+          @keyframes escrow-dot-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+          .escrow-dot{
+            display:inline-block;width:13px;height:13px;
+            border:2px solid var(--black-10);border-top-color:var(--primary);
+            border-radius:50%;animation:escrow-dot-spin .8s linear infinite;
+            vertical-align:middle;
+          }
+        `}</style>
         {/* Header */}
         <div className="popup-header">
           <div className="popup-header-left">
@@ -774,24 +783,30 @@ export default function OfferDetailPopup({
                 </span>
               </span>
             </div>
-            {offerDetails?.details?.escrow && (
+            {offer.type === "ask" && (
               <div className="popup-row">
                 <span className="popup-label">Onchain escrow</span>
                 <span className="popup-value">
-                  <a
-                    href={`https://mempool.space/address/${offerDetails.details.escrow}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      fontSize:".78rem", fontWeight:600, color:"var(--primary)",
-                      textDecoration:"none", display:"inline-flex", alignItems:"center", gap:4,
-                    }}
-                  >
-                    See on mempool.space
-                    <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M2 9L9 2M9 2H5M9 2v4"/>
-                    </svg>
-                  </a>
+                  {offerDetails?.details?.escrow ? (
+                    <a
+                      href={`https://mempool.space/address/${offerDetails.details.escrow}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        fontSize:".78rem", fontWeight:600, color:"var(--primary)",
+                        textDecoration:"none", display:"inline-flex", alignItems:"center", gap:4,
+                      }}
+                    >
+                      See on mempool.space
+                      <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M2 9L9 2M9 2H5M9 2v4"/>
+                      </svg>
+                    </a>
+                  ) : detailsLoading ? (
+                    <span className="escrow-dot" role="status" aria-label="Loading escrow" />
+                  ) : (
+                    <span style={{color:"var(--black-50)"}}>—</span>
+                  )}
                 </span>
               </div>
             )}
