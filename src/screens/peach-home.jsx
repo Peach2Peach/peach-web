@@ -323,10 +323,12 @@ export default function PeachHome() {
   // Build user profile — live data when logged in, empty defaults when logged out.
   // Some fields (preferredMethods, totalVolumeBtc, etc.) are not yet returned by
   // the API, so we show "—" / empty defaults.
+  // Active disputes = opened - resolved (clamped at 0). API returns a number or
+  // an object { opened, won, lost, resolved }; a bare number is treated as opened.
   const disputes = liveProfile?.disputes;
-  const disputesTotal = disputes
-    ? (typeof disputes === "number" ? disputes : Object.values(disputes).reduce((s, v) => s + (v || 0), 0))
-    : 0;
+  const disputesTotal = typeof disputes === "number"
+    ? Math.max(0, disputes)
+    : Math.max(0, (disputes?.opened ?? 0) - (disputes?.resolved ?? 0));
   const user = auth ? {
     peachId:             auth.peachId ? formatPeachId(auth.peachId) : "—",
     memberSince:         liveProfile?.creationDate
