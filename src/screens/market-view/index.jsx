@@ -112,13 +112,15 @@ export default function PeachMarket() {
   // The OfferDetailPopup owns all popup-internal state; market-view only
   // remembers which offer id is currently open and tracks list-level state
   // that survives popup mount/unmount (requested pill, undo flash, etc.).
-  const [popupOfferId,   setPopupOfferId]   = useState(null);
+  // Holds the open offer object (not just its id) so the popup survives a 30s
+  // list refresh — needed for the post-cancel "refund pending" state, which must
+  // stay visible after the cancelled offer drops out of the live list.
+  const [popupOffer,     setPopupOffer]     = useState(null);
   const [badgesHelpOpen, setBadgesHelpOpen] = useState(false);
   const [undoAnim,       setUndoAnim]       = useState(null);   // offer id being undone
   const [localRequested, setLocalRequested] = useState(() => new Set()); // track requested state locally
   const [acceptedContracts, setAcceptedContracts] = useState(() => new Map()); // offerId → contractId once seller accepts a sent request
   const [highlightedIds, setHighlightedIds] = useState(() => new Set()); // newly published offers, briefly highlighted
-  const [signingModal,   setSigningModal]   = useState(null);    // { offerId } for sell offer cancel
   const [toast,          setToast]          = useState(null);
   const [toastTone,      setToastTone]      = useState("default"); // "default" | "error" | "orange" | "success"
 
@@ -612,14 +614,13 @@ export default function PeachMarket() {
       <style>{CSS}</style>
 
         {/* ── POPUP ── */}
-        {popupOfferId && (() => {
-          const offer = marketOffers.find(o => String(o.id) === String(popupOfferId));
-          if (!offer) return null;
+        {popupOffer && (() => {
+          const offer = popupOffer;
           return (
             <OfferDetailPopup
               key={offer.id}
               offer={offer}
-              onClose={() => setPopupOfferId(null)}
+              onClose={() => setPopupOffer(null)}
               onLocalRequestedChange={(id, req) => {
                 setLocalRequested(prev => {
                   const s = new Set(prev);
@@ -629,13 +630,13 @@ export default function PeachMarket() {
               }}
               onOfferUpdated={(updated) => {
                 setLiveOffers(prev => prev ? prev.map(x => x.id === updated.id ? updated : x) : prev);
+                setPopupOffer(prev => prev && prev.id === updated.id ? updated : prev);
               }}
-              onOfferWithdrawn={(id, { needsMobileSign }) => {
+              onOfferWithdrawn={(id) => {
                 setLiveOffers(prev => prev ? prev.filter(x => x.id !== id) : prev);
-                if (needsMobileSign) setSigningModal({ offerId: id });
               }}
               onContractAccepted={(contractId) => {
-                setPopupOfferId(null);
+                setPopupOffer(null);
                 navigate(`/trade/${contractId}`);
               }}
               onTradeRequested={() => {
@@ -883,7 +884,7 @@ export default function PeachMarket() {
                         undoAnim===offer.id?"undo-row":"",
                         highlightedIds.has(offer.id)?"new-offer-row":""
                       ].filter(Boolean).join(" ")}
-                      style={{cursor: "pointer"}} onClick={() => setPopupOfferId(offer.id)}>
+                      style={{cursor: "pointer"}} onClick={() => setPopupOffer(offer)}>
                       <td><RepCell offer={offer}/></td>
                       <td><AmountCell offer={offer} btcPrice={btcPrice} currency={selectedCurrency}/></td>
                       <td><PriceCell offer={offer} btcPrice={btcPrice} currency={selectedCurrency} isSellTab={isSellTab}/></td>
@@ -969,7 +970,7 @@ export default function PeachMarket() {
               </div>
             ) : displayOffers.map(offer => (
             <div key={offer.id} className={`offer-card${offer.isOwn?" own-card":""}${effectiveRequested.has(offer.id)&&!offer.auto&&!offer.isOwn?" requested-card":""}${undoAnim===offer.id?" undo-card":""}${highlightedIds.has(offer.id)?" new-offer-card":""}`}
-              style={{cursor: "pointer"}} onClick={() => setPopupOfferId(offer.id)}>
+              style={{cursor: "pointer"}} onClick={() => setPopupOffer(offer)}>
                 {/* Row 1: PeachID + avatar · rep/badges (left) | offer ID + action (right) */}
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
                   <span className="user-peach-id">{offer.peachId}</span>

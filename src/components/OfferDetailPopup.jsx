@@ -24,6 +24,7 @@ import { fmtFiat, hasPrice, PRICE_PLACEHOLDER } from "../utils/format.js";
 import PeachRating from "./PeachRating.jsx";
 import Avatar from "./Avatar.jsx";
 import RepeatTraderBadge from "./RepeatTraderBadge.jsx";
+import MobilePendingButton from "./MobilePendingButton.jsx";
 import RequestedOfferPopup from "./RequestedOfferPopup.jsx";
 import { BadgesInfoPopup } from "./InfoPopup.jsx";
 import { methodDisplayName } from "../data/paymentMethodMeta.js";
@@ -115,6 +116,7 @@ export default function OfferDetailPopup({
   const [withdrawConfirm, setWithdrawConfirm] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
   const [withdrawError, setWithdrawError] = useState(null);
+  const [refundActionId, setRefundActionId] = useState(null);
   const [tradeLoading, setTradeLoading] = useState(false);
   const [pendingRequest, setPendingRequest] = useState(null);
   const [badgesHelpOpen, setBadgesHelpOpen] = useState(false);
@@ -305,31 +307,55 @@ export default function OfferDetailPopup({
   async function handleWithdraw(offer) {
     setWithdrawing(true); setWithdrawError(null);
     try {
-      // Buy offers use v069 DELETE (v1 cancel returns 401 for numeric v069 IDs);
-      // sell offers use the v1 cancel endpoint. Matches the trades dashboard.
-      let res;
+      // Buy offers use v069 DELETE (v1 cancel returns 401 for numeric v069 IDs).
+      // No escrow → no refund: drop from list and close.
       if (offer.type === "bid") {
         const v069Base = auth.baseUrl.replace(/\/v1$/, "/v069");
-        res = await fetchWithSessionCheck(`${v069Base}/buyOffer/${offer.id}`, {
+        const res = await fetchWithSessionCheck(`${v069Base}/buyOffer/${offer.id}`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${auth.token}` },
         });
-      } else {
-        res = await post(`/offer/${offer.id}/cancel`, {});
-      }
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(data?.error || data?.message || `Server error ${res.status}`);
-      }
-      if (data?.psbt) {
-        onOfferWithdrawn(offer.id, { needsMobileSign: true });
-        onToast("Refund sent to mobile for signing", "orange");
+        const data = await res.json().catch(() => null);
+        if (!res.ok)
+          throw new Error(data?.error || data?.message || `Server error ${res.status}`);
+        onOfferWithdrawn(offer.id);
+        onToast("Offer cancelled", "success");
         onClose();
         return;
       }
-      onOfferWithdrawn(offer.id, { needsMobileSign: false });
-      onToast("Offer cancelled", "success");
-      onClose();
+
+      // Sell offers: cancel first, then trigger the refund pending action so the
+      // escrow return reaches the mobile app for signing. Mirrors the trades
+      // dashboard (handleWithdrawOffer). Market sell offers are live/funded, so
+      // a refund is always required.
+      const res = await post(`/offer/${offer.id}/cancel`, {});
+      const data = await res.json().catch(() => null);
+      if (!res.ok)
+        throw new Error(data?.error || data?.message || `Server error ${res.status}`);
+
+      const refundRes = await post(`/offer/${offer.id}/refundPendingAction`);
+      if (!refundRes.ok) {
+        const err = await refundRes.json().catch(() => null);
+        throw new Error(
+          err?.error || err?.message || `Refund request failed: HTTP ${refundRes.status}`,
+        );
+      }
+      // Fetch /details to pull the new pending-action id (for the mobile deep-link).
+      try {
+        const detailsRes = await get(`/offer/${offer.id}/details`);
+        if (detailsRes.ok) {
+          const body = await detailsRes.json().catch(() => null);
+          const rId = body?.mobileActionRefundWasTriggered;
+          setRefundActionId(typeof rId === "number" ? rId : true);
+        } else {
+          setRefundActionId(true);
+        }
+      } catch {
+        setRefundActionId(true);
+      }
+      setWithdrawConfirm(false);
+      onOfferWithdrawn(offer.id);
+      onToast("Refund confirmation needed on mobile", "orange");
     } catch (err) {
       setWithdrawError(err.message || "Failed to cancel");
     } finally {
@@ -976,8 +1002,16 @@ export default function OfferDetailPopup({
             )
           )}
 
+          {/* ── Refund pending (own funded sell offer after cancel) ── */}
+          {isOwn && refundActionId && (
+            <MobilePendingButton
+              label="✓ Refund request sent — check your phone"
+              type="refundEscrow"
+              actionId={refundActionId}
+            />
+          )}
           {/* ── Own offer ── */}
-          {isOwn && !withdrawConfirm && (
+          {isOwn && !refundActionId && !withdrawConfirm && (
             <>
               {/* Premium edit */}
               {editingPremium ? (
@@ -1015,7 +1049,7 @@ export default function OfferDetailPopup({
             </>
           )}
           {/* ── Withdraw confirmation ── */}
-          {isOwn && withdrawConfirm && (
+          {isOwn && !refundActionId && withdrawConfirm && (
             <div style={{width:"100%"}}>
               <div style={{fontSize:".84rem",fontWeight:600,color:"var(--black)",marginBottom:10}}>
                 Cancel this offer?
