@@ -31,6 +31,8 @@ import {
   satsToFiatRaw,
   fmtFiat,
   fmt,
+  hasPrice,
+  PRICE_PLACEHOLDER,
 } from "../../utils/format.js";
 import {
   STATUS_CONFIG,
@@ -3409,7 +3411,7 @@ export default function TradesDashboard() {
                                 )}
                               </strong>{" "}
                               sats. Accept the received amount to continue, or
-                              withdraw the offer to refund.
+                              cancel the offer to refund.
                             </div>
                             {odAcceptWrongError && (
                               <div
@@ -3763,6 +3765,7 @@ export default function TradesDashboard() {
                       const pVal = parseFloat(odEditPremiumVal) || 0;
                       const dispCur = o.currency || selectedCurrency;
                       const curPrice = allPrices?.[dispCur] ?? btcPrice;
+                      const curPriced = hasPrice(curPrice);
                       const fiatWithPremium =
                         satsToFiatRaw(o.amount, curPrice) * (1 + pVal / 100);
                       const step = 0.2;
@@ -3837,7 +3840,7 @@ export default function TradesDashboard() {
 
                           {/* Fiat equivalent */}
                           <div className="premium-fiat-line">
-                            (currently {fmtFiat(fiatWithPremium)} {dispCur})
+                            (currently {curPriced ? fmtFiat(fiatWithPremium) : PRICE_PLACEHOLDER} {dispCur})
                           </div>
 
                           {/* Error */}

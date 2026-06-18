@@ -17,7 +17,7 @@ import { isApiError, hashPaymentFields, encryptForPublicKey, encryptPGPMessage, 
 import { deriveEscrowPubKey, deriveReturnAddress, isReturnAddressFromXpub } from "../../utils/escrow.js";
 import { validateBtcAddress } from "../../peach-validators.js";
 import { QRCodeSVG } from "qrcode.react";
-import { SAT, fmt, satsToFiatRaw as satsToFiat, fmtFiat as fmtEur, formatTradeId, truncateAddress } from "../../utils/format.js";
+import { SAT, fmt, satsToFiatRaw as satsToFiat, fmtFiat as fmtEur, formatTradeId, truncateAddress, hasPrice, PRICE_PLACEHOLDER } from "../../utils/format.js";
 import { extractCustomRefundAddressFromProfile } from "../../utils/customRefundAddressSync.js";
 import { fetchSavedCustomPayoutAddress } from "../../utils/customPayoutAddressSync.js";
 import PayoutAddressWizard from "../../components/PayoutAddressWizard.jsx";
@@ -491,6 +491,9 @@ export default function OfferCreation({ initialType="buy" }) {
   const activeCurrency = pickedCurrency ?? selectedCurrency;
   const activeBtcPrice = allPrices?.[activeCurrency] ?? btcPrice;
   const activeEffP     = activeBtcPrice * (1 + prem/100);
+  // Live price available? When not, fiat/price previews show a placeholder
+  // instead of a guessed value (slider bounds keep their own input fallback).
+  const priced = hasPrice(activeBtcPrice);
 
   // Live market stats (competing offers + avg premium of completed trades).
   const marketStats = useMarketStats({ type, pms: selectedSaved, premium: prem });
@@ -1408,7 +1411,8 @@ export default function OfferCreation({ initialType="buy" }) {
                 </div>
 
                 <AmountSlider form={form} setF={setF} btcPrice={btcPrice}
-                  activeCurrency={activeCurrency} activeBtcPrice={activeBtcPrice}/>
+                  activeCurrency={activeCurrency} activeBtcPrice={activeBtcPrice}
+                  kyc={!!auth?.profile?.kyc}/>
               </div>
 
               {/* §2 Payment */}
@@ -1579,7 +1583,7 @@ export default function OfferCreation({ initialType="buy" }) {
                     <div style={{fontSize:".88rem",fontWeight:800,
                       color:prem===0?"var(--black)":
                         isSell?(prem>0?"var(--success)":"var(--error)"):(prem<0?"var(--success)":"var(--error)")}}>
-                      {currSym(activeCurrency)}{Math.round(activeEffP).toLocaleString()}
+                      {currSym(activeCurrency)}{priced ? Math.round(activeEffP).toLocaleString() : PRICE_PLACEHOLDER}
                     </div>
                   </div>
                   {(isSell?form.amtFixed:form.amtFixed)>0&&(
@@ -1591,9 +1595,7 @@ export default function OfferCreation({ initialType="buy" }) {
                           {isSell?"You receive":"You pay"}
                         </div>
                         <div style={{fontSize:".88rem",fontWeight:800}}>
-                          {isSell
-                            ? `${currSym(activeCurrency)}${fmtEur(satsToFiat(form.amtFixed,activeEffP))}`
-                            : `${currSym(activeCurrency)}${fmtEur(satsToFiat(form.amtFixed,activeEffP))}`}
+                          {currSym(activeCurrency)}{priced ? fmtEur(satsToFiat(form.amtFixed,activeEffP)) : PRICE_PLACEHOLDER}
                         </div>
                       </div>
                     </>
@@ -1980,7 +1982,7 @@ export default function OfferCreation({ initialType="buy" }) {
                     <span style={{display:"inline-flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                       <SatsAmount sats={form.amtFixed}/>
                       <span style={{color:"var(--black-65)",fontWeight:600,fontSize:".82rem"}}>
-                        ≈ {currSym(activeCurrency)}{fmtEur(satsToFiat(form.amtFixed,activeEffP))}
+                        ≈ {currSym(activeCurrency)}{priced ? fmtEur(satsToFiat(form.amtFixed,activeEffP)) : PRICE_PLACEHOLDER}
                       </span>
                     </span>],
                   ["Premium",
@@ -1994,7 +1996,7 @@ export default function OfferCreation({ initialType="buy" }) {
                         {editingPremiumInline?"close":"edit"}
                       </button>
                     </span>],
-                  ["Current effective price", `${currSym(activeCurrency)}${Math.round(activeEffP).toLocaleString()}/BTC`],
+                  ["Current effective price", priced ? `${currSym(activeCurrency)}${Math.round(activeEffP).toLocaleString()}/BTC` : `${currSym(activeCurrency)}${PRICE_PLACEHOLDER}/BTC`],
                   ["Methods", offerMethods.join(", ")||"—"],
                   ["Currencies", (() => {
                     // For m-pesa PMs we collapse the (long) currencies list down
@@ -2043,7 +2045,7 @@ export default function OfferCreation({ initialType="buy" }) {
                       <div style={{fontSize:".88rem",fontWeight:800,
                         color:prem===0?"var(--black)":
                           isSell?(prem>0?"var(--success)":"var(--error)"):(prem<0?"var(--success)":"var(--error)")}}>
-                        {currSym(activeCurrency)}{Math.round(activeEffP).toLocaleString()}
+                        {currSym(activeCurrency)}{priced ? Math.round(activeEffP).toLocaleString() : PRICE_PLACEHOLDER}
                       </div>
                     </div>
                     <div style={{width:1,background:"var(--black-10)"}}/>
@@ -2053,7 +2055,7 @@ export default function OfferCreation({ initialType="buy" }) {
                         {isSell?"You receive":"You pay"}
                       </div>
                       <div style={{fontSize:".88rem",fontWeight:800}}>
-                        {currSym(activeCurrency)}{fmtEur(satsToFiat(form.amtFixed,activeEffP))}
+                        {currSym(activeCurrency)}{priced ? fmtEur(satsToFiat(form.amtFixed,activeEffP)) : PRICE_PLACEHOLDER}
                       </div>
                     </div>
                   </div>

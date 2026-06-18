@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
-  SAT, BTC_PRICE_FALLBACK,
+  SAT, PRICE_PLACEHOLDER, hasPrice,
   fmt, fmtPct, fmtFiat, satsToFiatRaw, satsToFiat,
   relTime, formatDate, formatTradeId,
 } from "./format.js";
@@ -11,9 +11,19 @@ describe("constants", () => {
   it("SAT is 100 million", () => {
     expect(SAT).toBe(100_000_000);
   });
+});
 
-  it("BTC_PRICE_FALLBACK is a positive number", () => {
-    expect(BTC_PRICE_FALLBACK).toBeGreaterThan(0);
+// ── hasPrice ─────────────────────────────────────────────────────────────────
+
+describe("hasPrice", () => {
+  it("is true for a positive finite number", () => {
+    expect(hasPrice(87432)).toBe(true);
+  });
+  it("is false for null/undefined/0/NaN", () => {
+    expect(hasPrice(null)).toBe(false);
+    expect(hasPrice(undefined)).toBe(false);
+    expect(hasPrice(0)).toBe(false);
+    expect(hasPrice(NaN)).toBe(false);
   });
 });
 
@@ -98,10 +108,13 @@ describe("satsToFiat", () => {
     expect(result).toContain(",");
   });
 
-  it("uses fallback price when none provided", () => {
-    const result = satsToFiat(100_000_000);
-    // Should use BTC_PRICE_FALLBACK
-    expect(result).toBeTruthy();
+  it("returns the placeholder when no price is provided", () => {
+    expect(satsToFiat(100_000_000)).toBe(PRICE_PLACEHOLDER);
+  });
+
+  it("returns the placeholder for an invalid price", () => {
+    expect(satsToFiat(100_000_000, 0)).toBe(PRICE_PLACEHOLDER);
+    expect(satsToFiat(100_000_000, null)).toBe(PRICE_PLACEHOLDER);
   });
 });
 

@@ -7,7 +7,7 @@ import { useState, useEffect, useRef } from "react";
 import { SatsAmount } from "../../components/BitcoinAmount.jsx";
 import PeachRating from "../../components/PeachRating.jsx";
 import Avatar from "../../components/Avatar.jsx";
-import { fmtPct, fmtFiat, toPeaches } from "../../utils/format.js";
+import { fmtPct, fmtFiat, toPeaches, hasPrice, PRICE_PLACEHOLDER } from "../../utils/format.js";
 import { BadgesInfoPopup } from "../../components/InfoPopup.jsx";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -218,13 +218,14 @@ export function OfferIdCopy({ tradeId }) {
 // ── AmountCell ────────────────────────────────────────────────────────────────
 
 export function AmountCell({ offer, btcPrice, currency }) {
+  const priced = hasPrice(btcPrice);
   const rate = btcPrice * (1 + offer.premium / 100);
   const fiat = (offer.amount / 100_000_000) * rate;
   const sym  = currSym(currency);
   return (
     <div className="amount-cell">
       <SatsAmount sats={offer.amount} />
-      <span className="amount-fiat">{sym}{fmtFiat(fiat)}</span>
+      <span className="amount-fiat">{sym}{priced ? fmtFiat(fiat) : PRICE_PLACEHOLDER}</span>
     </div>
   );
 }
@@ -232,12 +233,13 @@ export function AmountCell({ offer, btcPrice, currency }) {
 // ── PriceCell ─────────────────────────────────────────────────────────────────
 
 export function PriceCell({ offer, btcPrice, currency, isSellTab }) {
+  const priced = hasPrice(btcPrice);
   const rate = Math.round(btcPrice * (1 + offer.premium / 100));
   const sym  = currSym(currency);
   const p = offer.premium;
   return (
     <div className="price-cell">
-      <span className="price-rate">{rate.toLocaleString("fr-FR")} {sym}</span>
+      <span className="price-rate">{priced ? rate.toLocaleString("fr-FR") : PRICE_PLACEHOLDER} {sym}</span>
       <span className={premiumCls(p, isSellTab)}>{p > 0 ? "+" : ""}{p.toFixed(2)}%</span>
     </div>
   );

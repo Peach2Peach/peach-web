@@ -6,7 +6,7 @@ import { useApi } from "../../hooks/useApi.js";
 import { useCurrency } from "../../components/AppLayout.jsx";
 import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 import { getCached, setCache, clearCache } from "../../hooks/useApi.js";
-import { fmtPct, fmtFiat, formatTradeId, toPeaches } from "../../utils/format.js";
+import { fmtPct, fmtFiat, formatTradeId, toPeaches, hasPrice, PRICE_PLACEHOLDER } from "../../utils/format.js";
 import { normalizeOffer } from "../../utils/normalizeOffer.js";
 import PeachRating from "../../components/PeachRating.jsx";
 import Avatar from "../../components/Avatar.jsx";
@@ -1016,10 +1016,11 @@ export default function PeachMarket() {
                 {/* Row 3: premium (left) · fiat (right) — uses selectedCurrency */}
                 {(() => {
                   const sym  = currSym(selectedCurrency);
+                  const priced = hasPrice(btcPrice);
                   const rate = Math.round(btcPrice * (1 + offer.premium / 100));
-                  const rateStr = rate.toLocaleString("fr-FR") + " " + sym;
+                  const rateStr = (priced ? rate.toLocaleString("fr-FR") : PRICE_PLACEHOLDER) + " " + sym;
                   const fiat = (offer.amount / 100_000_000) * btcPrice * (1 + offer.premium / 100);
-                  const fiatVal = sym + fmtFiat(fiat);
+                  const fiatVal = sym + (priced ? fmtFiat(fiat) : PRICE_PLACEHOLDER);
                   const premCls = offer.premium === 0 ? "prem-zero" : isSellTab ? (offer.premium > 0 ? "prem-good" : "prem-bad") : (offer.premium < 0 ? "prem-good" : "prem-bad");
                   return (
                     <>

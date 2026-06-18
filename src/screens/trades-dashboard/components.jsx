@@ -7,7 +7,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { SatsAmount, IcoBtc } from "../../components/BitcoinAmount.jsx";
-import { BTC_PRICE_FALLBACK as BTC_PRICE, satsToFiatRaw, relTime as relativeTime, formatDate } from "../../utils/format.js";
+import { satsToFiatRaw, hasPrice, PRICE_PLACEHOLDER, relTime as relativeTime, formatDate } from "../../utils/format.js";
 import { STATUS_CONFIG } from "../../data/statusConfig.js";
 import Avatar from "../../components/Avatar.jsx";
 import StatusChip from "../../components/StatusChip.jsx";
@@ -23,8 +23,10 @@ export const IconAlert     = () => <svg width="14" height="14" viewBox="0 0 14 1
 export const IconEmpty     = () => <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="var(--black-25)" strokeWidth="1.5" strokeLinecap="round"><rect x="8" y="12" width="32" height="28" rx="4"/><path d="M16 12V9a8 8 0 0 1 16 0v3"/><line x1="19" y1="24" x2="29" y2="24"/><line x1="19" y1="30" x2="25" y2="30"/></svg>;
 
 
-// satsToFiat for dashboard: whole euros (no decimals) for compact display
-export function satsToFiat(sats, price = BTC_PRICE) {
+// satsToFiat for dashboard: whole euros (no decimals) for compact display.
+// Returns the placeholder when no live price is available (never a guess).
+export function satsToFiat(sats, price) {
+  if (!hasPrice(price)) return PRICE_PLACEHOLDER;
   return Math.round(satsToFiatRaw(sats, price)).toLocaleString("de-DE");
 }
 

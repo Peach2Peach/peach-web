@@ -20,7 +20,7 @@ import {
   generateSymmetricKey, encryptForRecipients, encryptSymmetric,
   signPGPMessage, hashPaymentFields,
 } from "../utils/pgp.js";
-import { fmtFiat } from "../utils/format.js";
+import { fmtFiat, hasPrice, PRICE_PLACEHOLDER } from "../utils/format.js";
 import PeachRating from "./PeachRating.jsx";
 import Avatar from "./Avatar.jsx";
 import RepeatTraderBadge from "./RepeatTraderBadge.jsx";
@@ -305,7 +305,18 @@ export default function OfferDetailPopup({
   async function handleWithdraw(offer) {
     setWithdrawing(true); setWithdrawError(null);
     try {
-      const res = await post(`/offer/${offer.id}/cancel`, {});
+      // Buy offers use v069 DELETE (v1 cancel returns 401 for numeric v069 IDs);
+      // sell offers use the v1 cancel endpoint. Matches the trades dashboard.
+      let res;
+      if (offer.type === "bid") {
+        const v069Base = auth.baseUrl.replace(/\/v1$/, "/v069");
+        res = await fetchWithSessionCheck(`${v069Base}/buyOffer/${offer.id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${auth.token}` },
+        });
+      } else {
+        res = await post(`/offer/${offer.id}/cancel`, {});
+      }
       const data = await res.json().catch(() => null);
       if (!res.ok) {
         throw new Error(data?.error || data?.message || `Server error ${res.status}`);
@@ -317,10 +328,10 @@ export default function OfferDetailPopup({
         return;
       }
       onOfferWithdrawn(offer.id, { needsMobileSign: false });
-      onToast("Offer withdrawn", "success");
+      onToast("Offer cancelled", "success");
       onClose();
     } catch (err) {
-      setWithdrawError(err.message || "Failed to withdraw");
+      setWithdrawError(err.message || "Failed to cancel");
     } finally {
       setWithdrawing(false);
     }
@@ -539,7 +550,9 @@ export default function OfferDetailPopup({
   const isRequested = (offer.hasPerformedTradeRequest || localJustRequested || !!acceptedContractId) && !isOwn;
   const isInstant = offer.auto;
   const displayCurrency = popupCurrency ?? selectedCurrency;
-  const displayBtcPrice = Math.round(allPrices?.[displayCurrency] ?? btcPrice);
+  const rawDisplayPrice = allPrices?.[displayCurrency] ?? btcPrice;
+  const priced = hasPrice(rawDisplayPrice);
+  const displayBtcPrice = Math.round(rawDisplayPrice);
   const sym = currSym(displayCurrency);
   const rate = Math.round(displayBtcPrice * (1 + offer.premium / 100));
   const fiat = (offer.amount / 100_000_000) * displayBtcPrice * (1 + offer.premium / 100);
@@ -697,11 +710,11 @@ export default function OfferDetailPopup({
             </div>
             <div className="popup-row">
               <span className="popup-label">Fiat value</span>
-              <span className="popup-value" style={{fontWeight:800}}>{sym}{fmtFiat(fiat)}</span>
+              <span className="popup-value" style={{fontWeight:800}}>{sym}{priced ? fmtFiat(fiat) : PRICE_PLACEHOLDER}</span>
             </div>
             <div className="popup-row">
               <span className="popup-label">Price</span>
-              <span className="popup-value">{rate.toLocaleString("fr-FR")} {sym} / BTC</span>
+              <span className="popup-value">{priced ? rate.toLocaleString("fr-FR") : PRICE_PLACEHOLDER} {sym} / BTC</span>
             </div>
             <div className="popup-row">
               <span className="popup-label">Premium</span>
@@ -992,7 +1005,7 @@ export default function OfferDetailPopup({
                   </button>
                   <button className="popup-btn popup-btn-withdraw"
                     onClick={() => { setWithdrawConfirm(true); setWithdrawError(null); }}>
-                    {offer.type === "ask" ? "Cancel and refund offer" : "Withdraw"}
+                    {offer.type === "ask" ? "Cancel and refund offer" : "Cancel offer"}
                   </button>
                 </div>
               )}
@@ -1005,7 +1018,7 @@ export default function OfferDetailPopup({
           {isOwn && withdrawConfirm && (
             <div style={{width:"100%"}}>
               <div style={{fontSize:".84rem",fontWeight:600,color:"var(--black)",marginBottom:10}}>
-                Withdraw this offer?
+                Cancel this offer?
               </div>
               <div style={{fontSize:".78rem",color:"var(--black-65)",lineHeight:1.5,marginBottom:12}}>
                 {offer.type === "ask"
@@ -1023,8 +1036,8 @@ export default function OfferDetailPopup({
                 <button className="popup-btn popup-btn-withdraw" style={{background:"var(--error)",color:"white",borderColor:"var(--error)"}}
                   onClick={() => handleWithdraw(offer)} disabled={withdrawing}>
                   {withdrawing
-                    ? "Withdrawing…"
-                    : (offer.type === "ask" ? "Refund (sign on mobile)" : "Yes, withdraw")}
+                    ? "Cancelling…"
+                    : (offer.type === "ask" ? "Refund (sign on mobile)" : "Yes, cancel")}
                 </button>
               </div>
             </div>

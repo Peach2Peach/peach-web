@@ -5,7 +5,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const SAT = 100_000_000;
-export const BTC_PRICE_FALLBACK = 87432;
+
+/** Shown in place of a fiat/price value when the live BTC price is unavailable. */
+export const PRICE_PLACEHOLDER = "?";
+
+/** True when `price` is a usable, positive BTC price (not null/NaN/0). */
+export function hasPrice(price) {
+  return typeof price === "number" && Number.isFinite(price) && price > 0;
+}
 
 /** Compact number: 85000 → "85k", 1240000 → "1.24M", 500 → "500" */
 export function fmt(n) {
@@ -31,8 +38,10 @@ export function satsToFiatRaw(sats, price) {
   return (sats / SAT) * price;
 }
 
-/** Convert sats to formatted fiat string: 85000 → "74,32" */
-export function satsToFiat(sats, price = BTC_PRICE_FALLBACK) {
+/** Convert sats to formatted fiat string: 85000 → "74,32". Returns the
+ *  placeholder when no live price is available (never a guessed value). */
+export function satsToFiat(sats, price) {
+  if (!hasPrice(price)) return PRICE_PLACEHOLDER;
   return fmtFiat(satsToFiatRaw(sats, price));
 }
 

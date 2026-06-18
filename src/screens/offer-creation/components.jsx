@@ -12,7 +12,8 @@ import {
   fmtFiat as fmtEur,
   formatTradeId,
   toPeaches,
-  BTC_PRICE_FALLBACK,
+  hasPrice,
+  PRICE_PLACEHOLDER,
 } from "../../utils/format.js";
 import { IS_PHONE, buildMobileActionDeepLink } from "../../utils/mobileAction.js";
 import { PhoneIcon } from "../../components/MobilePendingButton.jsx";
@@ -38,27 +39,33 @@ function stripPmIndex(id) { return String(id || "").replace(/[-_]\d+$/, ""); }
 // other currency is derived from /market/prices (CHF → target).
 export const MIN_CHF = 10;
 export const MAX_CHF = 800;
+// Per-account daily trading limit (CHF). The offer-amount band above is a
+// separate, per-offer regulatory cap; this is what the "Daily limit usage"
+// gauge is measured against.
+export const DAILY_LIMIT_CHF = 1000;
 export const SATS_STEP = 1;
 // The minimum is rounded up to the nearest 10k sats, then clamped to the hard
 // 20 000-sat floor the server enforces regardless of the CHF band, so the live
 // floor can never dip under a value the server would reject.
 export const MIN_SATS_STEP = 10_000;
 export const SERVER_MIN_SATS = 20_000;
-// Falls back to BTC_PRICE_FALLBACK (EUR-like, within ~5% of CHF) during the
-// brief window before /market/prices resolves, so the slider and form
-// validation stay usable on first render.
+// Sats bounds need *a* number for the slider/validation math during the brief
+// window before /market/prices resolves. This fallback (EUR-like, within ~5% of
+// CHF) is used ONLY for that input-bound math — never to display a price/fiat
+// value (those show a placeholder instead when no live price is available).
+const BOUNDS_BTC_PRICE_FALLBACK = 87432;
 export const minSatsAtLimit = (chfPrice) =>
   Math.max(
     SERVER_MIN_SATS,
-    Math.ceil((MIN_CHF / (chfPrice || BTC_PRICE_FALLBACK)) * SAT / MIN_SATS_STEP) * MIN_SATS_STEP,
+    Math.ceil((MIN_CHF / (chfPrice || BOUNDS_BTC_PRICE_FALLBACK)) * SAT / MIN_SATS_STEP) * MIN_SATS_STEP,
   );
 export const maxSatsAtLimit = (chfPrice) =>
-  Math.floor((MAX_CHF / (chfPrice || BTC_PRICE_FALLBACK)) * SAT / SATS_STEP) * SATS_STEP;
-export const limitInCurrency = (allPrices, currency) => {
+  Math.floor((MAX_CHF / (chfPrice || BOUNDS_BTC_PRICE_FALLBACK)) * SAT / SATS_STEP) * SATS_STEP;
+export const limitInCurrency = (allPrices, currency, chfAmount = MAX_CHF) => {
   const chf = allPrices?.CHF;
   const target = allPrices?.[currency];
   if (!chf || !target) return null;
-  return MAX_CHF * (target / chf);
+  return chfAmount * (target / chf);
 };
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
@@ -104,9 +111,10 @@ export function LivePreview({
   const userBadges = profile?.medals ?? profile?.badges ?? [];
 
   const sym = currSym(previewCurrency);
+  const priced = hasPrice(previewBtcPrice);
   const rate = Math.round(effP);
-  const rateStr = `${rate.toLocaleString("fr-FR")} ${sym}`;
-  const fiatVal = hasAmt ? `${sym}${fmtEur(satsToFiat(form.amtFixed, effP))}` : "—";
+  const rateStr = priced ? `${rate.toLocaleString("fr-FR")} ${sym}` : `${PRICE_PLACEHOLDER} ${sym}`;
+  const fiatVal = hasAmt ? (priced ? `${sym}${fmtEur(satsToFiat(form.amtFixed, effP))}` : `${sym}${PRICE_PLACEHOLDER}`) : "—";
 
   // Premium color: seller perspective → high premium = good (green)
   const premCls = p === 0 ? "prem-zero" : isSell ? (p > 0 ? "prem-good" : "prem-bad") : (p < 0 ? "prem-good" : "prem-bad");
@@ -189,7 +197,7 @@ export function LivePreview({
 
 // ─── AMOUNT SLIDER (unified buy + sell) ─────────────────────────────────────
 
-export function AmountSlider({ form, setF, btcPrice, activeCurrency, activeBtcPrice }) {
+export function AmountSlider({ form, setF, btcPrice, activeCurrency, activeBtcPrice, kyc }) {
   // Limit math is sats-based and currency-independent (anchored to CHF live).
   // Display values follow the offer's picked currency when provided, otherwise
   // fall back to the topbar's selectedCurrency.
@@ -202,13 +210,17 @@ export function AmountSlider({ form, setF, btcPrice, activeCurrency, activeBtcPr
   const span = Math.max(1, maxSats - minSats);
   const pct = ((val - minSats) / span) * 100;
 
+  const priced = hasPrice(displayBtcPrice);
   const currentFiat = satsToFiat(val, displayBtcPrice);
-  const pctOfLimit = maxSats ? val / maxSats : 0;
-
-  const barColor = pctOfLimit < 0.9 ? "var(--success)" : "var(--warning)";
 
   const sym = currSym(displayCurrency);
-  const limitInSel = limitInCurrency(allPrices, displayCurrency);
+  // Gauge measures the offer amount against the daily trading limit (1,000 CHF),
+  // not the per-offer amount cap. Percentage is taken in the displayed currency
+  // so the bar always matches the "X / Y" figures shown.
+  const limitInSel = limitInCurrency(allPrices, displayCurrency, DAILY_LIMIT_CHF);
+  const pctOfLimit = priced && limitInSel ? currentFiat / limitInSel : 0;
+
+  const barColor = pctOfLimit < 0.9 ? "var(--success)" : "var(--warning)";
 
   // Editable sats input state
   const [inputVal, setInputVal] = useState(String(val));
@@ -281,7 +293,7 @@ export function AmountSlider({ form, setF, btcPrice, activeCurrency, activeBtcPr
           <span className="amt-pill-black">Sats</span>
         </div>
         <div className="amt-pill fiat-pill">
-          <span className="amt-pill-fiat">≈ {sym}{fmtEur(currentFiat)}</span>
+          <span className="amt-pill-fiat">≈ {sym}{priced ? fmtEur(currentFiat) : PRICE_PLACEHOLDER}</span>
         </div>
       </div>
 
@@ -306,11 +318,11 @@ export function AmountSlider({ form, setF, btcPrice, activeCurrency, activeBtcPr
       {/* Labels */}
       <div className="amt-labels">
         <span>{fmt(minSats)} sats</span>
-        <span style={{ color: "var(--black-25)" }}>{MIN_CHF}–{MAX_CHF} CHF band</span>
         <span>{fmt(maxSats)} sats</span>
       </div>
 
-      {/* Limit bar */}
+      {/* Limit bar — hidden for KYC-verified accounts (no trading limits) */}
+      {!kyc && (
       <div className="limit-bar-wrap">
         <div className="limit-bar-label">
           <span>Daily limit usage</span>
@@ -319,7 +331,7 @@ export function AmountSlider({ form, setF, btcPrice, activeCurrency, activeBtcPr
               color: pctOfLimit >= 0.9 ? "var(--warning)" : "var(--black-65)",
             }}
           >
-            {sym}{Math.round(currentFiat).toLocaleString()} / {sym}
+            {sym}{priced ? Math.round(currentFiat).toLocaleString() : PRICE_PLACEHOLDER} / {sym}
             {limitInSel != null ? Math.round(limitInSel).toLocaleString() : "—"}
           </span>
         </div>
@@ -333,6 +345,7 @@ export function AmountSlider({ form, setF, btcPrice, activeCurrency, activeBtcPr
           />
         </div>
       </div>
+      )}
     </>
   );
 }
@@ -428,6 +441,7 @@ export function MultiEscrowFunding({
   const [qrWithAmount, setQrWithAmount] = useState(true);
   const { selectedCurrency } = useCurrency();
   const displayCurrency = activeCurrency ?? selectedCurrency;
+  const priced = hasPrice(effP);
 
   const validResults = results.filter(
     (r) => r.status !== "failed" && r.escrowAddress,
@@ -551,7 +565,7 @@ export function MultiEscrowFunding({
             <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:12}}>
               <SatsAmount sats={amtFixed} fontSize="1.6rem"/>
               <span style={{fontSize:".88rem",color:"var(--black-65)",fontWeight:600}}>
-                ≈ {currSym(displayCurrency)}{fmtEur(satsToFiat(amtFixed,effP))}
+                ≈ {currSym(displayCurrency)}{priced ? fmtEur(satsToFiat(amtFixed,effP)) : PRICE_PLACEHOLDER}
               </span>
             </div>
           </div>

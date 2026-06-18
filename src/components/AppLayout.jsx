@@ -4,7 +4,6 @@ import { Topbar, SideNav, CurrencyDropdown } from "./Navbars.jsx";
 import { IcoBtc } from "./BitcoinAmount.jsx";
 import { useAuth } from "../hooks/useAuth.js";
 import { useApi, getCached, setCache } from "../hooks/useApi.js";
-import { BTC_PRICE_FALLBACK as BTC_PRICE } from "../utils/format.js";
 
 const CurrencyContext = createContext(null);
 
@@ -25,7 +24,10 @@ export default function AppLayout({ children }) {
   });
   const [selectedCurrency, setSelectedCurrency] = useState("EUR");
   const pricesLoaded = allPrices !== null;
-  const btcPrice = Math.round(allPrices?.[selectedCurrency] ?? BTC_PRICE);
+  // Null when prices haven't loaded — consumers render a placeholder rather
+  // than a guessed BTC price (no stale/wrong fiat figures when logged out).
+  const rawPrice = allPrices?.[selectedCurrency];
+  const btcPrice = rawPrice != null ? Math.round(rawPrice) : null;
   const satsPerCur = btcPrice > 0 ? Math.round(100_000_000 / btcPrice) : 0;
 
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
