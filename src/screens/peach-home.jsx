@@ -7,7 +7,7 @@ import { useApi, getCached } from "../hooks/useApi.js";
 import { useUrgentCount } from "../hooks/useUrgentCount.js";
 import { STATUS_CONFIG, FINISHED_STATUSES } from "../data/statusConfig.js";
 import { methodDisplayName } from "../data/paymentMethodMeta.js";
-import { fmt as formatSats, fmtPct, toPeaches } from "../utils/format.js";
+import { fmt as formatSats, fmtPct, toPeaches, formatTradeId } from "../utils/format.js";
 import PeachRating from "../components/PeachRating.jsx";
 import Avatar from "../components/Avatar.jsx";
 import { RefreshIndicator } from "../components/RefreshIndicator.jsx";
@@ -132,6 +132,12 @@ const css = `
   .profile-strip-badges{display:inline-flex;gap:4px;font-size:.95rem;cursor:pointer}
   .profile-strip-link{font-size:.82rem;font-weight:600;color:var(--black-65);cursor:pointer}
   .profile-strip-link:hover{color:var(--primary)}
+  .profile-strip-disputes{position:relative;display:inline-flex}
+  .profile-strip-disputes-toggle{cursor:pointer}
+  .profile-strip-caret{font-size:.7rem;margin-left:1px}
+  .disputes-dropdown{position:absolute;top:calc(100% + 4px);left:0;z-index:30;display:flex;flex-direction:column;min-width:120px;padding:4px;background:var(--card-bg,#fff);border:1px solid var(--black-10);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.14)}
+  .disputes-dropdown-item{display:block;width:100%;text-align:left;padding:6px 10px;border:none;background:none;border-radius:6px;font-size:.82rem;font-weight:700;letter-spacing:.03em;color:var(--black);cursor:pointer}
+  .disputes-dropdown-item:hover{background:var(--black-5);color:var(--primary)}
   .profile-methods{display:flex;gap:5px;flex-wrap:wrap}
   .pref-chip{padding:3px 9px;border-radius:999px;font-size:.72rem;font-weight:600;
     background:var(--black-5);color:var(--black-75);border:1px solid var(--black-10)}
@@ -323,12 +329,12 @@ export default function PeachHome() {
   // Build user profile — live data when logged in, empty defaults when logged out.
   // Some fields (preferredMethods, totalVolumeBtc, etc.) are not yet returned by
   // the API, so we show "—" / empty defaults.
-  // Active disputes = opened - resolved (clamped at 0). API returns a number or
-  // an object { opened, won, lost, resolved }; a bare number is treated as opened.
-  const disputes = liveProfile?.disputes;
-  const disputesTotal = typeof disputes === "number"
-    ? Math.max(0, disputes)
-    : Math.max(0, (disputes?.opened ?? 0) - (disputes?.resolved ?? 0));
+  // Active disputes come straight from selfUser's activeDisputeContractIds — an
+  // array of contract ids currently in dispute. Count = array length.
+  const activeDisputeIds = Array.isArray(liveProfile?.activeDisputeContractIds)
+    ? liveProfile.activeDisputeContractIds
+    : [];
+  const disputesTotal = activeDisputeIds.length;
   const user = auth ? {
     peachId:             auth.peachId ? formatPeachId(auth.peachId) : "—",
     memberSince:         liveProfile?.creationDate
@@ -336,6 +342,7 @@ export default function PeachHome() {
                            : "—",
     trades:              liveProfile?.trades ?? 0,
     disputesTotal,
+    activeDisputeIds,
     rating:              liveProfile?.rating != null ? toPeaches(liveProfile.rating) : 0,
     badges:              liveProfile?.medals ?? liveProfile?.badges ?? [],
     preferredMethods:    liveProfile?.preferredPaymentMethods ?? [],
@@ -343,7 +350,7 @@ export default function PeachHome() {
     totalVolumeBtc:      liveProfile?.totalVolumeBtc ?? 0,
     lastTradeDaysAgo:    liveProfile?.lastTradeDaysAgo ?? null,
   } : {
-    peachId: "—", memberSince: "—", trades: 0, disputesTotal: 0,
+    peachId: "—", memberSince: "—", trades: 0, disputesTotal: 0, activeDisputeIds: [],
     rating: 0, badges: [], preferredMethods: [], preferredCurrencies: [],
     totalVolumeBtc: 0, lastTradeDaysAgo: null,
   };
@@ -444,6 +451,8 @@ export default function PeachHome() {
   });
   const [welcomeOutOfView, setWelcomeOutOfView] = useState(false);
   const [badgesHelpOpen, setBadgesHelpOpen] = useState(false);
+  const [disputesOpen, setDisputesOpen] = useState(false);
+  const disputesRef = useRef(null);
   const sentinelRef = useRef(null);
 
   useEffect(() => {
@@ -490,6 +499,15 @@ export default function PeachHome() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [seeAllOpen]);
+
+  useEffect(() => {
+    if (!disputesOpen) return;
+    function onKey(e) { if (e.key === "Escape") setDisputesOpen(false); }
+    function onClick(e) { if (disputesRef.current && !disputesRef.current.contains(e.target)) setDisputesOpen(false); }
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("mousedown", onClick);
+    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("mousedown", onClick); };
+  }, [disputesOpen]);
 
   // ── MARKET BREAKDOWN: top PMs + currencies across all outstanding offers ──
   // Fired once on home mount. Counts each offer once toward every PM and
@@ -612,9 +630,36 @@ export default function PeachHome() {
                 <div className="profile-strip-l2">
                   <span className="profile-strip-stat"><PeachRating rep={user.rating} size={13} trades={user.trades}/></span>
                   <span className="profile-strip-sep">·</span>
-                  <span className="profile-strip-stat" style={{color: user.disputesTotal > 0 ? "var(--error)" : "var(--success)"}}>
-                    {user.disputesTotal} {user.disputesTotal === 1 ? "dispute" : "disputes"}
-                  </span>
+                  {user.disputesTotal > 0 ? (
+                    <span className="profile-strip-disputes" ref={disputesRef}>
+                      <span
+                        className="profile-strip-stat profile-strip-disputes-toggle"
+                        style={{color: "var(--error)"}}
+                        onClick={() => setDisputesOpen(o => !o)}
+                        title="View active disputes"
+                      >
+                        {user.disputesTotal} {user.disputesTotal === 1 ? "dispute" : "disputes"}
+                        <span className="profile-strip-caret">{disputesOpen ? "▴" : "▾"}</span>
+                      </span>
+                      {disputesOpen && (
+                        <div className="disputes-dropdown">
+                          {user.activeDisputeIds.map((id) => (
+                            <button
+                              key={id}
+                              className="disputes-dropdown-item"
+                              onClick={() => { setDisputesOpen(false); navigate(`/trade/${id}`); }}
+                            >
+                              {formatTradeId(id)}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="profile-strip-stat" style={{color: "var(--success)"}}>
+                      0 disputes
+                    </span>
+                  )}
                   {user.badges.length > 0 && (
                     <>
                       <span className="profile-strip-sep">·</span>
