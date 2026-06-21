@@ -130,22 +130,19 @@ export default function PeachPaymentMethods() {
     }
   }, [pmsRaw]);
 
-  // Save handler (add or edit)
+  // Save handler (add or edit). Compute the next list from current state BEFORE
+  // setState — reading a value assigned inside the updater is unreliable (the
+  // updater isn't guaranteed to run synchronously), which silently skipped the
+  // server sync.
   function handleSavePM(pm) {
-    let nextMethods;
-    setSavedMethods(prev => {
-      const idx = prev.findIndex(p => p.id === pm.id);
-      if (idx >= 0) {
-        nextMethods = [...prev];
-        nextMethods[idx] = pm;
-      } else {
-        nextMethods = [...prev, pm];
-      }
-      return nextMethods;
-    });
+    const idx = savedMethods.findIndex(p => p.id === pm.id);
+    const nextMethods = idx >= 0
+      ? savedMethods.map(p => p.id === pm.id ? pm : p)
+      : [...savedMethods, pm];
+    setSavedMethods(nextMethods);
     setShowAddFlow(false);
     setEditPM(null);
-    if (auth && nextMethods) {
+    if (auth) {
       // Refetch AFTER the server PUT completes so the cache reloads the new
       // state, not the pre-write state. refetch() (not invalidate) so the list
       // actually reloads instead of going empty until a page refresh.
@@ -153,19 +150,16 @@ export default function PeachPaymentMethods() {
     }
   }
 
-  // Delete handler
+  // Delete handler. Same fix as handleSavePM: compute nextMethods from current
+  // state before setState so the server sync always fires (previously the value
+  // was read from inside the updater and was undefined at the if-check, so the
+  // PM was removed from the UI but never deleted server-side).
   function handleDeletePM() {
-    if (deletePM) {
-      let nextMethods;
-      setSavedMethods(prev => {
-        nextMethods = prev.filter(p => p.id !== deletePM.id);
-        return nextMethods;
-      });
-      setDeletePM(null);
-      if (auth && nextMethods) {
-        syncPMsToServer(nextMethods, auth).finally(() => refetch());
-      }
-    }
+    if (!deletePM) return;
+    const nextMethods = savedMethods.filter(p => p.id !== deletePM.id);
+    setSavedMethods(nextMethods);
+    setDeletePM(null);
+    if (auth) syncPMsToServer(nextMethods, auth).finally(() => refetch());
   }
 
   // Group saved methods by category

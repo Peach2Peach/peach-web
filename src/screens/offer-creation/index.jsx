@@ -719,26 +719,21 @@ export default function OfferCreation({ initialType="buy" }) {
   }
 
   function handleSavePM(pm) {
-    let nextList;
-    if(editingPM) {
-      // Update existing PM in place
-      setSavedMethods(prev => {
-        nextList = prev.map(m => m.id === pm.id ? pm : m);
-        return nextList;
-      });
+    // Compute the next list from current state BEFORE setState — reading a value
+    // assigned inside the updater is unreliable (the updater may run async),
+    // which silently skipped the server sync.
+    const nextList = editingPM
+      ? savedMethods.map(m => m.id === pm.id ? pm : m)
+      : [...savedMethods, pm];
+    setSavedMethods(nextList);
+    if (editingPM) {
       setEditingPM(null);
     } else {
       // Add new PM and auto-select it
-      setSavedMethods(prev => {
-        nextList = [...prev, pm];
-        return nextList;
-      });
       setF("selectedMethodIds",[...form.selectedMethodIds, pm.id]);
       setShowAddModal(false);
     }
-    if (auth && nextList) {
-      syncPMsToServer(nextList, auth).finally(() => refetch());
-    }
+    if (auth) syncPMsToServer(nextList, auth).finally(() => refetch());
   }
 
 
