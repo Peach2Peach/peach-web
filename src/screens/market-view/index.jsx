@@ -35,18 +35,35 @@ const CATEGORY_ID_BY_LABEL = Object.fromEntries(
   Object.entries(CATEGORY_META).map(([id, meta]) => [meta.label, id])
 );
 
+// ── Filter persistence (survives navigation + tab close + browser restart) ──
+const MARKET_FILTERS_KEY = "peach_marketFilters";
+function loadMarketFilters() {
+  try { return JSON.parse(localStorage.getItem(MARKET_FILTERS_KEY)) || {}; }
+  catch { return {}; }
+}
+function saveMarketFilters(filters) {
+  try { localStorage.setItem(MARKET_FILTERS_KEY, JSON.stringify(filters)); }
+  catch {}
+}
+
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 export default function PeachMarket() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [tab,            setTab]            = useState("buy");
-  const [sortKey,        setSortKey]        = useState("premium");
-  const [sortDir,        setSortDir]        = useState(1);
-  const [userSorted,     setUserSorted]     = useState(false);
-  const [selCurrencies,    setSelCurrencies]    = useState([]);   // [] = all
-  const [selMethods,       setSelMethods]       = useState([]);   // [] = all
-  const [selPaymentTypes,  setSelPaymentTypes]  = useState([]);   // [] = all
+  const [savedFilters] = useState(loadMarketFilters);
+  const [tab,            setTab]            = useState(savedFilters.tab ?? "buy");
+  const [sortKey,        setSortKey]        = useState(savedFilters.sortKey ?? "premium");
+  const [sortDir,        setSortDir]        = useState(savedFilters.sortDir ?? 1);
+  const [userSorted,     setUserSorted]     = useState(savedFilters.userSorted ?? false);
+  const [selCurrencies,    setSelCurrencies]    = useState(savedFilters.selCurrencies ?? []);   // [] = all
+  const [selMethods,       setSelMethods]       = useState(savedFilters.selMethods ?? []);   // [] = all
+  const [selPaymentTypes,  setSelPaymentTypes]  = useState(savedFilters.selPaymentTypes ?? []);   // [] = all
   const [searchQuery,      setSearchQuery]      = useState("");
+
+  // Persist filters (not search) so they survive navigation and browser restarts.
+  useEffect(() => {
+    saveMarketFilters({ tab, sortKey, sortDir, userSorted, selCurrencies, selMethods, selPaymentTypes });
+  }, [tab, sortKey, sortDir, userSorted, selCurrencies, selMethods, selPaymentTypes]);
 
   const [showMyOffers,        setShowMyOffers]        = useState(() => getCached("market-show-my-offers")?.data ?? false);
   useEffect(() => { setCache("market-show-my-offers", showMyOffers); }, [showMyOffers]);
@@ -446,12 +463,6 @@ export default function PeachMarket() {
 
     const methodHits = Object.entries(pmCatalogue).filter(([id, e]) => catalogueEntryMatches(id, e, "method"));
     methodOptions = [...new Set(methodHits.map(([, e]) => e.name))].sort();
-
-    const categoryHits = Object.entries(pmCatalogue).filter(([id, e]) => catalogueEntryMatches(id, e, "category"));
-    const cats = new Set(categoryHits.map(([, e]) => e.category));
-    paymentTypeOptions = Object.entries(CATEGORY_META)
-      .filter(([id]) => cats.has(id))
-      .map(([, m]) => m.label);
   } else {
     // Catalogue not loaded yet — fall back to what's present in current offers
     // so the dropdowns aren't empty during the initial fetch.
@@ -461,12 +472,6 @@ export default function PeachMarket() {
     methodOptions = [...new Set(
       marketPairs.filter(p => pairMatches(p, "method")).map(p => methodDisplayName(p.method))
     )].sort();
-    const paymentTypeCatsInScope = new Set(
-      marketPairs.filter(p => pairMatches(p, "category")).map(p => p.category)
-    );
-    paymentTypeOptions = Object.entries(CATEGORY_META)
-      .filter(([id]) => paymentTypeCatsInScope.has(id))
-      .map(([, m]) => m.label);
   }
 
   // Always surface currently-selected values — even if the current market has
@@ -475,8 +480,8 @@ export default function PeachMarket() {
   // it produced zero results, which feels like the filters resetting.
   currencyOptions = [...new Set([...currencyOptions, ...selCurrencies])].sort();
   methodOptions   = [...new Set([...methodOptions, ...selMethods])].sort();
-  const ptAllowed = new Set([...paymentTypeOptions, ...selPaymentTypes]);
-  paymentTypeOptions = Object.values(CATEGORY_META).map(m => m.label).filter(l => ptAllowed.has(l));
+  // Payment type always lists every category — never narrowed by the other filters.
+  paymentTypeOptions = Object.values(CATEGORY_META).map(m => m.label);
 
   // Reactive offer counts per filter option. Each option's count reflects the
   // number of current-tab offers that would match if this option were the only
