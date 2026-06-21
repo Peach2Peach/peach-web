@@ -14,6 +14,8 @@ import { SatsAmount } from "./BitcoinAmount.jsx";
 import { useApi } from "../hooks/useApi.js";
 import { useCurrency } from "./AppLayout.jsx";
 import { useUserPMs } from "../hooks/useUserPMs.js";
+import { useMeetupEvents } from "../hooks/useMeetupEvents.js";
+import { syncPMsToServer } from "../utils/pmSync.js";
 import { markSentRequestCreated } from "../hooks/useNotifications.js";
 import { fetchWithSessionCheck } from "../utils/sessionGuard.js";
 import {
@@ -28,7 +30,7 @@ import MobilePendingButton from "./MobilePendingButton.jsx";
 import RequestedOfferPopup from "./RequestedOfferPopup.jsx";
 import { BadgesInfoPopup } from "./InfoPopup.jsx";
 import { methodDisplayName } from "../data/paymentMethodMeta.js";
-import { methodLabel } from "./AddPMFlow.jsx";
+import { AddPMFlow, methodLabel, normalizeApiPaymentMethods } from "./AddPMFlow.jsx";
 
 const CURRENCY_SYMS = { EUR: "€", USD: "$", GBP: "£", CHF: "CHF " };
 const currSym = (c) => CURRENCY_SYMS[c] ?? `${c} `;
@@ -80,6 +82,55 @@ function normalizeUserPMs(pmsRaw) {
   return [];
 }
 
+// Normalize user PMs into the "syncable" methodId shape that AddPMFlow's
+// `existingPMs` and syncPMsToServer expect (mirrors offer-creation/index.jsx).
+// Distinct from normalizeUserPMs above, which produces the `type`-keyed shape
+// the popup's PM selection list renders from.
+function normalizeSavedMethods(pmsRaw) {
+  if (!pmsRaw) return [];
+  const STRUCTURAL = new Set([
+    "id", "methodId", "type", "name", "label", "currencies", "hashes",
+    "details", "data", "anonymous",
+  ]);
+  const shortId = (raw) => raw.replace(/-\d{10,}$/, "");
+  const sweepFields = (obj) => {
+    const explicit = obj.data || obj.details || null;
+    if (explicit) return explicit;
+    const swept = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (!STRUCTURAL.has(k) && typeof v !== "object") swept[k] = v;
+    }
+    return swept;
+  };
+  if (Array.isArray(pmsRaw) && pmsRaw.length > 0) {
+    return pmsRaw.map((pm, i) => {
+      const mid = shortId(pm.methodId || pm.type || pm.id || "unknown");
+      return {
+        id:         pm.id || `api-pm-${i}`,
+        methodId:   mid,
+        name:       pm.name || pm.label || mid,
+        label:      pm.label || pm.name || "",
+        currencies: pm.currencies ?? [],
+        details:    sweepFields(pm),
+      };
+    });
+  }
+  if (typeof pmsRaw === "object") {
+    return Object.entries(pmsRaw).map(([key, val]) => {
+      const mid = shortId(key);
+      return {
+        id:         val?.id || key,
+        methodId:   mid,
+        name:       val?.name || val?.label || mid,
+        label:      val?.label || val?.name || "",
+        currencies: val?.currencies ?? [],
+        details:    sweepFields(val || {}),
+      };
+    });
+  }
+  return [];
+}
+
 export default function OfferDetailPopup({
   offer,
   onClose,
@@ -95,9 +146,11 @@ export default function OfferDetailPopup({
   const { get, post, patch, auth } = useApi();
   const isLoggedIn = !!auth;
   const { btcPrice, selectedCurrency, allPrices } = useCurrency();
-  const { pms: pmsRaw, error: pmFetchError } = useUserPMs(auth);
+  const { pms: pmsRaw, error: pmFetchError, refetch } = useUserPMs(auth);
   const pmError = !!pmFetchError;
   const userPMs = normalizeUserPMs(pmsRaw);
+  const savedMethods = normalizeSavedMethods(pmsRaw);
+  const { events: meetupEvents } = useMeetupEvents();
 
   // ── Lifted state (was in market-view) ──
   const [selectedPM, setSelectedPM] = useState(null);
@@ -120,6 +173,12 @@ export default function OfferDetailPopup({
   const [tradeLoading, setTradeLoading] = useState(false);
   const [pendingRequest, setPendingRequest] = useState(null);
   const [badgesHelpOpen, setBadgesHelpOpen] = useState(false);
+
+  // ── Inline "create payment method" flow (AddPMFlow hosted on top of popup) ──
+  const [showAddFlow, setShowAddFlow] = useState(false);
+  const [methodsCatalogue, setMethodsCatalogue] = useState({});
+  const [catalogueError, setCatalogueError] = useState(false);
+  const [pendingSelectId, setPendingSelectId] = useState(null);
 
   const pendingTimerRef = useRef(null);
   const popupRequestSeenRef = useRef(false);
@@ -148,6 +207,50 @@ export default function OfferDetailPopup({
     }
     autoSelectedForRef.current = offer.id;
   }, [offer, userPMs, selectedPM, popupCurrency, selectedCurrency]);
+
+  // ── Fetch payment-method catalogue (for the inline AddPMFlow) ──
+  const fetchCatalogue = async () => {
+    setCatalogueError(false);
+    try {
+      const res = await get('/info/paymentMethods');
+      const data = await res.json();
+      if (Array.isArray(data) && data.length) {
+        setMethodsCatalogue(normalizeApiPaymentMethods(data));
+      } else {
+        setCatalogueError(true);
+      }
+    } catch {
+      setCatalogueError(true);
+    }
+  };
+  useEffect(() => {
+    if (showAddFlow && Object.keys(methodsCatalogue).length === 0) fetchCatalogue();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showAddFlow]);
+
+  // Save a newly-created PM: merge into the full list, push to server, reload
+  // the shared cache, and queue the new PM for auto-selection in this popup.
+  function handleSavePM(pm) {
+    const nextList = [...savedMethods, pm];
+    setShowAddFlow(false);
+    setPendingSelectId(pm.id);
+    if (auth) syncPMsToServer(nextList, auth).finally(() => refetch());
+  }
+
+  // Auto-select the just-created PM once it reappears in the reloaded list, so
+  // "Request trade" is immediately enabled. Falls back to clearing if the PM
+  // doesn't end up working for any of the offer's currencies.
+  useEffect(() => {
+    if (!pendingSelectId || !offer) return;
+    const pm = userPMs.find(p => p.id === pendingSelectId);
+    if (!pm) return;
+    const cur = pickRelevantCurrency(offer, pm, popupCurrency ?? selectedCurrency);
+    if (cur) {
+      setSelectedPM(pm.id);
+      setPopupCurrency(cur);
+    }
+    setPendingSelectId(null);
+  }, [pendingSelectId, userPMs, offer, popupCurrency, selectedCurrency]);
 
   // ── Fetch details + polling (mirrors market-view 183-300) ──
   useEffect(() => {
@@ -657,6 +760,7 @@ export default function OfferDetailPopup({
 
   // ── Main detail card ──
   return (
+    <>
     <div className="popup-overlay" onClick={onClose}>
       <div className="popup-card" onClick={e => e.stopPropagation()}>
         <style>{`
@@ -843,8 +947,8 @@ export default function OfferDetailPopup({
                     <div style={{fontSize:".76rem",color:"var(--black-65)",lineHeight:1.5}}>
                       This offer accepts {offer.methods.map(methodDisplayName).join(", ")} but you haven't configured any of these.
                     </div>
-                    <button className="popup-pm-link" onClick={() => navigate("/payment-methods")}>
-                      Go to Payment Methods →
+                    <button className="popup-pm-link" onClick={() => setShowAddFlow(true)}>
+                      Create a new payment method →
                     </button>
                   </div>
                 </div>
@@ -1095,5 +1199,23 @@ export default function OfferDetailPopup({
       </div>
       {badgesHelpOpen && <BadgesInfoPopup onClose={() => setBadgesHelpOpen(false)} />}
     </div>
+    {/* Rendered OUTSIDE .popup-overlay so clicks inside the PM flow don't bubble
+        to the overlay's onClick={onClose} and dismiss the whole offer popup. */}
+    {/* zIndex wrapper creates a stacking context above .popup-overlay (z-index 600);
+        AddPMFlow's own .modal-overlay is only 500, so it would otherwise render behind. */}
+    {showAddFlow && (
+      <div style={{ position: "relative", zIndex: 700 }}>
+        <AddPMFlow
+          methods={methodsCatalogue}
+          meetupEvents={meetupEvents}
+          existingPMs={savedMethods}
+          onSave={handleSavePM}
+          onClose={() => setShowAddFlow(false)}
+          error={catalogueError}
+          onRetry={fetchCatalogue}
+        />
+      </div>
+    )}
+    </>
   );
 }
