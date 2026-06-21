@@ -398,10 +398,10 @@ export function MultiOfferControl({ enabled, count, onToggle, onCountChange, onI
           <span className="multi-counter-val">×{count}</span>
           <button
             className="multi-counter-btn"
-            disabled={count >= 10}
+            disabled={count >= 21}
             onClick={(e) => {
               e.stopPropagation();
-              onCountChange(Math.min(10, count + 1));
+              onCountChange(Math.min(21, count + 1));
             }}
           >
             +
