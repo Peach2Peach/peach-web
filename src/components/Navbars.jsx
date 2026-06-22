@@ -95,25 +95,19 @@ export function SideNav({ active: activeProp, mobileOpen, onClose, onNavigate, m
   const location = useLocation();
   const active = activeProp ?? routeToNavId(location.pathname);
 
-  // Create button → Buy/Sell flyout (hover on desktop, long-press on touch)
-  const [createOpen, setCreateOpen] = useState(false);
+  // Create button → Buy/Sell options. Desktop: hover opens a popover to the right.
+  // Mobile: the Create row is split — tapping the icon+label navigates to the create
+  // screen, tapping the blank area / chevron toggles an inline dropdown.
+  const [createOpen, setCreateOpen] = useState(false);        // desktop hover popover
+  const [mobileExpanded, setMobileExpanded] = useState(false); // mobile chevron dropdown
   const [flyoutTop, setFlyoutTop] = useState(0);
   const createWrapRef = useRef(null);
   const closeTimer = useRef(null);
-  const longPressTimer = useRef(null);
-  const suppressClick = useRef(false);
 
   // Desktop flyout is position:fixed (the sidenav clips overflow), so align it to the button top.
   const syncFlyoutTop = () => { if (createWrapRef.current) setFlyoutTop(createWrapRef.current.getBoundingClientRect().top); };
-  const openCreate = () => { if (active === "create") return; if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null; } syncFlyoutTop(); setCreateOpen(true); };
+  const openCreate = () => { if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null; } syncFlyoutTop(); setCreateOpen(true); };
   const closeCreateSoon = () => { closeTimer.current = setTimeout(() => setCreateOpen(false), 120); };
-  const cancelLongPress = () => { if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; } };
-  const startLongPress = () => {
-    if (active === "create") return;
-    suppressClick.current = false;
-    cancelLongPress();
-    longPressTimer.current = setTimeout(() => { suppressClick.current = true; syncFlyoutTop(); setCreateOpen(true); }, 500);
-  };
 
   useEffect(() => {
     if (!createOpen) return;
@@ -124,9 +118,13 @@ export function SideNav({ active: activeProp, mobileOpen, onClose, onNavigate, m
     return () => { document.removeEventListener("mousedown", onDocDown); document.removeEventListener("keydown", onKey); };
   }, [createOpen]);
 
+  // Collapse the mobile dropdown whenever the slide-in menu closes.
+  useEffect(() => { if (!mobileOpen) setMobileExpanded(false); }, [mobileOpen]);
+
   const goCreate = (type) => {
     if (onNavigate) onNavigate(type ? `/offer/new?type=${type}` : NAV_ROUTES.create);
     setCreateOpen(false);
+    setMobileExpanded(false);
     if (onClose) onClose();
   };
 
@@ -138,21 +136,23 @@ export function SideNav({ active: activeProp, mobileOpen, onClose, onNavigate, m
           if (id === "create") {
             return (
               <div key={id} className="sidenav-create-wrap" ref={createWrapRef}>
-                <button className={`sidenav-item${active === id ? " sidenav-active" : ""}`}
-                  onMouseEnter={openCreate} onMouseLeave={closeCreateSoon}
-                  onClick={() => { if (suppressClick.current) { suppressClick.current = false; return; } goCreate(); }}
-                  onTouchStart={startLongPress} onTouchEnd={cancelLongPress}
-                  onTouchMove={cancelLongPress} onTouchCancel={cancelLongPress}>
-                  <span className="sidenav-icon">{icon()}</span>
-                  <span className="sidenav-label">{label}</span>
-                </button>
-                {createOpen && (
-                  <div className="sidenav-create-flyout" role="menu" style={{ top: flyoutTop }}
-                    onMouseEnter={openCreate} onMouseLeave={closeCreateSoon}>
-                    <button className="sidenav-create-option buy" role="menuitem" onClick={() => goCreate("buy")}>Buy offer</button>
-                    <button className="sidenav-create-option sell" role="menuitem" onClick={() => goCreate("sell")}>Sell offer</button>
-                  </div>
-                )}
+                <div className="sidenav-create-row">
+                  <button className={`sidenav-item sidenav-create-main${active === id ? " sidenav-active" : ""}`}
+                    onMouseEnter={openCreate} onMouseLeave={closeCreateSoon}
+                    onClick={() => goCreate()}>
+                    <span className="sidenav-icon">{icon()}</span>
+                    <span className="sidenav-label">{label}</span>
+                  </button>
+                  <button className="sidenav-create-toggle" aria-label="Show buy and sell options"
+                    aria-expanded={mobileExpanded} onClick={() => setMobileExpanded(v => !v)}>
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6l4 4 4-4"/></svg>
+                  </button>
+                </div>
+                <div className={`sidenav-create-flyout${createOpen ? " open" : ""}${mobileExpanded ? " expanded" : ""}`} role="menu" style={{ top: flyoutTop }}
+                  onMouseEnter={openCreate} onMouseLeave={closeCreateSoon}>
+                  <button className="sidenav-create-option buy" role="menuitem" onClick={() => goCreate("buy")}>Buy offer</button>
+                  <button className="sidenav-create-option sell" role="menuitem" onClick={() => goCreate("sell")}>Sell offer</button>
+                </div>
               </div>
             );
           }

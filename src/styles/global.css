@@ -496,12 +496,18 @@ body{font-family:var(--font);background:var(--primary-bg);color:var(--black)}
 }
 .sidenav-create-wrap{position:relative;width:100%;display:flex;flex-direction:column;align-items:center;flex-shrink:0}
 .sidenav-create-wrap .sidenav-item{width:calc(100% - 16px)}
+/* Create row: holds the main (navigate) button + the mobile-only chevron toggle. */
+.sidenav-create-row{width:100%;display:flex;flex-direction:column;align-items:center}
+.sidenav-create-toggle{display:none}
+.sidenav-create-toggle svg{transition:transform .18s ease}
+.sidenav-create-toggle[aria-expanded="true"] svg{transform:rotate(180deg)}
 .sidenav-create-flyout{
   position:fixed;left:64px;z-index:600;min-width:148px;
   background:var(--surface);border:1px solid var(--black-10);border-radius:12px;
   box-shadow:0 8px 28px rgba(43,25,17,.16);padding:6px;
-  display:flex;flex-direction:column;gap:2px;animation:fadeIn .12s ease;
+  display:none;flex-direction:column;gap:2px;
 }
+.sidenav-create-flyout.open{display:flex;animation:fadeIn .12s ease}
 .sidenav-create-option{
   width:100%;text-align:left;padding:9px 12px;border:none;border-radius:8px;
   background:transparent;cursor:pointer;color:var(--black);font-family:var(--font);
@@ -530,11 +536,28 @@ body{font-family:var(--font);background:var(--primary-bg);color:var(--black)}
   .sidenav-icon svg{width:25px;height:25px}
   .sidenav-theme-toggle{padding:13px 20px;gap:15px;font-size:1.025rem}
   .sidenav-create-wrap{align-items:stretch}
+  /* Split Create row: icon+label navigates; the chevron zone (blank space + chevron)
+     toggles the dropdown. */
+  .sidenav-create-row{flex-direction:row;align-items:stretch;width:calc(100% - 16px);margin:0 8px}
+  .sidenav-create-row .sidenav-create-main{flex:0 0 auto;width:auto}
+  .sidenav-create-toggle{
+    display:flex;align-items:center;justify-content:flex-end;flex:1 1 auto;
+    padding:0 18px 0 0;border:none;background:transparent;color:var(--black-50);cursor:pointer;
+  }
+  /* Inline dropdown, hidden until .expanded. Discreet: thin colored left rule, neutral
+     text, no fill, no surrounding box. */
   .sidenav-create-flyout{
     position:static;left:auto;top:auto!important;z-index:auto;
-    width:calc(100% - 16px);min-width:0;margin:2px 8px 0;box-shadow:none;
+    width:auto;min-width:0;margin:0 8px 6px 30px;gap:2px;
+    border:none;background:transparent;border-radius:0;padding:0;box-shadow:none;animation:none;
   }
-  .sidenav-create-option{font-size:1rem;padding:11px 16px}
+  .sidenav-create-flyout.expanded{display:flex}
+  .sidenav-create-option{
+    font-size:.95rem;padding:7px 12px;border-radius:0;background:transparent;
+    color:var(--black-65);border-left:2px solid var(--black-10);
+  }
+  .sidenav-create-option.buy{border-left-color:var(--success)}
+  .sidenav-create-option.sell{border-left-color:var(--error)}
 }
 
 /* ─── OFFER DETAIL POPUP (shared across MARKET and USER PROFILE screens) ─── */

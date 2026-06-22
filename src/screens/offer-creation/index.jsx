@@ -251,7 +251,7 @@ function PremiumSlider({ value, onChange, isSell }) {
 // ─── MAIN ───────────────────────────────────────────────────────────────────
 export default function OfferCreation({ initialType="buy" }) {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   // Explicit ?type= URL param wins (home/market CTAs pass ?type=buy|sell);
   // otherwise restore the persisted tab; otherwise fall back to initialType.
   const persisted = readPersistedState();
@@ -713,7 +713,14 @@ export default function OfferCreation({ initialType="buy" }) {
     window.addEventListener("peach:offer-published-dismissed", handler);
     return () => window.removeEventListener("peach:offer-published-dismissed", handler);
   }, [step, escrowFunded]);
-  function switchType(t){ setType(t); reset(); }
+  function switchType(t){ setType(t); reset(); setSearchParams({ type: t }, { replace: true }); }
+
+  // React to ?type= changes (e.g. the SideNav Buy/Sell options) while already on this
+  // screen. switchType keeps the URL in sync, so the t !== type guard prevents a loop.
+  useEffect(() => {
+    const t = searchParams.get("type");
+    if ((t === "buy" || t === "sell") && t !== type) switchType(t);
+  }, [searchParams, type]);
 
   function buildInstantTradeCriteria(){
     if(!form.instantMatch) return undefined;
