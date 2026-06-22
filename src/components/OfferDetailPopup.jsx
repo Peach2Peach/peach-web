@@ -234,7 +234,11 @@ export default function OfferDetailPopup({
     const nextList = [...savedMethods, pm];
     setShowAddFlow(false);
     setPendingSelectId(pm.id);
-    if (auth) syncPMsToServer(nextList, auth).finally(() => refetch());
+    if (auth) {
+      syncPMsToServer(nextList, auth)
+        .then(ok => { if (!ok) onToast("network error, couldn't save changes", "error"); })
+        .finally(() => refetch());
+    }
   }
 
   // Auto-select the just-created PM once it reappears in the reloaded list, so

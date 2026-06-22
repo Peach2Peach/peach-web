@@ -34,6 +34,7 @@ import {
 import InfoPopup, { InfoDot } from "../../components/InfoPopup.jsx";
 import MobilePendingButton from "../../components/MobilePendingButton.jsx";
 import { syncPMsToServer } from "../../utils/pmSync.js";
+import Toast from "../../components/Toast.jsx";
 
 // ─── Help-popup copy (verbatim from mobile app) ─────────────────────────────
 const INFO_COPY = {
@@ -274,6 +275,14 @@ export default function OfferCreation({ initialType="buy" }) {
   const [catalogueError, setCatalogueError] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPM,    setEditingPM]    = useState(null); // PM object being edited
+  // Toast (surfaces a failed PM server sync — see handleSavePM)
+  const [toast, setToast]               = useState(null);
+  const [toastTone, setToastTone]       = useState("default");
+  function showToast(message, tone = "default", durationMs = 3500) {
+    setToast(message);
+    setToastTone(tone);
+    setTimeout(() => { setToast(null); setToastTone("default"); }, durationMs);
+  }
   const [openInfo,     setOpenInfo]     = useState(null); // "amount" | "instant" | "experience" | "multi" | null
   const [pmError,      setPmError]      = useState(false);
   const [publishing,   setPublishing]   = useState(false);
@@ -733,7 +742,11 @@ export default function OfferCreation({ initialType="buy" }) {
       setF("selectedMethodIds",[...form.selectedMethodIds, pm.id]);
       setShowAddModal(false);
     }
-    if (auth) syncPMsToServer(nextList, auth).finally(() => refetch());
+    if (auth) {
+      syncPMsToServer(nextList, auth)
+        .then(ok => { if (!ok) showToast("network error, couldn't save changes", "error"); })
+        .finally(() => refetch());
+    }
   }
 
 
@@ -2442,6 +2455,8 @@ export default function OfferCreation({ initialType="buy" }) {
           </div>
         </div>
       )}
+
+      <Toast message={toast} tone={toastTone} />
     </>
   );
 }

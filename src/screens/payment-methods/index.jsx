@@ -16,6 +16,7 @@ import {
   AddPMFlow, CATEGORY_META, methodLabel, normalizeApiPaymentMethods, isCashId,
 } from "../../components/AddPMFlow.jsx";
 import { getPaymentLogo } from "../../assets/logos/index.ts";
+import Toast from "../../components/Toast.jsx";
 
 export default function PeachPaymentMethods() {
   const navigate = useNavigate();
@@ -41,6 +42,15 @@ export default function PeachPaymentMethods() {
   const [showAddFlow, setShowAddFlow]   = useState(false);
   const [editPM, setEditPM]             = useState(null);
   const [deletePM, setDeletePM]         = useState(null);
+
+  // Toast (surfaces a failed server sync — see handleSavePM / handleDeletePM)
+  const [toast, setToast]               = useState(null);
+  const [toastTone, setToastTone]       = useState("default");
+  function showToast(message, tone = "default", durationMs = 3500) {
+    setToast(message);
+    setToastTone(tone);
+    setTimeout(() => { setToast(null); setToastTone("default"); }, durationMs);
+  }
 
   // Fetch payment methods catalogue
   const fetchCatalogue = async () => {
@@ -146,7 +156,9 @@ export default function PeachPaymentMethods() {
       // Refetch AFTER the server PUT completes so the cache reloads the new
       // state, not the pre-write state. refetch() (not invalidate) so the list
       // actually reloads instead of going empty until a page refresh.
-      syncPMsToServer(nextMethods, auth).finally(() => refetch());
+      syncPMsToServer(nextMethods, auth)
+        .then(ok => { if (!ok) showToast("network error, couldn't save changes", "error"); })
+        .finally(() => refetch());
     }
   }
 
@@ -159,7 +171,11 @@ export default function PeachPaymentMethods() {
     const nextMethods = savedMethods.filter(p => p.id !== deletePM.id);
     setSavedMethods(nextMethods);
     setDeletePM(null);
-    if (auth) syncPMsToServer(nextMethods, auth).finally(() => refetch());
+    if (auth) {
+      syncPMsToServer(nextMethods, auth)
+        .then(ok => { if (!ok) showToast("network error, couldn't save changes", "error"); })
+        .finally(() => refetch());
+    }
   }
 
   // Group saved methods by category
@@ -322,6 +338,8 @@ export default function PeachPaymentMethods() {
           </div>
         </div>
       )}
+
+      <Toast message={toast} tone={toastTone} />
     </>
   );
 }
