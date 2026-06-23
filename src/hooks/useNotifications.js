@@ -214,6 +214,17 @@ function saveWrongAmountShown(peachId, set) {
   try { localStorage.setItem(k, JSON.stringify([...set])); } catch { /* quota */ }
 }
 
+// Mark an offer's wrong-amount popup as already shown. Exported so the
+// offer-creation screen (which fires the popup itself the moment it detects the
+// wrong amount) can suppress a duplicate pop from the next 15s background poll.
+export function markWrongAmountShown(peachId, offerId) {
+  if (!peachId || offerId == null) return;
+  const set = loadWrongAmountShown(peachId);
+  if (set.has(String(offerId))) return;
+  set.add(String(offerId));
+  saveWrongAmountShown(peachId, set);
+}
+
 // ── Contract wrong-amount refund-pending popup tracking ────────────────────
 // Mirrors the offer-level dedup above, keyed by contract id, so the global
 // contract refund popup shows once per contract (not every 15s poll) and still
@@ -335,6 +346,78 @@ function _updateTitle() {
 
 function _makeNotif(id, type, title, body, contractId, offerId, offerType) {
   return { id, type, title, body, contractId: contractId || null, offerId: offerId || null, offerType: offerType || null, createdAt: Date.now() };
+}
+
+// Build the pending-escrow poll list (localStorage ∪ own sell offers in the
+// escrow-funding window) and fetch each one's `/offer/:id/escrow` result.
+// Shared by the normal poll and the first (baseline) poll so the wrong-amount
+// modal can fire on either.
+const ESCROW_FUNDING_WINDOW = ["fundEscrow", "escrowWaitingForConfirmation", "fundingAmountDifferent"];
+async function _fetchEscrowChecks(peachId, base, hdrs, sellOffers) {
+  const byId = new Map();
+  for (const e of loadEscrowPending(peachId)) {
+    byId.set(String(e.offerId), { offerId: String(e.offerId), amount: e.amount });
+  }
+  for (const o of sellOffers) {
+    if (!ESCROW_FUNDING_WINDOW.includes(o.tradeStatus)) continue;
+    const oid = String(o.id);
+    if (!byId.has(oid)) byId.set(oid, { offerId: oid, amount: o.amount });
+  }
+  const pendingEscrows = Array.from(byId.values());
+  if (pendingEscrows.length === 0) return [];
+  return Promise.all(
+    pendingEscrows.map(({ offerId, amount }) =>
+      fetchWithSessionCheck(`${base}/offer/${offerId}/escrow`, { headers: hdrs })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => ({
+          offerId,
+          amount,
+          status: data?.funding?.status ?? null,
+          amounts: data?.funding?.amounts ?? [],
+          // raw (true | false | undefined) — distinguishes "explicitly forced
+          // refund" (false) from "field absent" (default to offering a choice)
+          userConfirmationRequired: data?.userConfirmationRequired,
+        }))
+        .catch(() => ({ offerId, amount, status: null, amounts: [], userConfirmationRequired: undefined }))
+    )
+  );
+}
+
+// Fire the global wrong-amount choice modal once per offer (deduped via the
+// persisted wrongShown set) and return matching persistent-panel notifs. Callers
+// on the normal path push those notifs; the baseline poll discards them so it
+// stays notif-silent while still surfacing the urgent modal.
+//   userConfirmationRequired === true → mempool, seller may confirm → "choice";
+//   funding.status === "WRONG_FUNDING_AMOUNT" → unusable → "refund".
+function _dispatchWrongAmountEscrows(checks, peachId) {
+  const wrongShown = loadWrongAmountShown(peachId);
+  let dirty = false;
+  const notifs = [];
+  for (const { offerId, amount, status, amounts, userConfirmationRequired } of checks) {
+    const oid = String(offerId);
+    const isChoice = userConfirmationRequired === true;
+    const isWrong = isChoice || status === "WRONG_FUNDING_AMOUNT";
+    if (!isWrong || wrongShown.has(oid)) continue;
+    const fundedSats = amounts.reduce((a, b) => a + b, 0);
+    window.dispatchEvent(new CustomEvent("peach:funding-amount-different", {
+      detail: {
+        offerId: oid,
+        variant: isChoice ? "choice" : "refund",
+        expectedSats: amount || null,
+        fundedSats: fundedSats || null,
+      },
+    }));
+    notifs.push(_makeNotif(
+      `wrong-amount-${oid}`, "warning",
+      "Wrong funding amount",
+      "You funded the escrow with a different amount. Choose to continue or refund.",
+      null, oid
+    ));
+    wrongShown.add(oid);
+    dirty = true;
+  }
+  if (dirty) saveWrongAmountShown(peachId, wrongShown);
+  return notifs;
 }
 
 async function _poll(auth, base) {
@@ -459,6 +542,10 @@ async function _poll(auth, base) {
         _prevOfferUnread.set(oid, (o.unreadMessages ?? 0) > 0);
         _prevTradeRequestCount.set(oid, trReqLookup.get(oid) ?? 0);
       }
+      // Even on the baseline poll, surface the urgent wrong-amount choice modal
+      // (panel notifs are withheld here to keep the baseline poll notif-silent).
+      const firstPollEscrowChecks = await _fetchEscrowChecks(peachId, base, hdrs, sellOffers);
+      _dispatchWrongAmountEscrows(firstPollEscrowChecks, peachId);
       saveBaseline();
       _notify();
       return;
@@ -792,86 +879,30 @@ async function _poll(auth, base) {
     // of localStorage). The escrow endpoint stays the detection signal because it
     // is the only mempool-timely source — the summary's tradeStatus only flips to
     // `fundingAmountDifferent` after on-chain confirmation.
-    const ESCROW_FUNDING_WINDOW = ["fundEscrow", "escrowWaitingForConfirmation", "fundingAmountDifferent"];
-    const pendingEscrows = (() => {
-      const byId = new Map();
-      for (const e of loadEscrowPending(peachId)) {
-        byId.set(String(e.offerId), { offerId: String(e.offerId), amount: e.amount });
-      }
-      for (const o of sellOffers) {
-        if (!ESCROW_FUNDING_WINDOW.includes(o.tradeStatus)) continue;
-        const oid = String(o.id);
-        if (!byId.has(oid)) byId.set(oid, { offerId: oid, amount: o.amount });
-      }
-      return Array.from(byId.values());
-    })();
-    if (pendingEscrows.length > 0) {
-      const checks = await Promise.all(
-        pendingEscrows.map(({ offerId, amount }) =>
-          fetchWithSessionCheck(`${base}/offer/${offerId}/escrow`, { headers: hdrs })
-            .then(r => r.ok ? r.json() : null)
-            .then(data => ({
-              offerId,
-              amount,
-              status: data?.funding?.status ?? null,
-              amounts: data?.funding?.amounts ?? [],
-              // raw (true | false | undefined) — distinguishes "explicitly forced
-              // refund" (false) from "field absent" (default to offering a choice)
-              userConfirmationRequired: data?.userConfirmationRequired,
-            }))
-            .catch(() => ({ offerId, amount, status: null, amounts: [], userConfirmationRequired: undefined }))
-        )
-      );
-      const wrongShown = loadWrongAmountShown(peachId);
-      let wrongShownDirty = false;
-      for (const { offerId, amount, status, amounts, userConfirmationRequired } of checks) {
-        const oid = String(offerId);
-        // Wrong amount surfaces two ways on /offer/:id/escrow:
-        //   userConfirmationRequired === true → seller may confirm this amount
-        //     (valid during the mempool state) → continue-or-refund choice;
-        //   funding.status === "WRONG_FUNDING_AMOUNT" → can't be used (e.g. above
-        //     the trading limit, or multiple UTXOs) → refund only.
-        const isChoice = userConfirmationRequired === true;
-        const isWrong = isChoice || status === "WRONG_FUNDING_AMOUNT";
-        if (isWrong) {
-          if (!wrongShown.has(oid)) {
-            const fundedSats = amounts.reduce((a, b) => a + b, 0);
-            window.dispatchEvent(new CustomEvent("peach:funding-amount-different", {
-              detail: {
-                offerId: oid,
-                variant: isChoice ? "choice" : "refund",
-                expectedSats: amount || null,
-                fundedSats: fundedSats || null,
-              },
-            }));
-            // Persistent panel entry so dismissing the popup still leaves a trace.
-            events.push(_makeNotif(
-              `wrong-amount-${oid}`, "warning",
-              "Wrong funding amount",
-              "You funded the escrow with a different amount. Choose to continue or refund.",
-              null, oid
-            ));
-            wrongShown.add(oid);
-            wrongShownDirty = true;
-          }
-        } else if (status === "FUNDED") {
-          const dedupId = `escrow-funded-${offerId}`;
-          const isNew = !_state.notifications.some(n => n.id === dedupId);
-          if (isNew) {
-            events.push(_makeNotif(
-              dedupId, "statusChange",
-              "Escrow funded",
-              "The escrow has been funded and your offer is published.",
-              null, String(offerId)
-            ));
-            window.dispatchEvent(new CustomEvent("peach:offer-published", {
-              detail: { offerId: String(offerId), amount },
-            }));
-          }
-          removePendingEscrow(offerId);
+    const escrowChecks = await _fetchEscrowChecks(peachId, base, hdrs, sellOffers);
+    if (escrowChecks.length > 0) {
+      // Wrong-amount choice modal + persistent panel notifs (shared helper; the
+      // baseline poll above calls the same helper but discards the notifs).
+      events.push(..._dispatchWrongAmountEscrows(escrowChecks, peachId));
+      // FUNDED → published. Offers flagged wrong above are excluded.
+      for (const { offerId, amount, status, userConfirmationRequired } of escrowChecks) {
+        const isWrong = userConfirmationRequired === true || status === "WRONG_FUNDING_AMOUNT";
+        if (isWrong || status !== "FUNDED") continue;
+        const dedupId = `escrow-funded-${offerId}`;
+        const isNew = !_state.notifications.some(n => n.id === dedupId);
+        if (isNew) {
+          events.push(_makeNotif(
+            dedupId, "statusChange",
+            "Escrow funded",
+            "The escrow has been funded and your offer is published.",
+            null, String(offerId)
+          ));
+          window.dispatchEvent(new CustomEvent("peach:offer-published", {
+            detail: { offerId: String(offerId), amount },
+          }));
         }
+        removePendingEscrow(offerId);
       }
-      if (wrongShownDirty) saveWrongAmountShown(peachId, wrongShown);
     }
 
     // ── Contract funded with wrong amount, refund pending ──

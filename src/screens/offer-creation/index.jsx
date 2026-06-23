@@ -11,7 +11,7 @@ import { useCurrency } from "../../components/AppLayout.jsx";
 import { useMarketStats } from "../../hooks/useMarketStats.js";
 import { useUserPMs } from "../../hooks/useUserPMs.js";
 import { useMeetupEvents } from "../../hooks/useMeetupEvents.js";
-import { addPendingEscrow, removePendingEscrow, addEscrowFundedNotification } from "../../hooks/useNotifications.js";
+import { addPendingEscrow, removePendingEscrow, addEscrowFundedNotification, markWrongAmountShown } from "../../hooks/useNotifications.js";
 import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 import { isApiError, hashPaymentFields, encryptForPublicKey, encryptPGPMessage, signPGPMessage } from "../../utils/pgp.js";
 import { deriveEscrowPubKey, deriveReturnAddress, isReturnAddressFromXpub } from "../../utils/escrow.js";
@@ -267,8 +267,7 @@ export default function OfferCreation({ initialType="buy" }) {
   const [copiedAddr,   setCopiedAddr]   = useState(false);
   const [qrWithAmount, setQrWithAmount] = useState(true);
   const [escrowFunded,  setEscrowFunded]  = useState(false);
-  const [fundingStatus, setFundingStatus] = useState(null); // null → "MEMPOOL" → "FUNDED" | "WRONG_FUNDING_AMOUNT"
-  const [fundingAmounts, setFundingAmounts] = useState(null); // amounts array from API (for wrong-amount case)
+  const [fundingStatus, setFundingStatus] = useState(null); // null → "MEMPOOL" → "FUNDED"
   const [savedMethods, setSavedMethods] = useState([]);
   const [methodsCatalogue, setMethodsCatalogue] = useState({});
   const { events: meetupEvents } = useMeetupEvents();
@@ -536,17 +535,27 @@ export default function OfferCreation({ initialType="buy" }) {
   useEffect(() => {
     if (step !== 2 || !sellOfferId || !auth || escrowFunded) return;
     let cancelled = false;
-    let redirected = false;
-    const triggerRedirect = (amounts) => {
-      if (redirected) return;
-      redirected = true;
-      setFundingStatus("WRONG_FUNDING_AMOUNT");
-      setFundingAmounts(amounts ?? []);
-      setTimeout(() => {
-        if (!cancelled) {
-          navigate("/trades", { state: { openOfferId: sellOfferId } });
-        }
-      }, 2500);
+    let iv;
+    let fired = false;
+    // Surface the global wrong-amount choice modal (App.jsx mounts it on this
+    // event) the moment we detect a wrong funding amount, then stop polling. The
+    // modal owns the continue/refund decision and the route to /trades.
+    const fireWrongAmount = (variant, amounts) => {
+      if (fired) return;
+      fired = true;
+      cancelled = true;
+      if (iv) clearInterval(iv);
+      const fundedSats = (amounts ?? []).reduce((a, b) => a + b, 0);
+      window.dispatchEvent(new CustomEvent("peach:funding-amount-different", {
+        detail: {
+          offerId: String(sellOfferId),
+          variant,
+          expectedSats: form.amtFixed || null,
+          fundedSats: fundedSats || null,
+        },
+      }));
+      // Suppress a duplicate pop from the next 15s background poll.
+      markWrongAmountShown(auth?.peachId, String(sellOfferId));
     };
     async function check() {
       try {
@@ -555,6 +564,8 @@ export default function OfferCreation({ initialType="buy" }) {
           get('/offer/' + sellOfferId + '/details'),
         ]);
         if (cancelled) return;
+        let detailsWrong = false;
+        let detailsAmounts = null;
         if (detailsRes.ok) {
           const details = await detailsRes.json();
           const maId = details?.mobileActionFundEscrowWasTriggered;
@@ -563,12 +574,25 @@ export default function OfferCreation({ initialType="buy" }) {
             details?.tradeStatus === "fundingAmountDifferent" ||
             details?.funding?.status === "WRONG_FUNDING_AMOUNT"
           ) {
-            triggerRedirect(details?.funding?.amounts);
-            return;
+            detailsWrong = true;
+            detailsAmounts = details?.funding?.amounts;
           }
         }
-        if (!escrowRes.ok) return;
-        const data = await escrowRes.json();
+        const data = escrowRes.ok ? await escrowRes.json() : null;
+        // Wrong amount surfaces two ways:
+        //   escrow.userConfirmationRequired === true → mempool, seller may confirm
+        //     this amount → continue-or-refund choice;
+        //   funding.status "WRONG_FUNDING_AMOUNT" / tradeStatus
+        //     "fundingAmountDifferent" → unusable → refund only.
+        if (data?.userConfirmationRequired === true) {
+          fireWrongAmount("choice", data?.funding?.amounts);
+          return;
+        }
+        if (data?.funding?.status === "WRONG_FUNDING_AMOUNT" || detailsWrong) {
+          fireWrongAmount("refund", data?.funding?.amounts ?? detailsAmounts);
+          return;
+        }
+        if (!data) return;
         const s = data?.funding?.status;
         if (s === "MEMPOOL") {
           setFundingStatus("MEMPOOL");
@@ -580,15 +604,13 @@ export default function OfferCreation({ initialType="buy" }) {
           window.dispatchEvent(new CustomEvent("peach:offer-published", {
             detail: { offerId: String(sellOfferId), amount: form.amtFixed },
           }));
-        } else if (s === "WRONG_FUNDING_AMOUNT") {
-          triggerRedirect(data?.funding?.amounts);
         }
       } catch (err) {
         console.warn("[OfferCreation] Escrow poll error:", err.message);
       }
     }
     check();
-    const iv = setInterval(check, 10000);
+    iv = setInterval(check, 10000);
     return () => { cancelled = true; clearInterval(iv); };
   }, [step, sellOfferId, auth, navigate, escrowFunded]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -696,7 +718,7 @@ export default function OfferCreation({ initialType="buy" }) {
     });
   }, [savedRefund?.address, isSell]);
   function reset(){
-    setStep(0);setDone(false);setEscrowFunded(false);setFundingStatus(null);setFundingAmounts(null);setPublishError(null);setEscrowAddress(null);setSellOfferId(null);
+    setStep(0);setDone(false);setEscrowFunded(false);setFundingStatus(null);setPublishError(null);setEscrowAddress(null);setSellOfferId(null);
     // Preserve shared params (amount, premium, advanced options, PMs) across
     // resets so Buy↔Sell switches and post-publish resets don't lose them.
     setForm(f => { const base = initForm(f.selectedMethodIds);
@@ -2138,37 +2160,7 @@ export default function OfferCreation({ initialType="buy" }) {
           )}
           {step===2 && !(multiResults && multiResults.filter(r=>r.status!=="failed"&&r.escrowAddress).length > 1) && (
             <div className="step-anim">
-              {fundingStatus === "WRONG_FUNDING_AMOUNT" ? (
-                <div style={{display:"flex",flexDirection:"column",alignItems:"center",
-                  gap:18,paddingTop:32,textAlign:"center",animation:"stepFwd .4s ease both"}}>
-                  <div style={{width:76,height:76,borderRadius:"50%",
-                    background:"var(--warning)",display:"flex",alignItems:"center",
-                    justifyContent:"center",color:"white",fontSize:"2.4rem",fontWeight:800,
-                    boxShadow:"0 8px 32px rgba(245,158,11,.3)"}}>⚠</div>
-                  <div style={{fontSize:"1.2rem",fontWeight:800,color:"var(--warning)"}}>
-                    Wrong amount funded
-                  </div>
-                  <p style={{fontSize:".88rem",color:"var(--black-65)",lineHeight:1.65,maxWidth:360}}>
-                    You funded the escrow with{" "}
-                    <strong style={{color:"var(--black)"}}>
-                      {(fundingAmounts ? fundingAmounts.reduce((a,b)=>a+b,0) : 0).toLocaleString("en-US")}
-                    </strong>{" "}
-                    sats, but the offer was created for{" "}
-                    <strong style={{color:"var(--black)"}}>
-                      {form.amtFixed.toLocaleString("en-US")}
-                    </strong>{" "}
-                    sats. Redirecting you to Trades so you can choose to continue with the funded amount or refund the escrow…
-                  </p>
-                  <button
-                    onClick={() => navigate("/trades", { state: { openOfferId: sellOfferId } })}
-                    style={{padding:"10px 28px",borderRadius:999,background:"var(--grad)",
-                      color:"white",border:"none",cursor:"pointer",fontFamily:"var(--font)",
-                      fontSize:".88rem",fontWeight:800}}
-                  >
-                    Go to Trades now
-                  </button>
-                </div>
-              ) : !escrowFunded?(
+              {!escrowFunded?(
                 <>
                   <div style={{fontSize:".84rem",color:"var(--black-65)",fontWeight:500,
                     lineHeight:1.6,marginBottom:20}}>
