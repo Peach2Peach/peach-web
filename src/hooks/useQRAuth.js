@@ -118,6 +118,12 @@ async function verifyConnectionIdSignature({ decryptedId, signatureArmored, serv
       message: await openpgp.createMessage({ text: decryptedId }),
       signature,
       verificationKeys: publicKey,
+      // Tolerate client clock skew: openpgp.js rejects a signature whose
+      // creation time is "in the future" vs the local clock. The server signs
+      // with its own (often slightly ahead) time, so a browser running a few
+      // seconds behind would fail. Shift the verification date forward to allow
+      // up to ~60s of drift.
+      date: new Date(Date.now() + 60_000),
     });
   } catch (err) {
     throw new Error(`Server signature verification failed: verify threw — ${err?.message || err} (${JSON.stringify(diag)})`);
@@ -324,6 +330,9 @@ export function useQRAuth({ baseUrl, auto = true }) {
           const verResult = await openpgp.verify({
             message: await openpgp.readMessage({ armoredMessage: testSig }),
             verificationKeys: [serverPubKeyObj],
+            // Same client-clock-skew tolerance as the server-signature check
+            // above (see note there).
+            date: new Date(Date.now() + 60_000),
           });
           const valid = await verResult.signatures[0].verified;
           if (!valid) throw new Error("PGP key mismatch");
