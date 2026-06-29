@@ -1229,6 +1229,11 @@ export function AboutSubScreen({ onBack }) {
     { icon:"📖", label:"GitHub",   url:"https://github.com/Peach2Peach" },
   ];
 
+  const legal = [
+    { icon:"📄", label:"Terms & Conditions", url:"https://peachbitcoin.com/terms-and-conditions/" },
+    { icon:"🔒", label:"Privacy Policy",     url:"https://peachbitcoin.com/privacy-policy/" },
+  ];
+
   return (
     <SubScreenWrapper title="About Peach" onBack={onBack}>
       {/* Branding header */}
@@ -1248,6 +1253,17 @@ export function AboutSubScreen({ onBack }) {
             Buy and sell Bitcoin peer-to-peer. No KYC. No middlemen.
           </p>
         </div>
+      </SettingsSection>
+
+      {/* Legal */}
+      <SettingsSection title="Legal">
+        {legal.map((l, i) => (
+          <SettingsRow key={l.url} icon={l.icon} label={l.label}
+            description={l.url.replace(/^https?:\/\//, "")}
+            right={<IconExternalLink size={14}/>}
+            onClick={() => window.open(l.url, "_blank", "noopener")}
+            noBorder={i === legal.length - 1}/>
+        ))}
       </SettingsSection>
 
       {/* Links */}
