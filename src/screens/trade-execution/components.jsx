@@ -257,23 +257,28 @@ const IconChevronUp = () => (
 // that jumps to the Transaction Batching section of Settings.
 export function BuyerGroupHugDisplay() {
   const navigate = useNavigate();
-  const profile = (typeof window !== "undefined" && window.__PEACH_AUTH__?.profile) || null;
+  const profile =
+    (typeof window !== "undefined" && window.__PEACH_AUTH__?.profile) || null;
   const isOn = !!profile?.isBatchingEnabled;
   const [showInfo, setShowInfo] = useState(false);
 
   return (
     <>
       {showInfo && (
-        <InfoPopup title="How transaction batching works" onClose={() => setShowInfo(false)}>
+        <InfoPopup
+          title="How transaction batching works"
+          onClose={() => setShowInfo(false)}
+        >
           <p className="ip-text">
-            Transaction batching, or Group Hug, means your payout will be batched with other transactions, which allows to reduce transaction fees.
+            Transaction batching, or Group Hug, means your payout will be
+            batched with other transactions, which allows to reduce transaction
+            fees.
           </p>
           <p className="ip-text">
-            Currently there is only one GH per day, which means your payout might take a little longer (up to 24h).
+            Currently there is only one GH per day, which means your payout
+            might take a little longer (up to 24h).
           </p>
-          <p className="ip-text">
-            You can change this on the Settings page.
-          </p>
+          <p className="ip-text">You can change this on the Settings page.</p>
         </InfoPopup>
       )}
       <div
@@ -289,7 +294,9 @@ export function BuyerGroupHugDisplay() {
           gap: 12,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
+        <div
+          style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}
+        >
           <span
             style={{
               fontSize: ".88rem",
@@ -299,9 +306,19 @@ export function BuyerGroupHugDisplay() {
           >
             Batch transaction
           </span>
-          <InfoDot ariaLabel="About transaction batching" onClick={() => setShowInfo(true)} />
+          <InfoDot
+            ariaLabel="About transaction batching"
+            onClick={() => setShowInfo(true)}
+          />
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexShrink: 0,
+          }}
+        >
           <span
             style={{
               padding: "2px 10px",
@@ -319,7 +336,9 @@ export function BuyerGroupHugDisplay() {
           <span style={{ color: "var(--black-25)", fontWeight: 700 }}>·</span>
           <button
             type="button"
-            onClick={() => navigate("/settings", { state: { openSection: "tx-batching" } })}
+            onClick={() =>
+              navigate("/settings", { state: { openSection: "tx-batching" } })
+            }
             style={{
               border: "none",
               background: "transparent",
@@ -359,9 +378,9 @@ export function BuyerPayoutAddressSelect({
 
   const hasSaved = !!savedAddress?.address;
   const customLabel = hasSaved
-    ? (savedAddress.label
-        ? `${savedAddress.label} — ${truncateAddress(savedAddress.address)} (custom)`
-        : `${truncateAddress(savedAddress.address)} (custom)`)
+    ? savedAddress.label
+      ? `${savedAddress.label} — ${truncateAddress(savedAddress.address)} (custom)`
+      : `${truncateAddress(savedAddress.address)} (custom)`
     : null;
   const currentLabel =
     selection === "custom" && hasSaved ? customLabel : "Peach Wallet";
@@ -369,7 +388,8 @@ export function BuyerPayoutAddressSelect({
   useEffect(() => {
     if (!open) return;
     const onDocClick = (e) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+      if (wrapRef.current && !wrapRef.current.contains(e.target))
+        setOpen(false);
     };
     const onKey = (e) => {
       if (e.key === "Escape") setOpen(false);
@@ -395,7 +415,10 @@ export function BuyerPayoutAddressSelect({
   return (
     <>
       {showInfo && (
-        <InfoPopup title="Receive bitcoin to" onClose={() => setShowInfo(false)}>
+        <InfoPopup
+          title="Receive bitcoin to"
+          onClose={() => setShowInfo(false)}
+        >
           <p className="ip-text">
             Choose where to receive the bitcoin from this trade — your in-app
             Peach wallet, or a custom Bitcoin address you've saved in Settings.
@@ -443,7 +466,9 @@ export function BuyerPayoutAddressSelect({
           position: "relative",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
+        <div
+          style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}
+        >
           <span
             style={{
               fontSize: ".88rem",
@@ -565,20 +590,40 @@ export function BuyerPayoutAddressSelect({
 // ─── HORIZONTAL STEPPER (bottom bar) ─────────────────────────────────────────
 const STEPS_BY_ORIGIN = {
   buy: [
-    { id: "fundEscrow",             label: "Accepted",      activeLabel: "Accepted" },
-    { id: "paymentRequired",        label: "Escrow Funded", activeLabel: "Funding Escrow" },
-    { id: "confirmPaymentRequired", label: "Payment Sent",  activeLabel: "Sending Payment" },
-    { id: "tradeCompleted",         label: "Completed",     activeLabel: "Completed" },
+    { id: "fundEscrow", label: "Accepted", activeLabel: "Accepted" },
+    {
+      id: "paymentRequired",
+      label: "Escrow Funded",
+      activeLabel: "Funding Escrow",
+    },
+    {
+      id: "confirmPaymentRequired",
+      label: "Payment Sent",
+      activeLabel: "Sending Payment",
+    },
+    { id: "tradeCompleted", label: "Completed", activeLabel: "Completed" },
   ],
   sell: [
-    { id: "paymentRequired",        label: "Escrow Funded", activeLabel: "Funding Escrow" },
-    { id: "fundEscrow",             label: "Accepted",      activeLabel: "Accepted" },
-    { id: "confirmPaymentRequired", label: "Payment Sent",  activeLabel: "Sending Payment" },
-    { id: "tradeCompleted",         label: "Completed",     activeLabel: "Completed" },
+    {
+      id: "paymentRequired",
+      label: "Escrow Funded",
+      activeLabel: "Funding Escrow",
+    },
+    { id: "fundEscrow", label: "Accepted", activeLabel: "Accepted" },
+    {
+      id: "confirmPaymentRequired",
+      label: "Payment Sent",
+      activeLabel: "Sending Payment",
+    },
+    { id: "tradeCompleted", label: "Completed", activeLabel: "Completed" },
   ],
 };
 
-export function HorizontalStepper({ status, statusWithoutDispute, originOfferType = "buy" }) {
+export function HorizontalStepper({
+  status,
+  statusWithoutDispute,
+  originOfferType = "buy",
+}) {
   const stepMap = {
     // Phase 1: Escrow funding in progress (Accepted milestone reached)
     createEscrow: 1,
@@ -946,9 +991,7 @@ export function CollapsibleAddressSection({
             <div
               style={{
                 color:
-                  warningTone === "success"
-                    ? "var(--success)"
-                    : "var(--error)",
+                  warningTone === "success" ? "var(--success)" : "var(--error)",
                 fontWeight: 600,
                 fontSize: ".78rem",
                 marginBottom: 8,
@@ -2285,7 +2328,12 @@ export function WrongAmountFundedCard({
             </span>
             <SatsAmount sats={expectedSats} size="sm" />
           </div>
-          <div style={{ height: 1, background: "color-mix(in srgb, var(--warning) 14%, transparent)" }} />
+          <div
+            style={{
+              height: 1,
+              background: "color-mix(in srgb, var(--warning) 14%, transparent)",
+            }}
+          />
           <div
             style={{
               display: "flex",
@@ -2502,7 +2550,8 @@ export function SlideToConfirm({
     }
   }
 
-  const progress = confirmed || awaitingMobile ? 1 : pos / Math.max(getMax(), 1);
+  const progress =
+    confirmed || awaitingMobile ? 1 : pos / Math.max(getMax(), 1);
 
   return (
     <div
@@ -2804,7 +2853,7 @@ function SellerPaymentCountdown({ deadline, onExtend }) {
             e.currentTarget.style.transform = "";
           }}
         >
-          ⏱  Extend Deadline (+12h)
+          ⏱ Extend Deadline (+12h)
         </button>
       )}
     </>
@@ -3060,11 +3109,18 @@ export function ActionPanel({
           body={
             <>
               <p style={{ margin: "0 0 12px" }}>
-                Only confirm if you have actually received the fiat payment in your account. You'll be able to rate the buyer once the bitcoin has been released.
+                Only confirm if you have actually received the fiat payment in
+                your account. You'll be able to rate the buyer once the bitcoin
+                has been released.
               </p>
               {scenario.contract?.method?.toLowerCase() === "revolut" && (
                 <p style={{ margin: 0 }}>
-                  <strong style={{ color: "var(--error)" }}>Revolut users:</strong> make sure the buyer has paid through Revtag or IBAN, and NOT through debit/credit card or Apple pay. They payments are reversible.
+                  <strong style={{ color: "var(--error)" }}>
+                    Revolut users:
+                  </strong>{" "}
+                  make sure the buyer has paid through Revtag or IBAN, and NOT
+                  through debit/credit card or Apple pay. They payments are
+                  reversible.
                 </p>
               )}
             </>
@@ -3096,293 +3152,306 @@ export function ActionPanel({
       )}
 
       {(() => {
-      const actionEntries = (
-      <>
-        {/* Buyer waiting for seller to fund escrow */}
-        {(status === "fundEscrow" ||
-          status === "createEscrow" ||
-          status === "waitingForFunding") &&
-          role === "buyer" && (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: 12,
-                padding: "20px 0",
-                textAlign: "center",
-              }}
-            >
-              <div
-                style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: "50%",
-                  background: "var(--warning-soft)",
-                  border: "2px solid var(--warning)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: "1.4rem",
-                }}
-              >
-                ⏳
-              </div>
-              <div style={{ fontWeight: 700, fontSize: ".95rem" }}>
-                Waiting for escrow
-              </div>
-              <div
-                style={{
-                  fontSize: ".83rem",
-                  color: "var(--black-65)",
-                  lineHeight: 1.6,
-                  maxWidth: 280,
-                }}
-              >
-                The seller is funding the escrow. Once the Bitcoin is locked in,
-                the trade will begin and you'll be able to send payment.
-              </div>
-              <div
-                style={{
-                  fontSize: ".85rem",
-                  fontWeight: 700,
-                  color: "var(--black-65)",
-                }}
-              >
-                No actions required for the moment.
-              </div>
-            </div>
-          )}
-
-        {/* Buyer: send payment */}
-        {status === "paymentRequired" && role === "buyer" && (
+        const actionEntries = (
           <>
-            {pendingTask === "confirmPayment" ? (
-              <PendingBtn
-                label="Confirm payment in mobile app"
-                type="paymentMade"
-                actionId={scenario.contract?.mobileActionPaymentMadeWasTriggered}
-              />
-            ) : (
-              <SlideToConfirm
-                key={paymentSliderKey}
-                label="I've sent the payment"
-                onConfirm={() => onAction("payment_sent")}
-                requiresMobileConfirm
-              />
-            )}
-          </>
-        )}
-
-        {/* Seller: waiting for buyer to send payment */}
-        {status === "paymentRequired" && role === "seller" && (
-          <>
-            <SellerPaymentCountdown
-              deadline={scenario.contract.paymentExpectedBy}
-              onExtend={() => onAction("extend_time")}
-            />
-            {/* Greyed-out — seller cannot confirm payment yet */}
-            <SlideToConfirm label="I've received the payment" disabled={true} />
-          </>
-        )}
-
-        {/* Seller: confirm receipt → releases bitcoin */}
-        {(status === "confirmPaymentRequired" || status === "releaseEscrow") &&
-          role === "seller" && (
-            <>
-              {pendingTask === "release" ? (
-                <PendingBtn
-                  label="Confirm release in mobile app"
-                  type="paymentConfirmed"
-                  actionId={scenario.contract?.mobileActionPaymentConfirmedWasTriggered}
-                />
-              ) : (
-                <SlideToConfirm
-                  key={confirmSliderKey}
-                  label="I've received the payment"
-                  onConfirm={() => setShowConfirm(true)}
-                  requiresMobileConfirm
-                />
+            {/* Buyer waiting for seller to fund escrow */}
+            {(status === "fundEscrow" ||
+              status === "createEscrow" ||
+              status === "waitingForFunding") &&
+              role === "buyer" && (
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 12,
+                    padding: "20px 0",
+                    textAlign: "center",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: "50%",
+                      background: "var(--warning-soft)",
+                      border: "2px solid var(--warning)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "1.4rem",
+                    }}
+                  >
+                    ⏳
+                  </div>
+                  <div style={{ fontWeight: 700, fontSize: ".95rem" }}>
+                    Waiting for escrow
+                  </div>
+                  <div
+                    style={{
+                      fontSize: ".83rem",
+                      color: "var(--black-65)",
+                      lineHeight: 1.6,
+                      maxWidth: 280,
+                    }}
+                  >
+                    The seller is funding the escrow. Once the Bitcoin is locked
+                    in, the trade will begin and you'll be able to send payment.
+                  </div>
+                  <div
+                    style={{
+                      fontSize: ".85rem",
+                      fontWeight: 700,
+                      color: "var(--black-65)",
+                    }}
+                  >
+                    No actions required for the moment.
+                  </div>
+                </div>
               )}
+
+            {/* Buyer: send payment */}
+            {status === "paymentRequired" && role === "buyer" && (
+              <>
+                {pendingTask === "confirmPayment" ? (
+                  <PendingBtn
+                    label="Confirm payment in mobile app"
+                    type="paymentMade"
+                    actionId={
+                      scenario.contract?.mobileActionPaymentMadeWasTriggered
+                    }
+                  />
+                ) : (
+                  <SlideToConfirm
+                    key={paymentSliderKey}
+                    label="I've sent the payment"
+                    onConfirm={() => onAction("payment_sent")}
+                    requiresMobileConfirm
+                  />
+                )}
+              </>
+            )}
+
+            {/* Seller: waiting for buyer to send payment */}
+            {status === "paymentRequired" && role === "seller" && (
+              <>
+                <SellerPaymentCountdown
+                  deadline={scenario.contract.paymentExpectedBy}
+                  onExtend={() => onAction("extend_time")}
+                />
+                {/* Greyed-out — seller cannot confirm payment yet */}
+                <SlideToConfirm
+                  label="I've received the payment"
+                  disabled={true}
+                />
+              </>
+            )}
+
+            {/* Seller: confirm receipt → releases bitcoin */}
+            {(status === "confirmPaymentRequired" ||
+              status === "releaseEscrow") &&
+              role === "seller" && (
+                <>
+                  {pendingTask === "release" ? (
+                    <PendingBtn
+                      label="Confirm release in mobile app"
+                      type="paymentConfirmed"
+                      actionId={
+                        scenario.contract
+                          ?.mobileActionPaymentConfirmedWasTriggered
+                      }
+                    />
+                  ) : (
+                    <SlideToConfirm
+                      key={confirmSliderKey}
+                      label="I've received the payment"
+                      onConfirm={() => setShowConfirm(true)}
+                      requiresMobileConfirm
+                    />
+                  )}
+                  <Btn
+                    label="Open Dispute"
+                    bg="var(--error-bg)"
+                    color="var(--error)"
+                    onClick={() => onAction("dispute")}
+                  />
+                </>
+              )}
+
+            {/* Buyer: waiting for seller to confirm payment — status card now
+            rendered above the counterparty card in index.jsx. Dispute button
+            stays here in the actions panel. */}
+            {status === "confirmPaymentRequired" && role === "buyer" && (
               <Btn
                 label="Open Dispute"
                 bg="var(--error-bg)"
                 color="var(--error)"
                 onClick={() => onAction("dispute")}
               />
-            </>
-          )}
+            )}
 
-        {/* Buyer: waiting for seller to confirm payment — status card now
-            rendered above the counterparty card in index.jsx. Dispute button
-            stays here in the actions panel. */}
-        {status === "confirmPaymentRequired" && role === "buyer" && (
-          <Btn
-            label="Open Dispute"
-            bg="var(--error-bg)"
-            color="var(--error)"
-            onClick={() => onAction("dispute")}
-          />
-        )}
-
-        {/* Payout pending — buyer: banner now rendered above the counterparty
+            {/* Payout pending — buyer: banner now rendered above the counterparty
             card in index.jsx so it sits in the trade-details column, not the
             actions column. */}
 
-        {/* Payout pending — seller: trade done, release broadcasting */}
-        {status === "payoutPending" && role === "seller" && (
-          <SuccessBanner
-            title="You're done! Bitcoin released to the buyer."
-            subtitle="The transaction is broadcasting. This may take a few minutes to confirm."
-          />
-        )}
+            {/* Payout pending — seller: trade done, release broadcasting */}
+            {status === "payoutPending" && role === "seller" && (
+              <SuccessBanner
+                title="You're done! Bitcoin released to the buyer."
+                subtitle="The transaction is broadcasting. This may take a few minutes to confirm."
+              />
+            )}
 
-        {/* Payment too late — seller POV. After "Cancel Trade", the contract
+            {/* Payment too late — seller POV. After "Cancel Trade", the contract
             transitions to refundOrReviveRequired (deriveDisplayStatus normalizes
             tradeCanceled too), so the post-cancel UI is rendered by the
             refundOrReviveRequired branch below. */}
-        {/* Payment too late — seller POV: status card now rendered above the
+            {/* Payment too late — seller POV: status card now rendered above the
             counterparty card in index.jsx (status, not action). */}
-        {status === "paymentTooLate" && role === "seller" && (
-          <>
-            <SlideToConfirm
-              label="Cancel Trade"
-              onConfirm={() => onAction("cancel_trade")}
-              confirmedColor="var(--error)"
-            />
-            <SlideToConfirm
-              label="Give More Time"
-              onConfirm={() => onAction("extend_time")}
-            />
-          </>
-        )}
-
-        {/* refundOrReviveRequired — seller POV: status card now rendered above
-            the counterparty card in index.jsx (status, not action). */}
-        {status === "refundOrReviveRequired" &&
-          role === "seller" &&
-          !scenario.revived &&
-          !scenario.refunded && (
-            <>
-              <SlideToConfirm
-                label="Re-publish Offer"
-                onConfirm={() => onAction("republish_offer")}
-                disabled={pendingTask === "refund"}
-              />
-              {pendingTask === "refund" ? (
-                <PendingBtn
-                  label="Confirm refund in mobile app"
-                  type="refundEscrowContract"
-                  actionId={scenario.contract?.mobileActionRefundWasTriggered}
-                />
-              ) : (
+            {status === "paymentTooLate" && role === "seller" && (
+              <>
                 <SlideToConfirm
-                  key={refundSliderKey}
-                  label="Refund Escrow"
-                  onConfirm={() => onAction("refund_escrow")}
-                  requiresMobileConfirm
+                  label="Cancel Trade"
+                  onConfirm={() => onAction("cancel_trade")}
+                  confirmedColor="var(--error)"
                 />
-              )}
-            </>
-          )}
+                <SlideToConfirm
+                  label="Give More Time"
+                  onConfirm={() => onAction("extend_time")}
+                />
+              </>
+            )}
 
-        {/* refundOrReviveRequired — revived / refunded info cards now rendered
+            {/* refundOrReviveRequired — seller POV: status card now rendered above
+            the counterparty card in index.jsx (status, not action). */}
+            {status === "refundOrReviveRequired" &&
+              role === "seller" &&
+              !scenario.revived &&
+              !scenario.refunded && (
+                <>
+                  <SlideToConfirm
+                    label="Re-publish Offer"
+                    onConfirm={() => onAction("republish_offer")}
+                    disabled={pendingTask === "refund"}
+                  />
+                  {pendingTask === "refund" ? (
+                    <PendingBtn
+                      label="Confirm refund in mobile app"
+                      type="refundEscrowContract"
+                      actionId={
+                        scenario.contract?.mobileActionRefundWasTriggered
+                      }
+                    />
+                  ) : (
+                    <SlideToConfirm
+                      key={refundSliderKey}
+                      label="Refund Escrow"
+                      onConfirm={() => onAction("refund_escrow")}
+                      requiresMobileConfirm
+                    />
+                  )}
+                </>
+              )}
+
+            {/* refundOrReviveRequired — revived / refunded info cards now rendered
             above the counterparty card in index.jsx (status, not action). */}
 
-        {/* refundTxSignatureRequired — seller must sign the refund tx from
+            {/* refundTxSignatureRequired — seller must sign the refund tx from
             mobile. Status card now rendered above the counterparty card in
             index.jsx (status, not action). */}
-        {status === "refundTxSignatureRequired" && role === "seller" && (
-          <>
-            {pendingTask === "refund" ? (
-              <PendingBtn
-                label="Confirm refund in mobile app"
-                type="refundEscrowContract"
-                actionId={scenario.contract?.mobileActionRefundWasTriggered}
-              />
-            ) : (
-              <SlideToConfirm
-                key={refundSliderKey}
-                label="Sign Refund with mobile app"
-                onConfirm={() => onAction("refund_escrow")}
-                requiresMobileConfirm
-              />
+            {status === "refundTxSignatureRequired" && role === "seller" && (
+              <>
+                {pendingTask === "refund" ? (
+                  <PendingBtn
+                    label="Confirm refund in mobile app"
+                    type="refundEscrowContract"
+                    actionId={scenario.contract?.mobileActionRefundWasTriggered}
+                  />
+                ) : (
+                  <SlideToConfirm
+                    key={refundSliderKey}
+                    label="Sign Refund with mobile app"
+                    onConfirm={() => onAction("refund_escrow")}
+                    requiresMobileConfirm
+                  />
+                )}
+              </>
             )}
-          </>
-        )}
 
-        {/* Payment too late — buyer POV: status card now rendered above the
+            {/* Payment too late — buyer POV: status card now rendered above the
             counterparty card in index.jsx (status, not action). */}
 
-        {/* Trade cancelled — final state. Status card now rendered above the
+            {/* Trade cancelled — final state. Status card now rendered above the
             counterparty card in index.jsx (status, not action). */}
-        {(status === "tradeCanceled" || status === "confirmCancelation") &&
-          scenario.revived &&
-          role === "seller" &&
-          scenario.newOfferId && (
-            <Btn
-              label="Go to new trade"
-              bg="var(--primary-bg)"
-              color="var(--primary)"
-              onClick={() =>
-                onAction("go_to_new_offer", scenario.newOfferId)
-              }
-            />
-          )}
+            {(status === "tradeCanceled" || status === "confirmCancelation") &&
+              scenario.revived &&
+              role === "seller" &&
+              scenario.newOfferId && (
+                <Btn
+                  label="Go to new trade"
+                  bg="var(--primary-bg)"
+                  color="var(--primary)"
+                  onClick={() =>
+                    onAction("go_to_new_offer", scenario.newOfferId)
+                  }
+                />
+              )}
 
-        {/* Dispute states — DisputeBanner now rendered above the counterparty
+            {/* Dispute states — DisputeBanner now rendered above the counterparty
             card in index.jsx (status, not action). */}
 
-        {/* Cancel trade — available during active trade phases for buyer only (seller cancels at offer level or via dispute) */}
-        {[
-          "paymentRequired",
-          "fundEscrow",
-          "createEscrow",
-          "waitingForFunding",
-          "escrowWaitingForConfirmation",
-        ].includes(status) &&
-          role === "buyer" &&
-          !scenario.disputeActive && (
-            <Btn
-              label="Cancel Trade"
-              bg="var(--error-bg)"
-              color="var(--error)"
-              onClick={() => setShowCancelConfirm(true)}
-            />
-          )}
-      </>
-      );
-      const renderedActions = Children.toArray(actionEntries.props.children).filter(Boolean);
-      const isExempt =
-        status === "rateUser" ||
-        status === "tradeCompleted" ||
-        (role === "seller" &&
-          [
-            "fundEscrow",
-            "createEscrow",
-            "waitingForFunding",
-            "fundingAmountDifferent",
-            "wrongAmountFundedOnContract",
-            "wrongAmountFundedOnContractRefundWaiting",
-          ].includes(status));
-      const showEmptyPlaceholder = !isExempt && renderedActions.length === 0;
-      return (
-        <div className="action-panel">
-          {showEmptyPlaceholder && (
-            <div
-              style={{
-                fontSize: ".85rem",
-                fontWeight: 700,
-                color: "var(--black-65)",
-                padding: "4px 0",
-              }}
-            >
-              No actions required for the moment.
-            </div>
-          )}
-          {actionEntries}
-        </div>
-      );
+            {/* Cancel trade — available during active trade phases for buyer only (seller cancels at offer level or via dispute) */}
+            {[
+              "paymentRequired",
+              "fundEscrow",
+              "createEscrow",
+              "waitingForFunding",
+              "escrowWaitingForConfirmation",
+            ].includes(status) &&
+              role === "buyer" &&
+              !scenario.disputeActive && (
+                <Btn
+                  label="Cancel Trade"
+                  bg="var(--error-bg)"
+                  color="var(--error)"
+                  onClick={() => setShowCancelConfirm(true)}
+                />
+              )}
+          </>
+        );
+        const renderedActions = Children.toArray(
+          actionEntries.props.children,
+        ).filter(Boolean);
+        const isExempt =
+          status === "rateUser" ||
+          status === "tradeCompleted" ||
+          (role === "seller" &&
+            [
+              "fundEscrow",
+              "createEscrow",
+              "waitingForFunding",
+              "fundingAmountDifferent",
+              "wrongAmountFundedOnContract",
+              "wrongAmountFundedOnContractRefundWaiting",
+            ].includes(status));
+        const showEmptyPlaceholder = !isExempt && renderedActions.length === 0;
+        return (
+          <div className="action-panel">
+            {showEmptyPlaceholder && (
+              <div
+                style={{
+                  fontSize: ".85rem",
+                  fontWeight: 700,
+                  color: "var(--black-65)",
+                  padding: "4px 0",
+                }}
+              >
+                No actions required for the moment.
+              </div>
+            )}
+            {actionEntries}
+          </div>
+        );
       })()}
     </>
   );
@@ -3494,7 +3563,12 @@ export function RatingPanel({ counterparty, onRate }) {
 }
 
 // ─── TRADE COMPLETE MODAL ─────────────────────────────────────────────────────
-export function TradeCompleteModal({ role, counterpartyName, onRate, onClose }) {
+export function TradeCompleteModal({
+  role,
+  counterpartyName,
+  onRate,
+  onClose,
+}) {
   const [rating, setRating] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -3533,7 +3607,9 @@ export function TradeCompleteModal({ role, counterpartyName, onRate, onClose }) 
 
         {!submitted ? (
           <>
-            <div className="tc-icon" aria-hidden="true">✓</div>
+            <div className="tc-icon" aria-hidden="true">
+              ✓
+            </div>
             <div className="tc-headline">Trade Complete!</div>
             <div className="tc-sub">
               {role === "buyer"
@@ -3579,7 +3655,9 @@ export function TradeCompleteModal({ role, counterpartyName, onRate, onClose }) 
           </>
         ) : (
           <div className="tc-thanks">
-            <div className="tc-checkmark" aria-hidden="true">✓</div>
+            <div className="tc-checkmark" aria-hidden="true">
+              ✓
+            </div>
             <div>Thanks!</div>
           </div>
         )}
@@ -3665,11 +3743,7 @@ export function BatchInfoModal({
             )}
 
             {typeof onAccelerate === "function" && (
-              <button
-                type="button"
-                className="bi-accel"
-                onClick={onAccelerate}
-              >
+              <button type="button" className="bi-accel" onClick={onAccelerate}>
                 Accelerate payout in settings
               </button>
             )}
@@ -4047,10 +4121,10 @@ export function ChatPanel({
           }
           const isMe = msg.from === "me";
           // Only flag messages from the counterparty (not the logged-in user),
-          // and only when that counterparty is the seller — i.e. we are the buyer.
+          // and only when that counterparty is the buyer — i.e. we are the seller.
           const isSuspicious =
             !isMe &&
-            role === "buyer" &&
+            role === "seller" &&
             typeof msg.text === "string" &&
             msg.text.toLowerCase().includes("veem");
           return (
