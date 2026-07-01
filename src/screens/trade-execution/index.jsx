@@ -387,8 +387,10 @@ const CSS = `
     background:var(--black-5);border-bottom:1px solid var(--black-10);
     font-size:.7rem;font-weight:600;color:var(--black-65);flex-shrink:0;font-family:monospace}
   .chat-messages{flex:1;overflow-y:auto;padding:20px 18px;display:flex;flex-direction:column;gap:10px}
-  .chat-bubble-row{display:flex}
+  .chat-bubble-row{display:flex;flex-wrap:wrap}
   .chat-bubble-row-me{justify-content:flex-end}
+  .chat-scam-warning{flex:0 0 100%;margin-top:4px;font-size:.72rem;font-weight:600;color:var(--error);text-align:left}
+  .chat-bubble-row-me .chat-scam-warning{text-align:right}
   .chat-bubble{max-width:72%;border-radius:14px;padding:9px 13px;line-height:1.5}
   .chat-bubble-me{background:var(--grad);color:white;border-bottom-right-radius:4px}
   .chat-bubble-them{background:var(--surface);border:1px solid var(--black-10);color:var(--black);border-bottom-left-radius:4px}
@@ -1182,6 +1184,10 @@ export default function TradeExecution() {
             ratingSeller: c.ratingSeller ?? null,
             buyOffer69Id: c.buyOffer69Id ?? null,
             batchInfo: c.batchInfo ?? null,
+            mobileActionPaymentMadeWasTriggered:
+              c.mobileActionPaymentMadeWasTriggered ?? null,
+            mobileActionPaymentConfirmedWasTriggered:
+              c.mobileActionPaymentConfirmedWasTriggered ?? null,
           },
           counterparty: (() => {
             const cp = isBuyer ? (c.seller ?? {}) : (c.buyer ?? {});
@@ -3201,6 +3207,7 @@ export default function TradeExecution() {
                 <ChatPanel
                   messages={messages}
                   counterpartyPeachId={counterparty.name}
+                  role={role}
                   disabled={
                     status === "fundEscrow" ||
                     status === "createEscrow" ||

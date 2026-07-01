@@ -3823,6 +3823,7 @@ export function ChatPanel({
   loadingMore,
   onLoadOlder,
   counterpartyPeachId,
+  role,
 }) {
   const disputeOpen =
     status === "dispute" || status === "disputeWithoutEscrowFunded";
@@ -4045,6 +4046,13 @@ export function ChatPanel({
             );
           }
           const isMe = msg.from === "me";
+          // Only flag messages from the counterparty (not the logged-in user),
+          // and only when that counterparty is the seller — i.e. we are the buyer.
+          const isSuspicious =
+            !isMe &&
+            role === "buyer" &&
+            typeof msg.text === "string" &&
+            msg.text.toLowerCase().includes("veem");
           return (
             <div
               key={msg.id}
@@ -4067,6 +4075,12 @@ export function ChatPanel({
                   )}
                 </div>
               </div>
+              {isSuspicious && (
+                <div className="chat-scam-warning">
+                  This message looks suspicious. Scammers ask for alternative
+                  payment methods.
+                </div>
+              )}
             </div>
           );
         })}
