@@ -16,6 +16,7 @@ import {
   encryptSymmetric,
   signPGPMessage,
   encryptForPublicKey,
+  verifyPaymentDataHashes,
 } from "../../utils/pgp.js";
 import {
   satsToFiat,
@@ -983,6 +984,7 @@ export default function TradeExecution() {
     counterparty: null,
     paymentDetails: null,
     paymentDetailsError: null,
+    paymentDetailsHashMismatch: false,
     ownPaymentDetails: null,
   };
   const {
@@ -993,6 +995,7 @@ export default function TradeExecution() {
     role,
     paymentDetails,
     paymentDetailsError,
+    paymentDetailsHashMismatch,
     ownPaymentDetails,
   } = scenario;
   const messages = (() => {
@@ -1260,6 +1263,12 @@ export default function TradeExecution() {
         const ownEncryptedPM = isBuyer
           ? c.buyerPaymentDataEncrypted
           : c.paymentDataEncrypted;
+        // Hashes the counterparty committed to: seller's live in hashedPaymentData,
+        // buyer's in buyerHashedPaymentData. We recompute from the decrypted PM
+        // below and flag a mismatch (someone submitted the wrong hashes).
+        const counterpartyHashed = isBuyer
+          ? c.hashedPaymentData
+          : c.buyerHashedPaymentData;
         const symKeyEnc = c.symmetricKeyEncrypted;
 
         // Decrypt symmetric key (needed for both PM data and chat)
@@ -1303,8 +1312,20 @@ export default function TradeExecution() {
         if (encryptedPM) {
           const pmData = await decryptPM(encryptedPM);
           if (pmData) {
+            // verifyPaymentDataHashes returns false only on a confident mismatch;
+            // null (missing/unparseable hashes) must NOT raise a false alarm.
+            const hashCheck = await verifyPaymentDataHashes(
+              pmData,
+              counterpartyHashed,
+            );
             setLiveContract((prev) =>
-              prev ? { ...prev, paymentDetails: pmData } : prev,
+              prev
+                ? {
+                    ...prev,
+                    paymentDetails: pmData,
+                    paymentDetailsHashMismatch: hashCheck === false,
+                  }
+                : prev,
             );
           } else {
             setLiveContract((prev) =>
@@ -2542,6 +2563,31 @@ export default function TradeExecution() {
                               ? "Make sure to include the reference with your payment"
                               : "Please, ensure that the origin of the payment matches with the payment data provided by your counterparty."}
                           </p>
+                        )}
+                        {paymentDetailsHashMismatch && (
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "flex-start",
+                              gap: 8,
+                              padding: "10px 12px",
+                              marginBottom: 10,
+                              borderRadius: 10,
+                              background: "var(--error-bg)",
+                              border: "1px solid var(--error)",
+                              color: "var(--error)",
+                              fontSize: ".83rem",
+                              fontWeight: 600,
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            <IconAlert />
+                            <span>
+                              The {role === "buyer" ? "seller" : "buyer"} has
+                              suspicious payment details. In case of doubt,
+                              contact Peach Customer Support and don't trade.
+                            </span>
+                          </div>
                         )}
                         <PaymentDetailsCard
                           details={paymentDetails}

@@ -251,6 +251,120 @@ export async function hashPaymentFields(methodType, pmData, country) {
 }
 
 /**
+ * Pull the flat array of committed hash hex strings out of the many shapes a
+ * contract's hashedPaymentData / buyerHashedPaymentData can take. Observed in
+ * the wild:
+ *   { wise: { hashes: [...] } }        — canonical, keyed by payment-method type
+ *   { hashes: [...] }                  — already unwrapped
+ *   ["hash", ...] | "hash"             — bare array / single hash
+ *   '{"wise":{"hashes":[...]}}'        — JSON string of any of the above
+ *   ['{"wise":{"hashes":[...]}}']      — ARRAY of JSON strings (real buyer data)
+ *
+ * Strategy: recursively walk the value, parsing embedded JSON strings and
+ * flattening arrays, collecting (a) every method-keyed hashes object and
+ * (b) any bare hex-hash strings. Prefer the hashes recorded under the
+ * contract's own payment method so a counterparty who committed several PMs
+ * doesn't drag in hashes for a method this contract doesn't use.
+ *
+ * Returns an array of hash strings, or null if none could be extracted.
+ */
+function extractCommittedHashes(data, methodType) {
+  const objects = [];
+  const bareHashes = [];
+  const walk = (node) => {
+    if (!node) return;
+    if (typeof node === "string") {
+      const s = node.trim();
+      if (s.startsWith("{") || s.startsWith("[")) {
+        try {
+          walk(JSON.parse(s));
+        } catch {
+          /* not JSON — ignore */
+        }
+      } else if (s) {
+        // A non-JSON, non-empty string is a committed hash value. Do NOT
+        // require valid hex: a tampered/wrong hash (e.g. "zzb539…") must still
+        // be captured so the comparison can flag the mismatch.
+        bareHashes.push(s);
+      }
+      return;
+    }
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+      return;
+    }
+    if (typeof node === "object") objects.push(node);
+  };
+  walk(data);
+
+  const asHashes = (v) =>
+    Array.isArray(v?.hashes) ? v.hashes.filter((h) => typeof h === "string") : null;
+
+  // Prefer hashes recorded under the contract's payment method.
+  if (methodType) {
+    for (const n of objects) {
+      const h = asHashes(n[methodType]);
+      if (h) return h;
+    }
+  }
+  // Else an already-unwrapped { hashes: [...] }.
+  for (const n of objects) {
+    const h = asHashes(n);
+    if (h) return h;
+  }
+  // Else the first nested value that carries a hashes array.
+  for (const n of objects) {
+    for (const v of Object.values(n)) {
+      const h = asHashes(v);
+      if (h) return h;
+    }
+  }
+  return bareHashes.length ? bareHashes : null;
+}
+
+/**
+ * Verify that decrypted counterparty payment details match the hashes the
+ * counterparty committed to on the contract (contract.hashedPaymentData for the
+ * seller, contract.buyerHashedPaymentData for the buyer).
+ *
+ * Recomputes the SHA-256 field hashes from the revealed payment data via
+ * hashPaymentFields() — the exact same routine the counterparty used when they
+ * committed — and compares them, as a set, against the committed hashes. A
+ * mismatch means the counterparty revealed different details than they
+ * committed to, which is a scam signal.
+ *
+ * Returns:
+ *   true  — hashes match (all good)
+ *   false — confident mismatch (caller should warn)
+ *   null  — cannot determine (missing/unparseable hashes) → do NOT warn
+ */
+export async function verifyPaymentDataHashes(paymentDetails, committedHashedData) {
+  try {
+    if (!paymentDetails || typeof paymentDetails !== "object") return null;
+    const methodType = paymentDetails.type;
+    const committed = extractCommittedHashes(committedHashedData, methodType);
+    if (!committed || committed.length === 0) return null;
+
+    const computedObj = await hashPaymentFields(
+      methodType,
+      paymentDetails,
+      paymentDetails.country || undefined,
+    );
+    const computed = computedObj?.[methodType]?.hashes ?? [];
+    if (computed.length === 0) return null;
+
+    const committedSet = new Set(committed.map((h) => String(h).toLowerCase()));
+    const computedSet = new Set(computed.map((h) => String(h).toLowerCase()));
+    if (committedSet.size !== computedSet.size) return false;
+    for (const h of computedSet) if (!committedSet.has(h)) return false;
+    return true;
+  } catch (err) {
+    console.warn("[PGP] verifyPaymentDataHashes failed:", err.message);
+    return null;
+  }
+}
+
+/**
  * Detect API error responses that come back as 200 with an error body
  * (e.g. {"error": "forbidden"}). These should not be treated as PM data.
  */
