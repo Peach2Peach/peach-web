@@ -50,10 +50,13 @@ const CSS = `
     color:var(--primary);margin-bottom:12px}
 
   .ou-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .ou-stats.is-3{grid-template-columns:repeat(3,1fr)}
   .ou-stat{background:var(--black-5);border-radius:10px;padding:12px;text-align:center}
   .ou-stat-val{font-size:1.15rem;font-weight:800;color:var(--black);line-height:1.2}
   .ou-stat-lbl{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
     color:var(--black-65);margin-top:3px}
+  .ou-substat-lbl{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+    color:var(--black-65);margin-top:16px;margin-bottom:8px}
 
   .ou-meta-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px 24px}
   .ou-meta-row .lbl{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
@@ -355,14 +358,10 @@ export default function OtherUserPage() {
                 {/* Stats */}
                 <div className="ou-card">
                   <div className="ou-card-title">Trading Stats</div>
-                  <div className="ou-stats">
+                  <div className="ou-stats is-3">
                     <div className="ou-stat">
                       <div className="ou-stat-val">{user?.trades ?? 0}</div>
                       <div className="ou-stat-lbl">Trades</div>
-                    </div>
-                    <div className="ou-stat">
-                      <div className="ou-stat-val">{user?.openedTrades ?? 0}</div>
-                      <div className="ou-stat-lbl">Opened</div>
                     </div>
                     <div className="ou-stat">
                       <div className="ou-stat-val">{user?.canceledTrades ?? 0}</div>
@@ -375,8 +374,24 @@ export default function OtherUserPage() {
                       <div className="ou-stat-lbl">Disputes</div>
                     </div>
                   </div>
-                  <div style={{marginTop:10,fontSize:".75rem",color:"var(--black-65)"}}>
-                    Disputes: {disputes.opened} opened · {disputes.won} won · {disputes.lost} lost · {disputes.resolved} resolved
+                  <div className="ou-substat-lbl">Disputes</div>
+                  <div className="ou-stats">
+                    <div className="ou-stat">
+                      <div className="ou-stat-val" style={{color:"var(--primary)"}}>{disputes.opened}</div>
+                      <div className="ou-stat-lbl">Opened</div>
+                    </div>
+                    <div className="ou-stat">
+                      <div className="ou-stat-val" style={{color:"var(--success)"}}>{disputes.won}</div>
+                      <div className="ou-stat-lbl">Won</div>
+                    </div>
+                    <div className="ou-stat">
+                      <div className="ou-stat-val" style={{color:"var(--error)"}}>{disputes.lost}</div>
+                      <div className="ou-stat-lbl">Lost</div>
+                    </div>
+                    <div className="ou-stat">
+                      <div className="ou-stat-val" style={{color:"var(--black-65)"}}>{disputes.resolved}</div>
+                      <div className="ou-stat-lbl">Resolved</div>
+                    </div>
                   </div>
                 </div>
 
