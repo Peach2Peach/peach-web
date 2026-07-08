@@ -36,21 +36,13 @@ export async function computeReturnAddressBaseIndex(auth, get) {
     ...(Array.isArray(historySell) ? historySell.filter((o) => o.type === "ask") : []),
   ];
   if (allPastSellOffers.some((o) => o?.returnAddress)) {
-    const index = allPastSellOffers.reduce((n, o) => {
+    return allPastSellOffers.reduce((n, o) => {
       const addr = o?.returnAddress;
       return addr && isReturnAddressFromXpub(auth.xpub, addr, 1000) ? n + 1 : n;
     }, 0);
-    console.log(
-      `[ReturnAddr] Next return address index: ${index} (from ${allPastSellOffers.length} past sell offers) → path m/84'/coin'/0'/1/${index}`,
-    );
-    return index;
   }
   console.warn(
     "[ReturnAddr] No returnAddress on past offers — falling back to total count",
   );
-  const index = allPastSellOffers.length;
-  console.log(
-    `[ReturnAddr] Next return address index (fallback): ${index} → path m/84'/coin'/0'/1/${index}`,
-  );
-  return index;
+  return allPastSellOffers.length;
 }
