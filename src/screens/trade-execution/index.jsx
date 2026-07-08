@@ -24,6 +24,7 @@ import {
   toPeaches,
 } from "../../utils/format.js";
 import { deriveEscrowPubKey, deriveReturnAddress } from "../../utils/escrow.js";
+import { computeReturnAddressBaseIndex } from "../../utils/returnAddressIndex.js";
 import { getEsploraBaseUrl } from "../../utils/esplora.js";
 import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 import { extractCustomRefundAddressFromProfile } from "../../utils/customRefundAddressSync.js";
@@ -764,7 +765,13 @@ export default function TradeExecution() {
           auth.multisigXpub,
           Number(offerId),
         );
-        const returnAddress = deriveReturnAddress(auth.xpub, Number(offerId));
+        // The escrow pubkey path is /3/{offerId} (a Peach-coordinated scheme),
+        // but the return address must land on the standard change chain within
+        // the wallet's gap limit. Use the same contiguous-index accounting as
+        // sell-offer creation instead of the raw offerId, which would fall far
+        // past the gap and be undiscoverable by the watch-only scanner.
+        const returnIdx = await computeReturnAddressBaseIndex(auth, get);
+        const returnAddress = deriveReturnAddress(auth.xpub, returnIdx);
         const res = await post(`/offer/${offerId}/escrow`, {
           publicKey: pubKeyHex,
           returnAddress,

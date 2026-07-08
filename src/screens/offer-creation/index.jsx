@@ -14,7 +14,8 @@ import { useMeetupEvents } from "../../hooks/useMeetupEvents.js";
 import { addPendingEscrow, removePendingEscrow, addEscrowFundedNotification, markWrongAmountShown } from "../../hooks/useNotifications.js";
 import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 import { isApiError, hashPaymentFields, encryptForPublicKey, encryptPGPMessage, signPGPMessage } from "../../utils/pgp.js";
-import { deriveEscrowPubKey, deriveReturnAddress, isReturnAddressFromXpub } from "../../utils/escrow.js";
+import { deriveEscrowPubKey, deriveReturnAddress } from "../../utils/escrow.js";
+import { computeReturnAddressBaseIndex } from "../../utils/returnAddressIndex.js";
 import { validateBtcAddress } from "../../peach-validators.js";
 import { QRCodeSVG } from "qrcode.react";
 import { SAT, fmt, satsToFiatRaw as satsToFiat, fmtFiat as fmtEur, formatTradeId, truncateAddress, hasPrice, PRICE_PLACEHOLDER } from "../../utils/format.js";
@@ -935,31 +936,11 @@ export default function OfferCreation({ initialType="buy" }) {
           }
           const { meansOfPayment, paymentData } = await buildPaymentPayload(serverPGPKey, { requireInstant: form.instantMatch });
 
-          // 1. Derive base return address index — count only past offers whose returnAddress was derived from this xpub.
-          // External-address offers don't consume an `m/84'/.../1/N` slot, so they shouldn't bump the counter.
-          const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
-          const hdrs = { Authorization: `Bearer ${auth.token}` };
-          const [ownOffersRes, historySellRes] = await Promise.all([
-            fetchWithSessionCheck(`${v069Base}/user/${auth.peachId}/offers`, { headers: hdrs }),
-            get('/offers/summary'),
-          ]);
-          const ownOffersData = await ownOffersRes.json().catch(() => ({}));
-          const historySell = await historySellRes.json().catch(()=>[]);
-          const activeSell = ownOffersData?.sellOffers ?? [];
-          const allPastSellOffers = [
-            ...activeSell,
-            ...(Array.isArray(historySell) ? historySell.filter(o => o.type === "ask") : []),
-          ];
-          let baseAddrIdx;
-          if (allPastSellOffers.some(o => o?.returnAddress)) {
-            baseAddrIdx = allPastSellOffers.reduce((n, o) => {
-              const addr = o?.returnAddress;
-              return addr && isReturnAddressFromXpub(auth.xpub, addr, 1000) ? n + 1 : n;
-            }, 0);
-          } else {
-            console.warn("[OfferCreation] No returnAddress on past offers — falling back to total count");
-            baseAddrIdx = allPastSellOffers.length;
-          }
+          // Derive base return address index — the next contiguous change-chain
+          // slot, counting only past offers whose returnAddress derives from this
+          // xpub (external/saved addresses don't consume a slot). Shared with the
+          // contract-escrow path so both draw from one gap-limit-safe range.
+          const baseAddrIdx = await computeReturnAddressBaseIndex(auth, get);
 
           const count = multiEnabled ? multiCount : 1;
 
@@ -1229,30 +1210,9 @@ export default function OfferCreation({ initialType="buy" }) {
       setPublishError(e.message || "Couldn't prepare instant offer");
       return;
     }
-    // Re-derive base index — count existing offers now (which includes the ones that succeeded earlier)
-    const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
-    const hdrs = { Authorization: `Bearer ${auth.token}` };
-    const [ownOffersRes, historySellRes] = await Promise.all([
-      fetchWithSessionCheck(`${v069Base}/user/${auth.peachId}/offers`, { headers: hdrs }),
-      get('/offers/summary'),
-    ]);
-    const ownOffersData = await ownOffersRes.json().catch(()=>({}));
-    const historySell = await historySellRes.json().catch(()=>[]);
-    const activeSellRetry = ownOffersData?.sellOffers ?? [];
-    const allPastSellOffersRetry = [
-      ...activeSellRetry,
-      ...(Array.isArray(historySell) ? historySell.filter(o => o.type === "ask") : []),
-    ];
-    let nextIdx;
-    if (allPastSellOffersRetry.some(o => o?.returnAddress)) {
-      nextIdx = allPastSellOffersRetry.reduce((n, o) => {
-        const addr = o?.returnAddress;
-        return addr && isReturnAddressFromXpub(auth.xpub, addr, 1000) ? n + 1 : n;
-      }, 0);
-    } else {
-      console.warn("[OfferCreation] No returnAddress on past offers (retry path) — falling back to total count");
-      nextIdx = allPastSellOffersRetry.length;
-    }
+    // Re-derive base index — counts existing offers now, including any that
+    // succeeded earlier in this session (same accounting as the initial path).
+    let nextIdx = await computeReturnAddressBaseIndex(auth, get);
 
     const updated = [...multiResults];
     for(const idx of failedIdxs){
