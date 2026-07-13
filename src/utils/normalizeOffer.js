@@ -19,6 +19,8 @@ export function normalizeOffer(o, typeHint, viewerPeachId) {
     type: o.type ?? typeHint,
     amount: o.amountSats ?? (Array.isArray(o.amount) ? o.amount[0] : (o.amount ?? 0)),
     premium: o.premium ?? 0,
+    fixedPrice: o.fixedPrice ?? null,
+    fixedPriceCurrency: o.fixedPriceCurrency ?? null,
     methods,
     currencies,
     rep: toPeaches(o.user?.rating ?? 0),

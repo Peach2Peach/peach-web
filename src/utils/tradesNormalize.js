@@ -57,6 +57,8 @@ export function normalizeOffer(o, { allPrices = null } = {}) {
     direction: isBuy ? "buy" : "sell",
     amount: amt,
     premium: o.premium ?? 0,
+    fixedPrice: o.fixedPrice ?? null,
+    fixedPriceCurrency: o.fixedPriceCurrency ?? null,
     fiatAmount,
     currency,
     prices: pricesObj,

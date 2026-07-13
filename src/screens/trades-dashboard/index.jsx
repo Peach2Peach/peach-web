@@ -1283,6 +1283,8 @@ export default function TradesDashboard() {
   const [canceledOfferDetails, setCanceledOfferDetails] = useState(null); // /offer/:id/details for canceled popup
   const [odEditingPremium, setOdEditingPremium] = useState(false);
   const [odEditPremiumVal, setOdEditPremiumVal] = useState("");
+  const [odEditingFixedPrice, setOdEditingFixedPrice] = useState(false);
+  const [odEditFixedPriceVal, setOdEditFixedPriceVal] = useState("");
   const [odEditSaving, setOdEditSaving] = useState(false);
   const [odEditError, setOdEditError] = useState(null);
   const [odWithdrawConfirm, setOdWithdrawConfirm] = useState(false);
@@ -1313,6 +1315,7 @@ export default function TradesDashboard() {
 
   function openOfferDetail(offer) {
     setOdEditingPremium(false);
+    setOdEditingFixedPrice(false);
     setOdEditError(null);
     setOdWithdrawConfirm(false);
     setOdWithdrawError(null);
@@ -1322,6 +1325,7 @@ export default function TradesDashboard() {
   function closeOfferDetail() {
     setOfferDetailPopup(null);
     setOdEditingPremium(false);
+    setOdEditingFixedPrice(false);
     setOdEditError(null);
     setOdWithdrawConfirm(false);
     setOdWithdrawError(null);
@@ -1507,6 +1511,47 @@ export default function TradesDashboard() {
       );
       setOdEditingPremium(false);
       setToast("Premium updated");
+      setToastTone("success");
+      setTimeout(() => { setToast(null); setToastTone("default"); }, 3000);
+    } catch (err) {
+      setOdEditError(err.message || "Failed to save");
+    } finally {
+      setOdEditSaving(false);
+    }
+  }
+
+  // Fixed-price edit — sell offers only. Sends the absolute price the seller is
+  // paid (the "you receive" total) + its currency, and NO premium (mutually
+  // exclusive on the offer). Sell offers PATCH the v1 /offer/:id endpoint.
+  async function handleSaveOfferFixedPrice(offer, currency) {
+    const val = parseFloat(odEditFixedPriceVal);
+    if (isNaN(val) || val <= 0) {
+      setOdEditError("Enter a valid number");
+      return;
+    }
+    const rounded = Math.round(val * 100) / 100;
+    setOdEditSaving(true);
+    setOdEditError(null);
+    try {
+      // fixedPriceCurrency is immutable — only the price itself is patched.
+      const res = await patch(`/offer/${offer.id}`, { fixedPrice: rounded });
+      if (!res.ok) {
+        const d = await res.json().catch(() => null);
+        throw new Error(d?.error || d?.message || `Server error ${res.status}`);
+      }
+      const patchOffer = (o) =>
+        String(o.id) === String(offer.id)
+          ? { ...o, fixedPrice: rounded, fixedPriceCurrency: currency }
+          : o;
+      setOfferDetailPopup((prev) =>
+        prev ? { ...prev, fixedPrice: rounded, fixedPriceCurrency: currency } : prev,
+      );
+      setOfferDetails((prev) =>
+        prev ? { ...prev, fixedPrice: rounded, fixedPriceCurrency: currency } : prev,
+      );
+      setLivePending((prev) => prev?.map(patchOffer));
+      setOdEditingFixedPrice(false);
+      setToast("Fixed price updated");
       setToastTone("success");
       setTimeout(() => { setToast(null); setToastTone("default"); }, 3000);
     } catch (err) {
@@ -2525,6 +2570,13 @@ export default function TradesDashboard() {
           const o = offerDetailPopup;
           const isBuy = o.direction === "buy";
 
+          // Fixed-price offers (sell only) carry an absolute price instead of a
+          // premium. Value may arrive on the offer object or the /details body.
+          const fixedPrice = o.fixedPrice ?? offerDetails?.fixedPrice ?? null;
+          const fixedPriceCurrency =
+            o.fixedPriceCurrency ?? offerDetails?.fixedPriceCurrency ?? o.currency ?? selectedCurrency;
+          const hasFixedPrice = !isBuy && fixedPrice != null;
+
           const fundingConfs =
             typeof offerDetails?.funding?.confirmations === "number"
               ? offerDetails.funding.confirmations
@@ -2657,7 +2709,9 @@ export default function TradesDashboard() {
                     </span>
                   </div>
                   <div className="offer-detail-row">
-                    <span className="offer-detail-label">Premium</span>
+                    <span className="offer-detail-label">
+                      {hasFixedPrice ? "Fixed price" : "Premium"}
+                    </span>
                     <span
                       className="offer-detail-value"
                       style={{
@@ -2670,8 +2724,13 @@ export default function TradesDashboard() {
                         <button
                           type="button"
                           onClick={() => {
-                            setOdEditPremiumVal(String(o.premium ?? 0));
-                            setOdEditingPremium(true);
+                            if (hasFixedPrice) {
+                              setOdEditFixedPriceVal(String(fixedPrice ?? ""));
+                              setOdEditingFixedPrice(true);
+                            } else {
+                              setOdEditPremiumVal(String(o.premium ?? 0));
+                              setOdEditingPremium(true);
+                            }
                             setOdEditError(null);
                           }}
                           style={{
@@ -2705,23 +2764,31 @@ export default function TradesDashboard() {
                           Edit
                         </button>
                       )}
-                      <span
-                        style={{
-                          color:
-                            (o.premium ?? 0) > 0
-                              ? "var(--success, var(--success))"
-                              : (o.premium ?? 0) < 0
-                                ? "var(--error)"
-                                : "var(--black)",
-                        }}
-                      >
-                        {(o.premium ?? 0) > 0 ? "+" : ""}
-                        {(o.premium ?? 0).toFixed(1)}%
-                      </span>
+                      {hasFixedPrice ? (
+                        <span style={{ fontWeight: 800 }}>
+                          {fixedPriceCurrency} {fmtFiat(fixedPrice)}
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            color:
+                              (o.premium ?? 0) > 0
+                                ? "var(--success, var(--success))"
+                                : (o.premium ?? 0) < 0
+                                  ? "var(--error)"
+                                  : "var(--black)",
+                          }}
+                        >
+                          {(o.premium ?? 0) > 0 ? "+" : ""}
+                          {(o.premium ?? 0).toFixed(1)}%
+                        </span>
+                      )}
                     </span>
                   </div>
-                  {/* Live fiat price — from /offer/:id/details (sell offers) */}
-                  {offerDetails?.prices &&
+                  {/* Live fiat price — from /offer/:id/details (sell offers).
+                      Meaningless for a fixed-price offer, so hidden then. */}
+                  {!hasFixedPrice &&
+                    offerDetails?.prices &&
                     Object.keys(offerDetails.prices).length > 0 && (
                       <div className="offer-detail-row">
                         <span className="offer-detail-label">Live price</span>
@@ -3468,7 +3535,7 @@ export default function TradesDashboard() {
                 {!isBuy &&
                   !odDetailsLoading &&
                   fundingStage === "funded" &&
-                  !odEditingPremium &&
+                  !odEditingPremium && !odEditingFixedPrice &&
                   !odWithdrawConfirm &&
                   !odRefundActionId && (
                     <div
@@ -3497,18 +3564,19 @@ export default function TradesDashboard() {
                     would be empty in that state and produce extra whitespace). */}
                 {!odDetailsLoading &&
                   (odEditingPremium ||
+                  odEditingFixedPrice ||
                   odWithdrawConfirm ||
                   !(!isBuy && fundingStage === "funded" && !odRefundActionId)) && (
                 <div
                   className={`offer-detail-footer${
-                    !odEditingPremium && !odWithdrawConfirm
+                    !odEditingPremium && !odEditingFixedPrice && !odWithdrawConfirm
                       ? " offer-detail-sticky-footer"
                       : ""
                   }`}
                 >
                   {/* Fund via mobile app — primary action for an unfunded sell offer,
                     pinned in the footer alongside Cancel. */}
-                  {!odEditingPremium &&
+                  {!odEditingPremium && !odEditingFixedPrice &&
                     !odWithdrawConfirm &&
                     !isBuy &&
                     !odDetailsLoading &&
@@ -3614,7 +3682,7 @@ export default function TradesDashboard() {
 
                   {/* Funded sell offer with refund pending: greyed message
                     (or Open Peach App deeplink on mobile). */}
-                  {!odEditingPremium &&
+                  {!odEditingPremium && !odEditingFixedPrice &&
                     !odWithdrawConfirm &&
                     o.direction === "sell" &&
                     fundingStage === "funded" &&
@@ -3629,7 +3697,7 @@ export default function TradesDashboard() {
 
                   {/* Unfunded sell offer: single "Cancel offer" button, no confirmation
                     (nothing has been escrowed, so the action is non-destructive). */}
-                  {!odEditingPremium &&
+                  {!odEditingPremium && !odEditingFixedPrice &&
                     !odWithdrawConfirm &&
                     o.direction === "sell" &&
                     o.tradeStatus === "fundEscrow" &&
@@ -3646,7 +3714,7 @@ export default function TradesDashboard() {
                   {/* Wrong amount funded — seller chooses: continue with funded
                     amount (confirm escrow) or refund (cancel offer + mobile refund
                     pending action). Replaces the default edit/cancel buttons. */}
-                  {!odEditingPremium &&
+                  {!odEditingPremium && !odEditingFixedPrice &&
                     !odWithdrawConfirm &&
                     o.direction === "sell" &&
                     o.tradeStatus === "fundingAmountDifferent" &&
@@ -3731,7 +3799,7 @@ export default function TradesDashboard() {
                     Hidden for unfunded sell offers (handled above), for sell offers
                     with wrong-amount funded (handled by the choice panel above), and
                     for funded sell offers (handled by the inline buttons above). */}
-                  {!odEditingPremium &&
+                  {!odEditingPremium && !odEditingFixedPrice &&
                     !odWithdrawConfirm &&
                     !(
                       o.direction === "sell" &&
@@ -3871,6 +3939,107 @@ export default function TradesDashboard() {
                             <button
                               className="premium-btn-save"
                               onClick={() => handleSaveOfferPremium(o)}
+                              disabled={odEditSaving}
+                            >
+                              {odEditSaving ? "Saving…" : "Save"}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                  {/* Edit fixed-price mode — sell offers with a fixedPrice */}
+                  {odEditingFixedPrice &&
+                    (() => {
+                      const dispCur = fixedPriceCurrency;
+                      const curPrice = allPrices?.[dispCur] ?? btcPrice;
+                      const curPriced = hasPrice(curPrice);
+                      // "You receive" total at market, and its ±35% bounds — the
+                      // range of fixed prices allowed for this amount/currency.
+                      const marketReceive = satsToFiatRaw(o.amount, curPrice);
+                      const minFP = Math.round(marketReceive * 0.65 * 100) / 100;
+                      const maxFP = Math.round(marketReceive * 1.35 * 100) / 100;
+                      const fpVal = parseFloat(odEditFixedPriceVal) || 0;
+                      const premEquiv =
+                        marketReceive > 0 ? (fpVal / marketReceive - 1) * 100 : 0;
+                      const step = curPriced
+                        ? Math.max(Math.round(((maxFP - minFP) / 700) * 100) / 100, 0.01)
+                        : 1;
+                      return (
+                        <div className="premium-editor">
+                          <div className="premium-editor-title">set fixed price</div>
+                          <div className="premium-editor-subtitle">
+                            for selling <SatsAmount sats={o.amount} />
+                          </div>
+
+                          {/* Number input */}
+                          <div className="premium-editor-controls">
+                            <div className="premium-input-group">
+                              <span className="premium-input-label">{dispCur}</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                className="premium-input-field"
+                                style={{ width: 130 }}
+                                value={odEditFixedPriceVal}
+                                onChange={(e) =>
+                                  setOdEditFixedPriceVal(e.target.value)
+                                }
+                                autoFocus
+                              />
+                            </div>
+                          </div>
+
+                          {/* Slider — bounded by the min/max fixed price (±35% of market) */}
+                          {curPriced && (
+                            <div className="premium-slider-wrap">
+                              <input
+                                type="range"
+                                className="premium-slider"
+                                min={minFP}
+                                max={maxFP}
+                                step={step}
+                                value={Math.min(Math.max(fpVal, minFP), maxFP)}
+                                onChange={(e) =>
+                                  setOdEditFixedPriceVal(e.target.value)
+                                }
+                              />
+                            </div>
+                          )}
+
+                          {/* Premium equivalent vs market */}
+                          <div className="premium-fiat-line">
+                            {curPriced
+                              ? `(${premEquiv >= 0 ? "+" : ""}${premEquiv.toFixed(1)}% vs market)`
+                              : "(live price unavailable)"}
+                          </div>
+
+                          {odEditError && (
+                            <div
+                              style={{
+                                color: "var(--error)",
+                                fontSize: ".78rem",
+                                fontWeight: 600,
+                                width: "100%",
+                              }}
+                            >
+                              {odEditError}
+                            </div>
+                          )}
+
+                          <div className="premium-actions">
+                            <button
+                              className="premium-btn-cancel"
+                              onClick={() => {
+                                setOdEditingFixedPrice(false);
+                                setOdEditError(null);
+                              }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              className="premium-btn-save"
+                              onClick={() => handleSaveOfferFixedPrice(o, dispCur)}
                               disabled={odEditSaving}
                             >
                               {odEditSaving ? "Saving…" : "Save"}

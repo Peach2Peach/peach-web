@@ -22,7 +22,7 @@ import {
   generateSymmetricKey, encryptForRecipients, encryptSymmetric,
   signPGPMessage, hashPaymentFields,
 } from "../utils/pgp.js";
-import { fmtFiat, hasPrice, PRICE_PLACEHOLDER } from "../utils/format.js";
+import { fmtFiat, hasPrice, satsToFiatRaw, PRICE_PLACEHOLDER } from "../utils/format.js";
 import PeachRating from "./PeachRating.jsx";
 import Avatar from "./Avatar.jsx";
 import RepeatTraderBadge from "./RepeatTraderBadge.jsx";
@@ -164,6 +164,8 @@ export default function OfferDetailPopup({
   const [offerDetails, setOfferDetails] = useState(null);
   const [editingPremium, setEditingPremium] = useState(false);
   const [editPremiumVal, setEditPremiumVal] = useState("");
+  const [editingFixedPrice, setEditingFixedPrice] = useState(false);
+  const [editFixedPriceVal, setEditFixedPriceVal] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState(null);
   const [withdrawConfirm, setWithdrawConfirm] = useState(false);
@@ -404,6 +406,29 @@ export default function OfferDetailPopup({
       onOfferUpdated(updated);
       setEditingPremium(false);
       onToast("Premium updated", "success");
+    } catch (err) {
+      setEditError(err.message || "Failed to save");
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  // Fixed-price edit — the absolute price the seller is paid ("you receive"
+  // total). fixedPriceCurrency is immutable, so only fixedPrice is patched.
+  async function handleSaveFixedPrice(offer) {
+    const val = parseFloat(editFixedPriceVal);
+    if (isNaN(val) || val <= 0) { setEditError("Enter a valid number"); return; }
+    const rounded = Math.round(val * 100) / 100;
+    setEditSaving(true); setEditError(null);
+    try {
+      const res = await patch(`/offer/${offer.id}`, { fixedPrice: rounded });
+      if (!res.ok) {
+        const d = await res.json().catch(() => null);
+        throw new Error(d?.error || d?.message || `Server error ${res.status}`);
+      }
+      onOfferUpdated({ ...offer, fixedPrice: rounded });
+      setEditingFixedPrice(false);
+      onToast("Fixed price updated", "success");
     } catch (err) {
       setEditError(err.message || "Failed to save");
     } finally {
@@ -695,6 +720,15 @@ export default function OfferDetailPopup({
     ? (offer.premium > 0 ? "prem-bad" : "prem-good")
     : (offer.premium < 0 ? "prem-bad" : "prem-good");
 
+  // Fixed-price offers (sell only) carry an absolute price instead of a premium.
+  // The market list offer prop often omits it, so fall back to the full sell
+  // offer body fetched into offerDetails.details (/v069/sellOffer/:id).
+  const fixedPrice = offer.fixedPrice ?? offerDetails?.details?.fixedPrice ?? null;
+  const fixedPriceCurrency =
+    offer.fixedPriceCurrency ?? offerDetails?.details?.fixedPriceCurrency
+    ?? offer.currencies?.[0] ?? displayCurrency;
+  const hasFixedPrice = offer.type === "ask" && fixedPrice != null;
+
   const validByPM = userPMs.map(pm => ({
     pm,
     currencies: offer.currencies.filter(c => pmWorksForCurrency(offer, pm, c)),
@@ -774,6 +808,22 @@ export default function OfferDetailPopup({
             border:2px solid var(--black-10);border-top-color:var(--primary);
             border-radius:50%;animation:escrow-dot-spin .8s linear infinite;
             vertical-align:middle;
+          }
+          .fp-slider{
+            -webkit-appearance:none;appearance:none;width:100%;height:8px;
+            border-radius:999px;background:#fff;border:1.5px solid var(--black-10);
+            outline:none;cursor:pointer;
+          }
+          .fp-slider::-webkit-slider-thumb{
+            -webkit-appearance:none;appearance:none;width:18px;height:18px;
+            border-radius:50%;background:var(--primary);border:none;cursor:pointer;
+          }
+          .fp-slider::-moz-range-thumb{
+            width:18px;height:18px;border-radius:50%;background:var(--primary);
+            border:none;cursor:pointer;
+          }
+          .fp-slider::-moz-range-track{
+            height:8px;border-radius:999px;background:#fff;border:1.5px solid var(--black-10);
           }
         `}</style>
         {/* Header */}
@@ -860,10 +910,16 @@ export default function OfferDetailPopup({
               <span className="popup-value">{priced ? rate.toLocaleString("fr-FR") : PRICE_PLACEHOLDER} {sym} / BTC</span>
             </div>
             <div className="popup-row">
-              <span className="popup-label">Premium</span>
-              <span className={`popup-value ${premCls}`} style={{fontWeight:800}}>
-                {offer.premium > 0 ? "+" : ""}{offer.premium.toFixed(2)}%
-              </span>
+              <span className="popup-label">{hasFixedPrice ? "Fixed price" : "Premium"}</span>
+              {hasFixedPrice ? (
+                <span className="popup-value" style={{fontWeight:800}}>
+                  {fixedPriceCurrency} {fmtFiat(fixedPrice)}
+                </span>
+              ) : (
+                <span className={`popup-value ${premCls}`} style={{fontWeight:800}}>
+                  {offer.premium > 0 ? "+" : ""}{offer.premium.toFixed(2)}%
+                </span>
+              )}
             </div>
             <div className="popup-row">
               <span className="popup-label">Payment methods</span>
@@ -1136,7 +1192,7 @@ export default function OfferDetailPopup({
           {/* ── Own offer ── */}
           {isOwn && !refundActionId && !withdrawConfirm && (
             <>
-              {/* Premium edit */}
+              {/* Premium / fixed-price edit */}
               {editingPremium ? (
                 <div style={{display:"flex",gap:8,width:"100%",alignItems:"center"}}>
                   <input type="number" step="0.1" value={editPremiumVal}
@@ -1154,11 +1210,70 @@ export default function OfferDetailPopup({
                     Cancel
                   </button>
                 </div>
+              ) : editingFixedPrice ? (
+                (() => {
+                  const fpMarket = allPrices?.[fixedPriceCurrency];
+                  const fpPriced = hasPrice(fpMarket);
+                  const marketReceive = fpPriced ? satsToFiatRaw(offer.amount, fpMarket) : 0;
+                  const minFP = Math.round(marketReceive * 0.65 * 100) / 100;
+                  const maxFP = Math.round(marketReceive * 1.35 * 100) / 100;
+                  const fpVal = parseFloat(editFixedPriceVal) || 0;
+                  const premEquiv = marketReceive > 0 ? (fpVal / marketReceive - 1) * 100 : 0;
+                  const step = fpPriced ? Math.max(Math.round(((maxFP - minFP) / 700) * 100) / 100, 0.01) : 1;
+                  // Track fill: orange left of the thumb, white to its right.
+                  const clampedFp = Math.min(Math.max(fpVal, minFP), maxFP);
+                  const fillPct = maxFP > minFP ? ((clampedFp - minFP) / (maxFP - minFP)) * 100 : 0;
+                  const sliderBg = `linear-gradient(to right,var(--primary) 0%,var(--primary) ${fillPct}%,#fff ${fillPct}%,#fff 100%)`;
+                  return (
+                    <div style={{display:"flex",flexDirection:"column",gap:10,width:"100%"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:".82rem",fontWeight:700,color:"var(--primary-dark)"}}>{fixedPriceCurrency}</span>
+                        <input type="number" step="0.01" value={editFixedPriceVal}
+                          onChange={e => setEditFixedPriceVal(e.target.value)}
+                          style={{flex:1,padding:"10px 14px",borderRadius:10,border:"1.5px solid var(--black-10)",
+                            fontFamily:"var(--font)",fontSize:".88rem",fontWeight:700,outline:"none"}}
+                          autoFocus/>
+                      </div>
+                      {fpPriced && (
+                        <input type="range" className="fp-slider" min={minFP} max={maxFP} step={step}
+                          value={clampedFp}
+                          onChange={e => setEditFixedPriceVal(e.target.value)}
+                          style={{background:sliderBg}}/>
+                      )}
+                      <div style={{fontSize:".78rem",fontWeight:700,textAlign:"center",
+                        color:!fpPriced ? "var(--black-50)"
+                          : premEquiv > 0 ? "var(--success)"
+                          : premEquiv < 0 ? "var(--error)"
+                          : "var(--black-50)"}}>
+                        {fpPriced
+                          ? `${premEquiv >= 0 ? "+" : ""}${premEquiv.toFixed(1)}% ${premEquiv < 0 ? "discount" : "premium"}`
+                          : "(live price unavailable)"}
+                      </div>
+                      <div style={{display:"flex",gap:8}}>
+                        <button className="popup-btn popup-btn-edit" onClick={() => handleSaveFixedPrice(offer)} disabled={editSaving}>
+                          {editSaving ? "Saving…" : "Save"}
+                        </button>
+                        <button className="popup-btn popup-btn-withdraw" onClick={() => { setEditingFixedPrice(false); setEditError(null); }}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()
               ) : (
                 <div style={{display:"flex",gap:8,width:"100%"}}>
                   <button className="popup-btn popup-btn-edit"
-                    onClick={() => { setEditPremiumVal(String(offer.premium ?? 0)); setEditingPremium(true); setEditError(null); }}>
-                    Edit premium
+                    onClick={() => {
+                      if (hasFixedPrice) {
+                        setEditFixedPriceVal(String(fixedPrice ?? ""));
+                        setEditingFixedPrice(true);
+                      } else {
+                        setEditPremiumVal(String(offer.premium ?? 0));
+                        setEditingPremium(true);
+                      }
+                      setEditError(null);
+                    }}>
+                    {hasFixedPrice ? "Edit fixed price" : "Edit premium"}
                   </button>
                   <button className="popup-btn popup-btn-withdraw"
                     onClick={() => { setWithdrawConfirm(true); setWithdrawError(null); }}>
