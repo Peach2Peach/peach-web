@@ -50,7 +50,7 @@ export const CSS = `
   .wizard-header,
   .step-bar,
   .step-anim,
-  .oc-nav{width:100%;max-width:720px;margin-left:auto;margin-right:auto}
+  .oc-nav{width:100%;max-width:1000px;margin-left:auto;margin-right:auto}
 
   /* Wizard header */
   .wizard-header{display:flex;align-items:center;justify-content:space-between;
