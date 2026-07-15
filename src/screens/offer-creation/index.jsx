@@ -106,7 +106,7 @@ const INFO_COPY = {
 // the cache is cleared). Shared across both directions — one set of values.
 const OFFER_STATE_KEY = "peach_offer_creation_state";
 const SHARED_FORM_KEYS = ["amtFixed","premium","instantMatch","noNewUsers",
-  "fixedPriceEnabled","fixedPriceCurrency",
+  "fixedPriceEnabled","fixedPriceCurrency","fixedPrice",
   "minReputation","instantMatchBadges","experienceLevel","selectedMethodIds"];
 function readPersistedState() {
   try { return JSON.parse(localStorage.getItem(OFFER_STATE_KEY)) || {}; }
@@ -219,12 +219,23 @@ function PremiumSlider({ value, onChange, isSell, fixed }) {
   };
   useEffect(() => { if (editing && inputRef.current) inputRef.current.select(); }, [editing]);
 
+  // Apply a premium value: in fixed mode we convert it to an absolute price and
+  // store THAT (so the price is the source of truth, frozen against live market);
+  // in premium mode we store the premium string as before.
+  const applyPrem = (p) => {
+    const c = clampPrem(p);
+    if (fixedOn && hasPrice(fixed.market)) fixed.onSetPrice(fixed.market * (1 + c / 100));
+    else onChange(c.toFixed(1));
+  };
+
   const commit = () => {
     setEditing(false);
     if (fixedOn) {
       const n = parseFloat(draft);
       if (!isNaN(n) && n > 0 && hasPrice(fixed.market)) {
-        onChange(String(clampPrem((n / fixed.market - 1) * 100)));
+        // Clamp the typed price to the ±35% band, then store the clamped price.
+        const p = clampPrem((n / fixed.market - 1) * 100);
+        fixed.onSetPrice(fixed.market * (1 + p / 100));
       }
       return;
     }
@@ -232,7 +243,7 @@ function PremiumSlider({ value, onChange, isSell, fixed }) {
     const n = parseFloat(draft);
     if (!isNaN(n)) onChange(clampPrem(n).toFixed(1));
   };
-  const nudge = d => onChange(clampPrem(prem + d).toFixed(1));
+  const nudge = d => applyPrem(prem + d);
 
   return (
     <>
@@ -263,7 +274,7 @@ function PremiumSlider({ value, onChange, isSell, fixed }) {
         <div className="prem-slider-wrap">
           <input type="range" className="prem-slider" min={-PREM_LIMIT} max={PREM_LIMIT} step={0.1}
             value={prem} style={{ background: sliderBg }}
-            onChange={e => onChange(parseFloat(e.target.value).toFixed(1))} />
+            onChange={e => applyPrem(parseFloat(e.target.value))} />
           <div className="slider-labels">
             <span>−{PREM_LIMIT}%</span><span>0%</span><span>+{PREM_LIMIT}%</span>
           </div>
@@ -406,7 +417,7 @@ export default function OfferCreation({ initialType="buy" }) {
 
   const initForm = (selectedMethodIds=[])=>({amtFixed:minSatsAtLimit(allPrices?.CHF),
     selectedMethodIds,premium:"0",instantMatch:false,noNewUsers:false,
-    fixedPriceEnabled:false,fixedPriceCurrency:"",
+    fixedPriceEnabled:false,fixedPriceCurrency:"",fixedPrice:"",
     minReputation:false,instantMatchBadges:[],experienceLevel:"",
     releaseMode:"peach",
     refundChoices:[{ mode:"peach", address:"" }]});
@@ -497,13 +508,16 @@ export default function OfferCreation({ initialType="buy" }) {
       localStorage.setItem(OFFER_STATE_KEY, JSON.stringify(slice));
     } catch {}
   }, [type, form.amtFixed, form.premium, form.instantMatch, form.noNewUsers,
-      form.fixedPriceEnabled, form.fixedPriceCurrency,
+      form.fixedPriceEnabled, form.fixedPriceCurrency, form.fixedPrice,
       form.minReputation, form.instantMatchBadges, form.experienceLevel, form.selectedMethodIds]);
 
   const isSell = type==="sell";
   const STEPS  = getSteps(type);
-  const prem   = parseFloat(form.premium)||0;
-  const effP   = btcPrice*(1+prem/100);
+  // Premium the user set via the slider (source of truth in premium mode). In
+  // fixed-price mode the effective premium is instead DERIVED from the stored
+  // absolute price (see below), so it tracks the live market while the price
+  // itself stays put.
+  const premInput = parseFloat(form.premium)||0;
 
   // Derive method types and currencies from selected saved PMs
   const selectedSaved    = savedMethods.filter(m=>form.selectedMethodIds.includes(m.id));
@@ -527,31 +541,71 @@ export default function OfferCreation({ initialType="buy" }) {
 
   const activeCurrency = pickedCurrency ?? selectedCurrency;
   const activeBtcPrice = allPrices?.[activeCurrency] ?? btcPrice;
+
+  // ── FIXED PRICE (sell only) ──
+  // A fixed price is an ABSOLUTE per-BTC price the seller commits to, stored in
+  // `form.fixedPrice` (in `fpCurrency`). It must NOT drift when the live market
+  // price polls in — so it's the source of truth here, and the effective
+  // premium is derived from it (fixedPrice ÷ live market). That derived premium
+  // moves with the market while the price the user set stays frozen.
+  const fixedPriceOn = isSell && form.fixedPriceEnabled;
+  const fpCurrency   = form.fixedPriceCurrency || activeCurrency;
+  const fpMarket     = allPrices?.[fpCurrency];
+  const storedFixed  = parseFloat(form.fixedPrice);
+  const fpHasStored  = fixedPriceOn && Number.isFinite(storedFixed) && storedFixed > 0;
+
+  // In fixed mode with a stored price, derive the equivalent premium from it;
+  // otherwise use the slider-set premium.
+  const prem = (fpHasStored && hasPrice(fpMarket))
+    ? (storedFixed / fpMarket - 1) * 100
+    : premInput;
+  const effP           = btcPrice * (1 + prem/100);
   const activeEffP     = activeBtcPrice * (1 + prem/100);
   // Live price available? When not, fiat/price previews show a placeholder
   // instead of a guessed value (slider bounds keep their own input fallback).
   const priced = hasPrice(activeBtcPrice);
 
-  // ── FIXED PRICE (sell only) ──
-  // Alternative to the premium: quote an absolute price in a chosen currency.
-  // `premium` remains the single source of truth (the slider position); the
-  // fixed price is just the effective price in `fpCurrency`, and back-solving
-  // the premium from an edited price keeps everything consistent. Defaults to
-  // the display currency until the user explicitly picks one.
-  const fixedPriceOn = isSell && form.fixedPriceEnabled;
-  const fpCurrency   = form.fixedPriceCurrency || activeCurrency;
-  const fpMarket     = allPrices?.[fpCurrency];
-  const fpValue      = hasPrice(fpMarket) ? fpMarket * (1 + prem / 100) : null;
-  const fixedPropForSlider = { on: fixedPriceOn, value: fpValue, sym: currSym(fpCurrency), market: fpMarket };
+  // Displayed fixed price = the stored absolute value (frozen). Before it's been
+  // captured (just toggled on), fall back to the current effective price.
+  const fpValue = fpHasStored
+    ? storedFixed
+    : (hasPrice(fpMarket) ? fpMarket * (1 + prem / 100) : null);
+  // onSetPrice writes the absolute price back to form (the source of truth).
+  const setFixedPrice = (p) => setF("fixedPrice", String(p));
+  // Switching currency re-denominates the stored price at the new currency's
+  // market, keeping the equivalent premium (so the offer's richness is stable).
+  const changeFixedPriceCurrency = (c) => {
+    const oldMkt = allPrices?.[fpCurrency];
+    const newMkt = allPrices?.[c];
+    if (fpHasStored && hasPrice(oldMkt) && hasPrice(newMkt)) {
+      const p = (storedFixed / oldMkt - 1) * 100;
+      setForm(f => ({ ...f, fixedPriceCurrency: c, fixedPrice: String(newMkt * (1 + p / 100)) }));
+    } else {
+      setF("fixedPriceCurrency", c);
+    }
+  };
+  const fixedPropForSlider = {
+    on: fixedPriceOn, value: fpValue, sym: currSym(fpCurrency),
+    market: fpMarket, onSetPrice: setFixedPrice,
+  };
   // Pricing fragment for the offer payload — mutually exclusive: a fixed-price
   // offer carries { fixedPrice, fixedPriceCurrency } and NO premium; otherwise
   // it carries { premium }. `fixedPrice` is the amount the seller is paid for
   // the sats (the "You receive" total), not the per-BTC price — so we convert
-  // the amount at the effective price rather than sending the pair value.
+  // the amount at the frozen fixed price rather than sending the pair value.
   const buildPricePayload = () =>
     (fixedPriceOn && fpValue != null)
       ? { fixedPrice: Math.round(satsToFiat(form.amtFixed, fpValue) * 100) / 100, fixedPriceCurrency: fpCurrency }
       : { premium: parseFloat(form.premium) || 0 };
+
+  // Capture the fixed price the moment the toggle turns on (or the amount/currency
+  // change leaves it unset), freezing the current effective price as the price.
+  useEffect(() => {
+    if (!fixedPriceOn) return;
+    if (Number.isFinite(storedFixed) && storedFixed > 0) return;
+    if (!hasPrice(fpMarket)) return;
+    setF("fixedPrice", String(fpMarket * (1 + premInput / 100)));
+  }, [fixedPriceOn, storedFixed, fpMarket, premInput]);
 
   // Live market stats (competing offers + avg premium of completed trades).
   const marketStats = useMarketStats({ type, pms: selectedSaved, premium: prem });
@@ -1624,18 +1678,18 @@ export default function OfferCreation({ initialType="buy" }) {
                     <label style={{display:"inline-flex",alignItems:"center",gap:8,cursor:"pointer",
                       fontSize:".82rem",fontWeight:700,color:"var(--black)"}}>
                       <input type="checkbox" checked={form.fixedPriceEnabled}
-                        onChange={e=>setF("fixedPriceEnabled",e.target.checked)}
+                        onChange={e=>setForm(f=>({...f,fixedPriceEnabled:e.target.checked,...(e.target.checked?{}:{fixedPrice:""})}))}
                         style={{accentColor:"var(--primary)"}}/>
                       Set fixed price
                     </label>
                     {form.fixedPriceEnabled && (
                       <CurrencyDropdown value={fpCurrency} options={availableCurrencies}
-                        onChange={c=>setF("fixedPriceCurrency",c)}/>
+                        onChange={changeFixedPriceCurrency}/>
                     )}
                   </div>
                 )}
 
-                <PremiumSlider value={form.premium} onChange={v=>setF("premium",v)} isSell={isSell} fixed={fixedPropForSlider}/>
+                <PremiumSlider value={fixedPriceOn ? String(prem) : form.premium} onChange={v=>setF("premium",v)} isSell={isSell} fixed={fixedPropForSlider}/>
 
                 {/* Effective price */}
                 <div style={{display:"flex",gap:12,marginTop:14,
@@ -2106,16 +2160,16 @@ export default function OfferCreation({ initialType="buy" }) {
                       <label style={{display:"inline-flex",alignItems:"center",gap:8,cursor:"pointer",
                         fontSize:".82rem",fontWeight:700,color:"var(--black)"}}>
                         <input type="checkbox" checked={form.fixedPriceEnabled}
-                          onChange={e=>setF("fixedPriceEnabled",e.target.checked)}/>
+                          onChange={e=>setForm(f=>({...f,fixedPriceEnabled:e.target.checked,...(e.target.checked?{}:{fixedPrice:""})}))}/>
                         Set fixed price
                       </label>
                       {form.fixedPriceEnabled && (
                         <CurrencyDropdown value={fpCurrency} options={availableCurrencies}
-                          onChange={c=>setF("fixedPriceCurrency",c)}/>
+                          onChange={changeFixedPriceCurrency}/>
                       )}
                     </div>
                   )}
-                  <PremiumSlider value={form.premium} onChange={v=>setF("premium",v)} isSell={isSell} fixed={fixedPropForSlider}/>
+                  <PremiumSlider value={fixedPriceOn ? String(prem) : form.premium} onChange={v=>setF("premium",v)} isSell={isSell} fixed={fixedPropForSlider}/>
                   <div style={{display:"flex",gap:12,marginTop:14,
                     background:"var(--bg)",borderRadius:8,padding:"8px 12px",
                     border:"1px solid var(--black-10)"}}>
