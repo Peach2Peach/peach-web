@@ -143,6 +143,26 @@ describe("verifyPaymentDataHashes", () => {
     expect(await verifyPaymentDataHashes(wiseData, committed)).toBe(true);
   });
 
+  it("reassembles committed hashes that were comma-split into fragments", async () => {
+    // Observed live for SEPA: the JSON string
+    //   {"sepa":{"hashes":["<iban hash>"],"country":"DE","isMpesa":false}}
+    // arrives split on every comma into a string array.
+    const sepaData = { type: "sepa", iban: "DE13200100204335378318" };
+    const real = await hashPaymentFields("sepa", sepaData, "DE");
+    real.sepa.isMpesa = false; // match the live shape that carries isMpesa:false
+    const fragmented = JSON.stringify(real).split(",");
+    expect(fragmented.length).toBeGreaterThan(1); // sanity: it really did split
+    expect(await verifyPaymentDataHashes(sepaData, fragmented)).toBe(true);
+  });
+
+  it("still flags a comma-split commitment whose iban was tampered", async () => {
+    const sepaData = { type: "sepa", iban: "DE13200100204335378318" };
+    const real = await hashPaymentFields("sepa", sepaData, "DE");
+    real.sepa.hashes = ["zz" + real.sepa.hashes[0]]; // wrong hash
+    const fragmented = JSON.stringify(real).split(",");
+    expect(await verifyPaymentDataHashes(sepaData, fragmented)).toBe(false);
+  });
+
   it("scopes to the contract's payment method when several are committed", async () => {
     const wiseHashes = await hashPaymentFields("wise", wiseData);
     const sepaHashes = await hashPaymentFields("sepa", {

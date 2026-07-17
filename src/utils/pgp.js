@@ -231,16 +231,8 @@ export async function decryptSymmetric(armoredMessage, passphrase) {
  */
 export async function hashPaymentFields(methodType, pmData, country) {
   try {
-    const hashes = [];
-    for (const field of ALL_PAYMENT_FIELDS) {
-      if (DO_NOT_HASH.has(field)) continue;
-      const val = pmData[field];
-      if (!val || typeof val !== "string") continue;
-      const encoded = new TextEncoder().encode(val.toLowerCase());
-      const hashBuffer = await crypto.subtle.digest("SHA-256", encoded);
-      hashes.push(bytesToHex(new Uint8Array(hashBuffer)));
-    }
-    const result = { hashes };
+    const breakdown = await hashPaymentFieldsBreakdown(pmData);
+    const result = { hashes: breakdown.map((b) => b.hash) };
     if (country) result.country = country;
     if (pmData.isMpesa === true) result.isMpesa = true;
     return { [methodType]: result };
@@ -248,6 +240,92 @@ export async function hashPaymentFields(methodType, pmData, country) {
     console.warn("[PGP] hashPaymentFields failed:", err.message);
     return { [methodType]: { hashes: [] } };
   }
+}
+
+/**
+ * Same hashing walk as hashPaymentFields(), but returns a per-field breakdown
+ * [{ field, value, hash }] instead of just the hash list. Used for diagnostics
+ * so we can see exactly which field produced which committed/computed hash.
+ * Also lists the fields present on pmData that are NOT hashed and why.
+ */
+export async function hashPaymentFieldsBreakdown(pmData) {
+  const breakdown = [];
+  for (const field of ALL_PAYMENT_FIELDS) {
+    if (DO_NOT_HASH.has(field)) continue;
+    const val = pmData?.[field];
+    if (!val || typeof val !== "string") continue;
+    const encoded = new TextEncoder().encode(val.toLowerCase());
+    const hashBuffer = await crypto.subtle.digest("SHA-256", encoded);
+    breakdown.push({
+      field,
+      value: val,
+      hash: bytesToHex(new Uint8Array(hashBuffer)),
+    });
+  }
+  return breakdown;
+}
+
+/**
+ * Explain, in plain terms, why a set of decrypted payment details does or does
+ * not match the committed hashes. Returns a structured object suitable for
+ * console logging — no side effects. Mirrors verifyPaymentDataHashes()'s logic.
+ */
+export async function explainPaymentDataHashes(paymentDetails, committedHashedData) {
+  const methodType = paymentDetails?.type;
+  const committed = extractCommittedHashes(committedHashedData, methodType) || [];
+  const breakdown = paymentDetails
+    ? await hashPaymentFieldsBreakdown(paymentDetails)
+    : [];
+  const computed = breakdown.map((b) => b.hash);
+
+  const committedSet = new Set(committed.map((h) => String(h).toLowerCase()));
+  const computedSet = new Set(computed.map((h) => String(h).toLowerCase()));
+
+  // Which decrypted fields WERE hashed vs skipped (and why).
+  const hashedFields = breakdown.map((b) => b.field);
+  const skipped = [];
+  for (const [k, v] of Object.entries(paymentDetails || {})) {
+    if (typeof v !== "string" || !v.trim()) continue;
+    if (hashedFields.includes(k)) continue;
+    let reason;
+    if (DO_NOT_HASH.has(k)) reason = "field is in DO_NOT_HASH";
+    else if (!ALL_PAYMENT_FIELDS.includes(k))
+      reason = "field is not in ALL_PAYMENT_FIELDS";
+    else reason = "empty/non-string";
+    if (k !== "type") skipped.push({ field: k, value: v, reason });
+  }
+
+  const committedMissingFromComputed = [...committedSet].filter(
+    (h) => !computedSet.has(h),
+  );
+  const computedMissingFromCommitted = computed
+    .map((h) => h.toLowerCase())
+    .filter((h) => !committedSet.has(h));
+
+  const match =
+    committed.length > 0 &&
+    computed.length > 0 &&
+    committedSet.size === computedSet.size &&
+    committedMissingFromComputed.length === 0;
+
+  return {
+    methodType,
+    match,
+    committedHashes: committed,
+    computedHashes: computed,
+    perFieldComputed: breakdown,
+    skippedFields: skipped,
+    committedMissingFromComputed,
+    computedMissingFromCommitted,
+    note:
+      committed.length === 0
+        ? "No committed hashes could be extracted → verify returns null (no warning)."
+        : computed.length === 0
+          ? "Decrypted details produced no hashable fields → verify returns null (no warning)."
+          : match
+            ? "All hashes line up → not suspicious."
+            : "Hash sets differ → flagged as suspicious. Compare committedMissingFromComputed / computedMissingFromCommitted below.",
+  };
 }
 
 /**
@@ -290,6 +368,19 @@ function extractCommittedHashes(data, methodType) {
       return;
     }
     if (Array.isArray(node)) {
+      // The value is sometimes a single JSON string that got comma-split into
+      // fragments, e.g. '{"sepa":{"hashes":[...],"country":"DE","isMpesa":false}}'
+      // stored as ['{"sepa":{"hashes":[...]', '"country":"DE"', '"isMpesa":false}}'].
+      // Reassemble and parse before falling back to per-element handling — a
+      // legit ["hash1","hash2"] array simply fails this parse and falls through.
+      if (node.length && node.every((el) => typeof el === "string")) {
+        try {
+          walk(JSON.parse(node.join(",")));
+          return;
+        } catch {
+          /* not a comma-split JSON — handle elements individually */
+        }
+      }
       node.forEach(walk);
       return;
     }
