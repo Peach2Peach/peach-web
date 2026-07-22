@@ -126,7 +126,8 @@ export type PaymentLogoType = keyof typeof PaymentLogos;
 
 // Resolve a methodId (from the API / saved PM) to a logo URL.
 // Handles exact matches, gift-card country variants (`giftCard.amazon.DE` →
-// `giftCard.amazon`), chain USDT variants (`arbitrumusdt` → `arbitrum`),
+// `giftCard.amazon`), chain stablecoin variants (`arbitrumusdt` /
+// `arbitrumusdc` → `arbitrum`),
 // national-transfer country variants (`nationalTransferBG` → placeholder for
 // now until flag SVGs are added), and falls back to the placeholder.
 export function getPaymentLogo(methodId: string | undefined | null): string {
@@ -139,8 +140,8 @@ export function getPaymentLogo(methodId: string | undefined | null): string {
     const parent = methodId.slice(0, dotIdx);
     if (logos[parent]) return logos[parent];
   }
-  // USDT chain variants: "arbitrumusdt" → "arbitrum"
-  if (methodId.endsWith("usdt")) {
+  // Stablecoin chain variants: "arbitrumusdt" / "arbitrumusdc" → "arbitrum"
+  if (methodId.endsWith("usdt") || methodId.endsWith("usdc")) {
     const chain = methodId.slice(0, -4);
     if (logos[chain]) return logos[chain];
   }
