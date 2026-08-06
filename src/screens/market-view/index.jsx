@@ -242,10 +242,12 @@ export default function PeachMarket() {
         for (const o of asksArr)    { const id = String(o.id); if (!seen.has(id)) { seen.add(id); merged.push(normalizeOffer(o, "ask", peachId)); } }
         all = merged;
       } else {
-        // Not authenticated: use v1 public search
+        // Not authenticated: use v1 public search. `size` is read from the
+        // query string only — in the body it is silently ignored and the
+        // response falls back to a single default page of ~21 offers.
         const [bidsRes, asksRes] = await Promise.all([
-          post('/offer/search', { type: 'bid', size: 50 }),
-          post('/offer/search', { type: 'ask', size: 50 }),
+          post('/offer/search?size=500', { type: 'bid' }),
+          post('/offer/search?size=500', { type: 'ask' }),
         ]);
         const [bids, asks] = await Promise.all([
           bidsRes.ok ? bidsRes.json() : [],
@@ -385,6 +387,21 @@ export default function PeachMarket() {
     setTab(t);
     navigate(location.pathname, { replace: true, state: null });
   }, [location.state]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Tab pre-select from the URL: /#/market?type=buy | ?type=sell ──
+  // Named for the user's own direction, matching the tab labels and the
+  // existing /offer/new?type=sell convention: type=buy → "Buy BTC" tab (which
+  // lists ask offers). `bid`/`ask` are accepted as offer-type aliases for
+  // callers that think in API terms. Applied once on mount so a later tab
+  // click isn't overridden; the param stays in the URL so links stay shareable.
+  const urlTabHandledRef = useRef(false);
+  useEffect(() => {
+    if (urlTabHandledRef.current) return;
+    urlTabHandledRef.current = true;
+    const t = new URLSearchParams(location.search).get("type");
+    if (t === "buy"  || t === "ask") setTab("buy");
+    if (t === "sell" || t === "bid") setTab("sell");
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Commit phase — runs whenever marketOffers updates after a highlight was set.
   // Waits for the new offers to appear in the list, then scrolls + starts fade timer.
