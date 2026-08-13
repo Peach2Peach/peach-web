@@ -561,6 +561,10 @@ export default function TradeExecution() {
   const [actionError, setActionError] = useState(null);
   const [signingModal, setSigningModal] = useState(null); // { title, description, taskType } or null
   const [pendingTaskType, setPendingTaskType] = useState(null); // "release" | "refund" | "rate" | "fundEscrow" | "confirmPayment" | null
+  // True between a successful createPaymentMadePendingAction POST and the first
+  // contract fetch that reports the action as effective. Guards the
+  // overtaken-action cleanup below from clearing that optimistic pending state.
+  const paymentMadeRequestedRef = useRef(false);
   const [fundEscrowLoading, setFundEscrowLoading] = useState(false);
   const [fundEscrowError, setFundEscrowError] = useState(null);
   // Bumped to remount the buyer's "I've sent the payment" slider so it
@@ -624,9 +628,9 @@ export default function TradeExecution() {
             mobileActionRefundWasTriggered:
               c.mobileActionRefundWasTriggered ??
               prev.contract.mobileActionRefundWasTriggered,
-            mobileActionPaymentMadeWasTriggered:
-              c.mobileActionPaymentMadeWasTriggered ??
-              prev.contract.mobileActionPaymentMadeWasTriggered,
+            // Taken verbatim, never `?? prev` — see syncPaymentMadeEffective.
+            mobileActionPaymentMadeIsEffective:
+              c.mobileActionPaymentMadeIsEffective ?? null,
             mobileActionPaymentConfirmedWasTriggered:
               c.mobileActionPaymentConfirmedWasTriggered ??
               prev.contract.mobileActionPaymentConfirmedWasTriggered,
@@ -634,6 +638,28 @@ export default function TradeExecution() {
         };
       });
     } catch {}
+  }
+
+  // The buyer's payment-made action is the one pending action that can be
+  // revoked server-side: once it is overtaken, `mobileActionPaymentMadeIsEffective`
+  // goes away while the contract stays in `paymentRequired` and the buyer has to
+  // declare the payment again. So this field is synced verbatim (an absent id is
+  // meaningful, `?? prev` would pin it forever) and outside the status-change
+  // guards in the pollers, since being overtaken moves no status.
+  function syncPaymentMadeEffective(c) {
+    const next = c.mobileActionPaymentMadeIsEffective ?? null;
+    setLiveContract((prev) => {
+      if (!prev?.contract) return prev;
+      if ((prev.contract.mobileActionPaymentMadeIsEffective ?? null) === next)
+        return prev;
+      return {
+        ...prev,
+        contract: {
+          ...prev.contract,
+          mobileActionPaymentMadeIsEffective: next,
+        },
+      };
+    });
   }
   const [chatPage, setChatPage] = useState(0);
   const [chatHasMore, setChatHasMore] = useState(false);
@@ -693,13 +719,6 @@ export default function TradeExecution() {
       if (routeId) savePendingTask(routeId, "fundEscrow");
     }
     if (
-      c.mobileActionPaymentMadeWasTriggered &&
-      pendingTaskType !== "confirmPayment"
-    ) {
-      setPendingTaskType("confirmPayment");
-      if (routeId) savePendingTask(routeId, "confirmPayment");
-    }
-    if (
       c.mobileActionPaymentConfirmedWasTriggered &&
       pendingTaskType !== "release"
     ) {
@@ -707,6 +726,34 @@ export default function TradeExecution() {
       if (routeId) savePendingTask(routeId, "release");
     }
   }, [liveContract, routeId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Buyer's payment-made pending task, seeded from the *effective* action ──
+  // Unlike the seed effect above this one also has to undo itself: when the
+  // action is overtaken the id goes away and the buyer must declare the payment
+  // again, so the pending button steps aside for the slider. Kept separate (and
+  // keyed on pendingTaskType) so that the two-way sync can't make the other
+  // branches up there ping-pong between task types.
+  useEffect(() => {
+    if (!liveContract?.contract) return;
+    if (liveContract.contract.mobileActionPaymentMadeIsEffective) {
+      paymentMadeRequestedRef.current = false;
+      if (pendingTaskType !== "confirmPayment") {
+        setPendingTaskType("confirmPayment");
+        if (routeId) savePendingTask(routeId, "confirmPayment");
+      }
+      return;
+    }
+    // No effective action. Skipped while a just-created one hasn't turned up in
+    // a contract fetch yet, so the optimistic pending state set on slide isn't
+    // wiped by that race.
+    if (
+      pendingTaskType === "confirmPayment" &&
+      !paymentMadeRequestedRef.current
+    ) {
+      setPendingTaskType(null);
+      if (routeId) clearPendingTask(routeId, "confirmPayment");
+    }
+  }, [liveContract?.contract, pendingTaskType, routeId]);
 
   // ── Fetch actual funded amount when status is fundingAmountDifferent ──
   useEffect(() => {
@@ -835,6 +882,9 @@ export default function TradeExecution() {
           direction: isBuyer ? "buy" : "sell",
           escrowFundingTimeLimitExpired: c.escrowFundingTimeLimitExpired,
         });
+        // Catches the buyer's payment-made action being overtaken while they
+        // sit on the pending button — no status change accompanies it.
+        syncPaymentMadeEffective(c);
         if (nextStatus && nextStatus !== signingStatusRef.current) {
           setLiveContract((prev) =>
             prev ? { ...prev, tradeStatus: nextStatus } : prev,
@@ -914,6 +964,10 @@ export default function TradeExecution() {
               : prev,
           );
         }
+        // Synced ahead of the status-change guard — an overtaken payment-made
+        // action leaves the trade in paymentRequired, so there's no status
+        // change to ride along with.
+        syncPaymentMadeEffective(c);
         if (!newStatus || newStatus === liveContract.tradeStatus) return;
         setLiveContract((prev) =>
           prev
@@ -939,9 +993,6 @@ export default function TradeExecution() {
                   mobileActionRefundWasTriggered:
                     c.mobileActionRefundWasTriggered ??
                     prev.contract.mobileActionRefundWasTriggered,
-                  mobileActionPaymentMadeWasTriggered:
-                    c.mobileActionPaymentMadeWasTriggered ??
-                    prev.contract.mobileActionPaymentMadeWasTriggered,
                   mobileActionPaymentConfirmedWasTriggered:
                     c.mobileActionPaymentConfirmedWasTriggered ??
                     prev.contract.mobileActionPaymentConfirmedWasTriggered,
@@ -1194,8 +1245,8 @@ export default function TradeExecution() {
             ratingSeller: c.ratingSeller ?? null,
             buyOffer69Id: c.buyOffer69Id ?? null,
             batchInfo: c.batchInfo ?? null,
-            mobileActionPaymentMadeWasTriggered:
-              c.mobileActionPaymentMadeWasTriggered ?? null,
+            mobileActionPaymentMadeIsEffective:
+              c.mobileActionPaymentMadeIsEffective ?? null,
             mobileActionPaymentConfirmedWasTriggered:
               c.mobileActionPaymentConfirmedWasTriggered ?? null,
           },
@@ -3044,6 +3095,7 @@ export default function TradeExecution() {
                                     `HTTP ${res.status}`,
                                 );
                               }
+                              paymentMadeRequestedRef.current = true;
                               savePendingTask(routeId, "confirmPayment");
                               setPendingTaskType("confirmPayment");
                               await refreshContractMobileActions();

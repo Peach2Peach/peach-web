@@ -3218,7 +3218,7 @@ export function ActionPanel({
                     label="Confirm payment in mobile app"
                     type="paymentMade"
                     actionId={
-                      scenario.contract?.mobileActionPaymentMadeWasTriggered
+                      scenario.contract?.mobileActionPaymentMadeIsEffective
                     }
                   />
                 ) : (
