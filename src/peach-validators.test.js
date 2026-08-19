@@ -4,6 +4,7 @@ import {
   validateIBAN,
   validatePhone,
   validateBIP322Signature,
+  parseSignature,
   validateFeeRate,
 } from "./peach-validators.js";
 
@@ -166,9 +167,10 @@ describe("validatePhone", () => {
 });
 
 // ── validateBIP322Signature ──────────────────────────────────────────────────
-// Field name says BIP322; payload is actually BIP-137 (Bitcoin Signed Message),
-// cross-platform with mobile. Validator enforces the 88-base64-char / 65-byte
-// shape so users can't paste legacy BIP322-simple sigs (~144 chars).
+// Shape pre-filter only. It must accept every format the mobile app's
+// isValidBitcoinSignature accepts — BIP-137 compact sigs AND full BIP-322
+// witnesses — because a rejection here means the crypto verifier never runs
+// and the user cannot save an address that works fine on mobile.
 
 describe("validateBIP322Signature", () => {
   // Real BIP-137 fixture from the mobile app's test suite. Pinned here so
@@ -176,10 +178,35 @@ describe("validateBIP322Signature", () => {
   const MOBILE_FIXTURE_SIG =
     "H2i3dzh/dYWjpsRJmrl1C9ZKMkg1PitsM/zdh7RIQ6PrLTaYa4Wmm0fKRsLAhaDIqwg1C51StxG5JMj3sF6Yqkc=";
 
+  // Real taproot BIP-322 fixture, same vector as bitcoinSignatureVerify.test.js.
+  // Taproot cannot produce a BIP-137 signature at all, so rejecting this shape
+  // made bc1p… payout addresses impossible to save on web.
+  const TAPROOT_BIP322_SIG =
+    "AUFdGjkDS0GfTFaUTuyn8rNDXFlunGJu0Ljnx6vmXlFoZxoSKMUQk57ChLIphMYbzNH9Rc8Mu8qkr0PFdn/dJCdfAQ==";
+
   it("accepts a valid 88-char BIP-137 signature", () => {
     const result = validateBIP322Signature(MOBILE_FIXTURE_SIG);
     expect(result.valid).toBe(true);
     expect(result.error).toBe(null);
+  });
+
+  it("accepts a taproot BIP-322 witness signature", () => {
+    const result = validateBIP322Signature(TAPROOT_BIP322_SIG);
+    expect(result.valid).toBe(true);
+    expect(result.error).toBe(null);
+  });
+
+  it("accepts a full BIP-322 witness signature for a segwit address", () => {
+    // What Sparrow / Leather / Xverse / UniSat emit.
+    const bip322Full =
+      "AkgwRQIhAKWu8tbg/7oZfT/Bq6FG5ksXf6QL4DnGtePuRMwkWqQoAiBw9oDIJbdrNwVVJZsDGvhz7x6E1HR4D/KqiHYTMe9D+wEhAsfxIAMZZEKUPYWI4BruhAQjzFT8FSFSajuFwrDL1Yhy";
+    expect(bip322Full.length).toBeGreaterThan(88);
+    expect(validateBIP322Signature(bip322Full).valid).toBe(true);
+  });
+
+  it("accepts a signature pasted with line wrapping", () => {
+    const wrapped = MOBILE_FIXTURE_SIG.slice(0, 44) + "\n" + MOBILE_FIXTURE_SIG.slice(44);
+    expect(validateBIP322Signature(wrapped).valid).toBe(true);
   });
 
   it("rejects empty", () => {
@@ -194,29 +221,11 @@ describe("validateBIP322Signature", () => {
     expect(validateBIP322Signature("not!valid@base64$$chars").valid).toBe(false);
   });
 
-  it("rejects a legacy BIP322-simple-shaped signature (~144 chars)", () => {
-    // Realistic length for the old BIP322-simple witness-only base64 output.
-    const bip322Simple =
-      "AkgwRQIhAKWu8tbg/7oZfT/Bq6FG5ksXf6QL4DnGtePuRMwkWqQoAiBw9oDIJbdrNwVVJZsDGvhz7x6E1HR4D/KqiHYTMe9D+wEhAsfxIAMZZEKUPYWI4BruhAQjzFT8FSFSajuFwrDL1Yhy";
-    expect(bip322Simple.length).toBeGreaterThan(88);
-    const result = validateBIP322Signature(bip322Simple);
+  it("rejects base64 that decodes to fewer than 65 bytes", () => {
+    const tooShort = btoa(String.fromCharCode(...new Uint8Array(32)));
+    const result = validateBIP322Signature(tooShort);
     expect(result.valid).toBe(false);
-    expect(result.error).toMatch(/88 base64 characters|BIP-137/);
-  });
-
-  it("rejects an 88-char base64 string whose decoded length isn't 65 bytes", () => {
-    // 88 chars without padding sometimes decodes to a different length. Use a
-    // string of exactly 88 chars with the wrong-shaped padding/end.
-    // "A" * 87 + "=" decodes to 65 bytes (66 - 1 pad) — that's actually 65,
-    // so this would pass length but might fail header. Test with a 64-byte
-    // payload padded to 88 chars: base64 of 66 bytes is 88 chars.
-    const sixtySixBytes = new Array(66).fill(0x20).map(() => "A").join("");
-    // Just craft a string with valid base64 of 66 zero bytes:
-    const wrongDecode = btoa(String.fromCharCode(...new Uint8Array(66)));
-    expect(wrongDecode.length).toBe(88);
-    const result = validateBIP322Signature(wrongDecode);
-    // 66-byte decode → fails the strict 65-byte check (or the header range).
-    expect(result.valid).toBe(false);
+    expect(result.error).toMatch(/too short/);
   });
 
   it("rejects a 65-byte signature with an out-of-range header byte", () => {
@@ -227,6 +236,35 @@ describe("validateBIP322Signature", () => {
     const result = validateBIP322Signature(b64);
     expect(result.valid).toBe(false);
     expect(result.error).toMatch(/header byte/);
+  });
+});
+
+// ── parseSignature ───────────────────────────────────────────────────────────
+
+describe("parseSignature", () => {
+  const BIP137 =
+    "H2i3dzh/dYWjpsRJmrl1C9ZKMkg1PitsM/zdh7RIQ6PrLTaYa4Wmm0fKRsLAhaDIqwg1C51StxG5JMj3sF6Yqkc=";
+  const TAPROOT_BIP322 =
+    "AUFdGjkDS0GfTFaUTuyn8rNDXFlunGJu0Ljnx6vmXlFoZxoSKMUQk57ChLIphMYbzNH9Rc8Mu8qkr0PFdn/dJCdfAQ==";
+
+  it("strips surrounding and embedded whitespace", () => {
+    expect(parseSignature("  " + BIP137.slice(0, 44) + "\n" + BIP137.slice(44) + "\n")).toBe(BIP137);
+  });
+
+  it("digs an 88-char BIP-137 run out of surrounding prose", () => {
+    expect(parseSignature(`Signature: ${BIP137} (signed with Electrum)`)).toBe(BIP137);
+  });
+
+  it("leaves a longer BIP-322 witness intact", () => {
+    // Regression: an 88-char run exists inside this string. Cutting it out
+    // would silently corrupt the witness (mobile has this bug on its
+    // clipboard button).
+    expect(parseSignature(TAPROOT_BIP322)).toBe(TAPROOT_BIP322);
+  });
+
+  it("returns an empty string for non-string input", () => {
+    expect(parseSignature(undefined)).toBe("");
+    expect(parseSignature(null)).toBe("");
   });
 });
 

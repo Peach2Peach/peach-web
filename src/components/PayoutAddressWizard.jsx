@@ -9,7 +9,7 @@ import {
   fetchSavedCustomPayoutAddress,
   syncCustomPayoutAddressToServer,
 } from "../utils/customPayoutAddressSync.js";
-import { validateBtcAddress, validateBIP322Signature } from "../peach-validators.js";
+import { validateBtcAddress, validateBIP322Signature, parseSignature } from "../peach-validators.js";
 import { BITCOIN_NETWORK } from "../utils/network.js";
 import { getSigningPeachId } from "../utils/format.js";
 import {
@@ -54,10 +54,14 @@ export default function PayoutAddressWizard({ auth, onClose, onDone, asModal = f
   const [removeSuccess, setRemoveSuccess] = useState(false);
   const handleBlur = makeBlurHandler(setErrors);
   const peachId = getSigningPeachId(auth?.peachId);
-  const signMessage = `I confirm that only I, ${peachId}, control the address ${address}`;
+  // Always sign, verify and store the trimmed address — validateBtcAddress
+  // trims internally, so an address pasted with a trailing newline would
+  // otherwise show as valid while no signature could ever match it.
+  const trimmedAddress = address.trim();
+  const signMessage = `I confirm that only I, ${peachId}, control the address ${trimmedAddress}`;
 
-  const addressValid = address.trim().length > 0
-    && validateBtcAddress(address, btcNetwork).valid;
+  const addressValid = trimmedAddress.length > 0
+    && validateBtcAddress(trimmedAddress, btcNetwork).valid;
 
   useEffect(() => {
     if (!auth?.token || !auth?.pgpPrivKey) return;
@@ -76,8 +80,8 @@ export default function PayoutAddressWizard({ auth, onClose, onDone, asModal = f
   // bip322-js is heavy, so dynamic-import it inside the effect — the chunk only
   // loads when the user is actually in the wizard with a pasted signature.
   useEffect(() => {
-    const sig = signature.trim();
-    if (!sig || !address.trim()) { setSigCryptoValid(null); setVerifying(false); return; }
+    const sig = parseSignature(signature);
+    if (!sig || !trimmedAddress) { setSigCryptoValid(null); setVerifying(false); return; }
     const shape = validateBIP322Signature(sig);
     if (!shape.valid) { setSigCryptoValid(null); setVerifying(false); return; }
 
@@ -86,7 +90,7 @@ export default function PayoutAddressWizard({ auth, onClose, onDone, asModal = f
     (async () => {
       try {
         const { isValidBitcoinSignature } = await import("../utils/bitcoinSignatureVerify.js");
-        const ok = isValidBitcoinSignature({ message: signMessage, address, signature: sig });
+        const ok = isValidBitcoinSignature({ message: signMessage, address: trimmedAddress, signature: sig });
         if (cancelled) return;
         setSigCryptoValid(ok);
         setErrors(p => ({ ...p, sig: ok ? null : "Signature does not match this address and message" }));
@@ -99,11 +103,12 @@ export default function PayoutAddressWizard({ auth, onClose, onDone, asModal = f
       }
     })();
     return () => { cancelled = true; };
-  }, [signature, address, signMessage]);
+  }, [signature, trimmedAddress, signMessage]);
 
   function handleAddressBlur() {
-    if (!address.trim()) { setErrors(p => ({ ...p, address: null })); return; }
-    handleBlur("address", address, validateBtcAddress, btcNetwork);
+    if (!trimmedAddress) { setErrors(p => ({ ...p, address: null })); return; }
+    setAddress(trimmedAddress);
+    handleBlur("address", trimmedAddress, validateBtcAddress, btcNetwork);
   }
 
   async function handleRemove() {
@@ -135,7 +140,8 @@ export default function PayoutAddressWizard({ auth, onClose, onDone, asModal = f
   }
 
   async function handleConfirm() {
-    const sigCheck = validateBIP322Signature(signature);
+    const cleanSignature = parseSignature(signature);
+    const sigCheck = validateBIP322Signature(cleanSignature);
     if (!sigCheck.valid) { setErrors(p => ({ ...p, sig: sigCheck.error })); return; }
     if (sigCryptoValid !== true) {
       setErrors(p => ({ ...p, sig: "Signature does not match this address and message" }));
@@ -149,10 +155,10 @@ export default function PayoutAddressWizard({ auth, onClose, onDone, asModal = f
       if (auth) {
         const ok = await syncCustomPayoutAddressToServer(
           {
-            address,
+            address: trimmedAddress,
             label: label || null,
             confirmationPhrase: signMessage,
-            bip322Signature: signature,
+            bip322Signature: cleanSignature,
           },
           auth,
         );
@@ -165,7 +171,7 @@ export default function PayoutAddressWizard({ auth, onClose, onDone, asModal = f
         await new Promise(r => setTimeout(r, 800));
       }
       setSubmitting(false);
-      if (onDone) onDone({ address, label: label || null, bip322Signature: signature, confirmationPhrase: signMessage });
+      if (onDone) onDone({ address: trimmedAddress, label: label || null, bip322Signature: cleanSignature, confirmationPhrase: signMessage });
       setShowSuccess(true);
     } catch (e) {
       setSubmitting(false);
@@ -208,8 +214,8 @@ export default function PayoutAddressWizard({ auth, onClose, onDone, asModal = f
         <div style={{ marginBottom:16 }}>
           <div style={{ fontSize:".75rem", fontWeight:700, color:"var(--black)", marginBottom:6 }}>your address</div>
           <div style={{ padding:"12px 14px", borderRadius:10, border:"1.5px solid var(--black-10)", background:"var(--black-5)", fontSize:".78rem", fontFamily:"monospace", wordBreak:"break-all", lineHeight:1.5, display:"flex", alignItems:"flex-start", gap:8 }}>
-            <span style={{ flex:1 }}>{address}</span>
-            <CopyBtn text={address}/>
+            <span style={{ flex:1 }}>{trimmedAddress}</span>
+            <CopyBtn text={trimmedAddress}/>
           </div>
         </div>
 

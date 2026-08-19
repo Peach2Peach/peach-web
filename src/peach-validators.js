@@ -537,44 +537,75 @@ export function validateHolder(raw) {
 
 
 /**
- * Bitcoin Signed Message (BIP-137) signature — shape check
+ * Bitcoin message signature — shape check
  *
  * Despite the legacy "BIP322" name (kept because the encrypted-blob field is
- * `bip322Signature`, cross-platform with mobile), the actual payload is a
- * BIP-137 / Bitcoin Signed Message compact recoverable ECDSA signature:
- *   [ header (1 byte 27..42) | r (32) | s (32) ]  = 65 bytes
- *   base64 → exactly 88 ASCII chars (one '=' pad)
+ * `bip322Signature`, cross-platform with mobile), two wire formats are valid
+ * here — exactly the two the mobile app accepts via isValidBitcoinSignature:
  *
- * Full cryptographic verification is server-side. Client-side check enforces
- * the precise shape so users can't paste BIP322-simple sigs (which are ~144
- * chars) or other malformed input.
+ *   BIP-137 / Bitcoin Signed Message — compact recoverable ECDSA
+ *     [ header (1 byte 27..42) | r (32) | s (32) ] = 65 bytes → 88 base64 chars
+ *
+ *   BIP-322 — serialised witness stack (the only format taproot can produce,
+ *     and what Sparrow / Leather / Xverse / UniSat emit for segwit too)
+ *     [ varint item count | varint len | item ]… → 66+ bytes
+ *
+ * This is a cheap pre-filter for obvious garbage only. The authority on
+ * validity is isValidBitcoinSignature() (bip322-js), which mirrors mobile —
+ * never reject a signature here that the verifier would have accepted.
  */
 const BASE64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
 
+// Pull the signature out of a messy paste. Mirrors mobile's parseSignature
+// (SignMessage.tsx): wallets and signing dialogs wrap or pad what they put on
+// the clipboard, so strip all whitespace, and fall back to digging an embedded
+// 88-char BIP-137 run out of surrounding prose.
+const BIP137_RUN_RE = /[A-Za-z0-9/+]{87}=/u;
+
+function decodeBase64OrNull(str) {
+  if (!BASE64_RE.test(str) || str.length % 4 !== 0) return null;
+  try { return atob(str); } catch { return null; }
+}
+
+export function parseSignature(raw) {
+  if (typeof raw !== "string") return "";
+  const stripped = raw.replace(/\s+/gu, "");
+  // A clean paste already decodes to a plausible signature — return it
+  // untouched. Cutting an 88-char run out of a longer BIP-322 witness would
+  // silently corrupt it (mobile has this bug on its clipboard button).
+  const decoded = decodeBase64OrNull(stripped);
+  if (decoded && decoded.length >= 65) return stripped;
+  return stripped.match(BIP137_RUN_RE)?.pop() || stripped;
+}
+
 export function validateBIP322Signature(raw) {
   if (!raw || !raw.trim()) return { valid: false, error: "Signature is required" };
-  const clean = raw.trim();
+  const clean = parseSignature(raw);
 
   if (!BASE64_RE.test(clean)) return { valid: false, error: "Signature must be valid base64" };
-  if (clean.length !== 88) {
-    return {
-      valid: false,
-      error:
-        "Signature must be exactly 88 base64 characters (65 bytes). " +
-        "Re-sign using the BIP-137 / Bitcoin Signed Message format.",
-    };
+
+  const decoded = decodeBase64OrNull(clean);
+  if (decoded === null) return { valid: false, error: "Signature is not valid base64" };
+
+  if (decoded.length === 65) {
+    // BIP-137: the header encodes the recovery id and compression flag.
+    const header = decoded.charCodeAt(0);
+    if (header < 27 || header > 42) {
+      return { valid: false, error: "Signature header byte is out of range (27..42)" };
+    }
+    return { valid: true, error: null };
   }
 
-  let decoded;
-  try { decoded = atob(clean); } catch { return { valid: false, error: "Signature is not valid base64" }; }
-  if (decoded.length !== 65) return { valid: false, error: "Signature must decode to 65 bytes" };
+  // BIP-322 witness stack. Shortest real one is a single 64-byte schnorr
+  // signature: [count=1][len=64][sig] = 66 bytes.
+  if (decoded.length >= 66) return { valid: true, error: null };
 
-  const header = decoded.charCodeAt(0);
-  if (header < 27 || header > 42) {
-    return { valid: false, error: "Signature header byte is out of range (27..42)" };
-  }
-
-  return { valid: true, error: null };
+  return {
+    valid: false,
+    error:
+      "Signature is too short — expected a 65-byte BIP-137 signature " +
+      "or a BIP-322 witness.",
+  };
 }
 
 
