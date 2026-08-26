@@ -8,6 +8,18 @@
 
 import { formatTradeId, toPeaches } from "./format.js";
 
+// Some endpoints return medals double-JSON-encoded — `"\"superTrader\""`
+// rather than `"superTrader"` — which would fall through the badge mapping
+// below and render the raw quoted string. Strip one layer of quotes if present.
+function decodeMedal(m) {
+  if (typeof m !== "string") return m;
+  const trimmed = m.trim();
+  if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    try { return JSON.parse(trimmed); } catch { return trimmed.slice(1, -1); }
+  }
+  return m;
+}
+
 export function normalizeOffer(o, typeHint, viewerPeachId) {
   const currencies = o.meansOfPayment ? Object.keys(o.meansOfPayment) : [];
   const methods = o.meansOfPayment
@@ -25,14 +37,15 @@ export function normalizeOffer(o, typeHint, viewerPeachId) {
     currencies,
     rep: toPeaches(o.user?.rating ?? 0),
     trades: o.user?.trades ?? 0,
-    badges: (o.user?.medals ?? o.user?.badges ?? []).map((m) =>
+    badges: (o.user?.medals ?? o.user?.badges ?? []).map(decodeMedal).map((m) =>
       m === "fastTrader" ? "fast"
         : m === "superTrader" ? "supertrader"
         : m,
     ),
     auto: o.allowedToInstantTrade ?? false,
     experienceLevel: o.experienceLevelCriteria ?? null,
-    online: o.user?.online ?? false,
+    // Top-level on the public search payloads; nested under `user` elsewhere.
+    online: o.online ?? o.user?.online ?? false,
     userId: o.user?.id ?? "",
     peachId: o.user?.id ? ("PEACH" + o.user.id.slice(0, 8).toUpperCase()) : "",
     isOwn: !!viewerPeachId && (

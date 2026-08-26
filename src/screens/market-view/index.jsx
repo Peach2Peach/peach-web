@@ -37,6 +37,12 @@ const CATEGORY_ID_BY_LABEL = Object.fromEntries(
 
 // ── Filter persistence (survives navigation + tab close + browser restart) ──
 const MARKET_FILTERS_KEY = "peach_marketFilters";
+
+// Query string for the public (unauthenticated) offer search. `size` must be
+// large enough to return the whole book in one page, and the premium bounds
+// must be explicit to defeat the server-side defaults. See fetchMarket().
+const PUBLIC_SEARCH_QUERY = "size=500&minPremium=-1000&maxPremium=1000";
+
 function loadMarketFilters() {
   try { return JSON.parse(localStorage.getItem(MARKET_FILTERS_KEY)) || {}; }
   catch { return {}; }
@@ -106,7 +112,7 @@ export default function PeachMarket() {
   const PTR_THRESHOLD = 70;
 
   // ── AUTH + API ──
-  const { get, post, auth } = useApi();
+  const { get, auth } = useApi();
   const [liveOffers,   setLiveOffers]   = useState(() => getCached("market-offers")?.data ?? null);
   const [offersLoading, setOffersLoading] = useState(() => !getCached("market-offers"));
   const [isRefetching, setIsRefetching] = useState(false);
@@ -242,12 +248,23 @@ export default function PeachMarket() {
         for (const o of asksArr)    { const id = String(o.id); if (!seen.has(id)) { seen.add(id); merged.push(normalizeOffer(o, "ask", peachId)); } }
         all = merged;
       } else {
-        // Not authenticated: use v1 public search. `size` is read from the
-        // query string only — in the body it is silently ignored and the
-        // response falls back to a single default page of ~21 offers.
+        // Not authenticated: use the public v1 search endpoints. These are
+        // named after the offer's own direction, not the viewer's: /search/buy
+        // returns `bid` offers (shown on the Sell BTC tab) and /search/sell
+        // returns `ask` offers. Unlike the legacy POST /offer/search they carry
+        // `premium` and `prices` on both sides, and `/search/buy` reads from the
+        // same v069 buy-offer table the authenticated path uses.
+        //
+        // Two quirks drive the query string:
+        //   - `size`/`page` are read from the query string only; omitting size
+        //     falls back to a single default page of ~21 offers.
+        //   - Omitting the premium bounds applies a server-side default that
+        //     silently hides real offers (sell defaults to maxPremium=20, which
+        //     drops legitimate 22–35 offers). Pass both bounds explicitly so the
+        //     full book comes back; the platform's own cap still applies.
         const [bidsRes, asksRes] = await Promise.all([
-          post('/offer/search?size=500', { type: 'bid' }),
-          post('/offer/search?size=500', { type: 'ask' }),
+          get(`/offer/search/buy?${PUBLIC_SEARCH_QUERY}`),
+          get(`/offer/search/sell?${PUBLIC_SEARCH_QUERY}`),
         ]);
         const [bids, asks] = await Promise.all([
           bidsRes.ok ? bidsRes.json() : [],
@@ -255,9 +272,22 @@ export default function PeachMarket() {
         ]);
         const bidsArr = Array.isArray(bids) ? bids : bids?.offers ?? [];
         const asksArr = Array.isArray(asks) ? asks : asks?.offers ?? [];
+        // `remaining > 0` means the page size truncated the book — the offer
+        // count in the stats pill would silently under-report.
+        const bidsRemaining = Array.isArray(bids) ? 0 : bids?.remaining ?? 0;
+        const asksRemaining = Array.isArray(asks) ? 0 : asks?.remaining ?? 0;
+        if (bidsRemaining > 0 || asksRemaining > 0) {
+          console.warn(
+            "[MarketView] public search truncated —",
+            `${bidsRemaining} bid(s) and ${asksRemaining} ask(s) not fetched`,
+          );
+        }
         console.log("[MarketView] v1 bids:", bidsArr.length, "asks:", asksArr.length);
         all = [
-          ...bidsArr.map(o => normalizeOffer(o, "bid", null)),
+          // `/search/buy` carries no `online` field and only returns offers that
+          // are currently online, so mark them as such rather than defaulting to
+          // offline. `/search/sell` reports `online` per offer.
+          ...bidsArr.map(o => normalizeOffer({ online: true, ...o }, "bid", null)),
           ...asksArr.map(o => normalizeOffer(o, "ask", null)),
         ];
       }
