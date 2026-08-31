@@ -38,7 +38,7 @@ function stripPmIndex(id) { return String(id || "").replace(/[-_]\d+$/, ""); }
 // so the realised range never falls outside [MIN_CHF, MAX_CHF]. The cap in any
 // other currency is derived from /market/prices (CHF → target).
 export const MIN_CHF = 10;
-export const MAX_CHF = 800;
+export const MAX_CHF = 500;
 // Per-account daily trading limit (CHF). The offer-amount band above is a
 // separate, per-offer regulatory cap; this is what the "Daily limit usage"
 // gauge is measured against.

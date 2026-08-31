@@ -586,6 +586,9 @@ export default function OfferDetailPopup({
           paymentDataSignature,
           symmetricKeyEncrypted,
           symmetricKeySignature,
+          // Trading against a buy offer means we're the seller, so the escrow
+          // the server sets up for this trade must be a v2 escrow.
+          ...(offerType === "buyOffer" ? { escrowVersion: 2 } : {}),
         }),
       });
 
@@ -680,6 +683,9 @@ export default function OfferDetailPopup({
           paymentDataSignature,
           symmetricKeyEncrypted,
           symmetricKeySignature,
+          // Trading against a buy offer means we're the seller, so the escrow
+          // the server sets up for this trade must be a v2 escrow.
+          ...(offerType === "buyOffer" ? { escrowVersion: 2 } : {}),
         }),
         signal: controller.signal,
       });

@@ -188,7 +188,7 @@ function MarketStatPills({ marketStats, isSell, onInfo }) {
 // Editable big number + −/+ steppers + range slider. Used in the Configure
 // step and the Review step's inline editor. `value` is the form.premium string;
 // `onChange` stores a new premium string; `isSell` flips the green/red sign.
-const PREM_LIMIT = 35;   // premium range: ±35%
+const PREM_LIMIT = 6;    // premium range: ±6%
 const PREM_STEP  = 0.5;  // −/+ button nudge (slider drag stays at 0.1)
 const clampPrem  = n => Math.max(-PREM_LIMIT, Math.min(PREM_LIMIT, n));
 
@@ -233,7 +233,7 @@ function PremiumSlider({ value, onChange, isSell, fixed }) {
     if (fixedOn) {
       const n = parseFloat(draft);
       if (!isNaN(n) && n > 0 && hasPrice(fixed.market)) {
-        // Clamp the typed price to the ±35% band, then store the clamped price.
+        // Clamp the typed price to the ±6% band, then store the clamped price.
         const p = clampPrem((n / fixed.market - 1) * 100);
         fixed.onSetPrice(fixed.market * (1 + p / 100));
       }
@@ -1073,7 +1073,7 @@ export default function OfferCreation({ initialType="buy" }) {
               try {
                 const returnAddress = resolveReturnAddress(i);
                 const sellPayload = {
-                  type: "ask", amount: form.amtFixed,
+                  type: "ask", amount: form.amtFixed, escrowVersion: 2,
                   ...buildPricePayload(),
                   meansOfPayment, paymentData, returnAddress,
                   ...(buildInstantTradeCriteria() ? { instantTradeCriteria: buildInstantTradeCriteria() } : {}),
@@ -1111,7 +1111,7 @@ export default function OfferCreation({ initialType="buy" }) {
             // ── SINGLE SELL ──
             const returnAddress = resolveReturnAddress(0);
             const sellPayload = {
-              type: "ask", amount: form.amtFixed,
+              type: "ask", amount: form.amtFixed, escrowVersion: 2,
               ...buildPricePayload(),
               meansOfPayment, paymentData, returnAddress,
               ...(buildInstantTradeCriteria() ? { instantTradeCriteria: buildInstantTradeCriteria() } : {}),
@@ -1325,7 +1325,7 @@ export default function OfferCreation({ initialType="buy" }) {
           ? choice.address.trim()
           : deriveReturnAddress(auth.xpub, nextIdx++);
         const payload = {
-          type:"ask", amount:form.amtFixed,
+          type:"ask", amount:form.amtFixed, escrowVersion:2,
           ...buildPricePayload(),
           meansOfPayment, paymentData, returnAddress,
           ...(buildInstantTradeCriteria()?{instantTradeCriteria:buildInstantTradeCriteria()}:{}),
