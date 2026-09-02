@@ -49,6 +49,7 @@ export const CSS = `
      Escrow). */
   .wizard-header,
   .step-bar,
+  .oc-banner-wrap,
   .step-anim,
   .oc-nav{width:100%;max-width:1000px;margin-left:auto;margin-right:auto}
 

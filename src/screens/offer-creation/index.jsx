@@ -33,6 +33,7 @@ import {
   AddPMFlow, methodLabel, normalizeApiPaymentMethods,
 } from "../../components/AddPMFlow.jsx";
 import InfoPopup, { InfoDot } from "../../components/InfoPopup.jsx";
+import TradingConditionsBanner from "../../components/TradingConditionsUpdate.jsx";
 import { CurrencyDropdown } from "../../components/Navbars.jsx";
 import MobilePendingButton from "../../components/MobilePendingButton.jsx";
 import { syncPMsToServer } from "../../utils/pmSync.js";
@@ -1493,6 +1494,14 @@ export default function OfferCreation({ initialType="buy" }) {
               </div>
             ))}
           </div>
+
+          {/* Temporary trading-conditions notice — buy side only (the buyer is
+              the one relying on the seller-controlled escrow). */}
+          {!isSell && (
+            <div className="oc-banner-wrap" style={{marginBottom:16}}>
+              <TradingConditionsBanner/>
+            </div>
+          )}
 
           {/* ── STEP 0: CONFIGURE (single card, 3 sections) ── */}
           {step===0&&(

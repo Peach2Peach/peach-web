@@ -29,6 +29,7 @@ import RepeatTraderBadge from "./RepeatTraderBadge.jsx";
 import MobilePendingButton from "./MobilePendingButton.jsx";
 import RequestedOfferPopup from "./RequestedOfferPopup.jsx";
 import { BadgesInfoPopup } from "./InfoPopup.jsx";
+import TradingConditionsBanner from "./TradingConditionsUpdate.jsx";
 import { methodDisplayName } from "../data/paymentMethodMeta.js";
 import { AddPMFlow, methodLabel, normalizeApiPaymentMethods } from "./AddPMFlow.jsx";
 
@@ -1138,6 +1139,12 @@ export default function OfferDetailPopup({
                 );
               })()}
             </>
+          )}
+
+          {/* Temporary trading-conditions notice — buyer side only, i.e. when
+              requesting a trade on someone else's sell offer. */}
+          {!isOwn && offer.type === "ask" && (
+            <TradingConditionsBanner style={{marginTop:16}}/>
           )}
 
         </div>
