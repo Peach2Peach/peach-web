@@ -2,7 +2,7 @@
 // Encrypt + sign + POST the user's custom payout address (with its BIP322
 // proof-of-control) to /v069/selfUser/encryptedCustomPayoutAddress, and
 // decrypt + signature-verify it back from GET /v069/selfUser. Mirrors
-// customRefundAddressSync.js. The encrypted blob carries the full bundle so
+// pmSync.js. The encrypted blob carries the full bundle so
 // the BIP322 proof travels with the address it confirms.
 // ─────────────────────────────────────────────────────────────────────────────
 

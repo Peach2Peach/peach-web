@@ -726,8 +726,9 @@ export async function extractPMsFromProfile(profile, armoredPrivKey) {
     // Log all profile keys so we can see the response shape
 
     // Collect all PGP-encrypted fields — top-level and one level deep
-    // Skip signature fields (PGP signed messages, not encrypted data) and the
-    // refund-address fields (handled separately by customRefundAddressSync).
+    // Skip signature fields (PGP signed messages, not encrypted data), the
+    // payout-address fields (handled separately by customPayoutAddressSync) and
+    // any legacy custom refund-address blob still stored on the server.
     const SKIP_FIELDS = new Set([
       "encryptedPaymentDataSignature",
       "encryptedCustomRefundAddress",

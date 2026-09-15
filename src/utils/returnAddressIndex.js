@@ -9,9 +9,10 @@
 // the funds from the wallet's point of view.
 //
 // We reconstruct the next free index by counting the user's past sell offers
-// whose returnAddress derives from this xpub. Saved / external refund addresses
-// don't occupy an `m/84'/.../1/N` slot, so isReturnAddressFromXpub filters them
-// out. This is the same accounting sell-offer creation uses, so the
+// whose returnAddress derives from this xpub. Older offers created with an
+// external refund address don't occupy an `m/84'/.../1/N` slot, so
+// isReturnAddressFromXpub filters them out. This is the same accounting
+// sell-offer creation uses, so the
 // offer-creation and contract-escrow paths draw from one contiguous range.
 //
 // Errors from the offer fetches are allowed to propagate — the caller decides

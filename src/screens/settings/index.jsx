@@ -11,7 +11,7 @@ import { SettingsRow, SettingsSection } from "./components.jsx";
 import { IS_REGTEST } from "../../utils/network.js";
 import {
   ProfileSubScreen, ReferralsSubScreen, BackupsSubScreen,
-  NetworkFeesSubScreen, TxBatchingSubScreen, RefundAddressSubScreen,
+  NetworkFeesSubScreen, TxBatchingSubScreen,
   PayoutWalletSubScreen, BlockUsersSubScreen,
   NotificationsSubScreen,
   LanguageSubScreen, NodeSubScreen, ContactSubScreen, AboutSubScreen,
@@ -24,7 +24,7 @@ export default function SettingsScreen() {
 
   // Reset to main view when sidenav "Settings" is clicked (same-route navigation).
   // When the avatar's "Profile" shortcut sets state.openProfile, jump straight to that sub-view.
-  // state.openSection ("payout", "refund", etc.) is a generic deep-link into any sub-view.
+  // state.openSection ("payout", "tx-batching", etc.) is a generic deep-link into any sub-view.
   useEffect(() => {
     if (location.state?.openProfile) setCurrentView("profile");
     else if (location.state?.openSection) setCurrentView(location.state.openSection);
@@ -43,7 +43,6 @@ export default function SettingsScreen() {
     if (currentView === "backups")      return <BackupsSubScreen     onBack={() => setCurrentView("main")}/>;
     if (currentView === "network-fees") return <NetworkFeesSubScreen onBack={() => setCurrentView("main")}/>;
     if (currentView === "tx-batching")  return <TxBatchingSubScreen  onBack={() => setCurrentView("main")}/>;
-    if (currentView === "refund")       return <RefundAddressSubScreen onBack={() => setCurrentView("main")}/>;
     if (currentView === "payout")       return <PayoutWalletSubScreen  onBack={() => setCurrentView("main")}/>;
     if (currentView === "block-users")  return <BlockUsersSubScreen  onBack={() => setCurrentView("main")}/>;
     if (currentView === "notifications")    return <NotificationsSubScreen    onBack={() => setCurrentView("main")}/>;
@@ -83,9 +82,6 @@ export default function SettingsScreen() {
           <SettingsRow icon="📦" label="Transaction Batching"
             description="Combine payouts to save on fees"
             onClick={() => setCurrentView("tx-batching")}/>
-          <SettingsRow icon="↩️" label="Refund Address"
-            description="Bitcoin address for trade cancellations"
-            onClick={() => setCurrentView("refund")}/>
           <SettingsRow icon="📤" label="Custom Payout Address"
             description="Send your sats to an external wallet automatically"
             onClick={() => setCurrentView("payout")}
