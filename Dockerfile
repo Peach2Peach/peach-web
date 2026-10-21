@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.6
 
 # ─── Build stage ────────────────────────────────────────────────────────────
-FROM node:20-alpine AS build
+FROM node:24.22.1-alpine AS build
 
 # Both env vars are inlined into the bundle by Vite at build time, so they
 # must be passed as --build-arg (not -e) when building the image. Build one
