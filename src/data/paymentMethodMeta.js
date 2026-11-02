@@ -359,6 +359,21 @@ export const PHONE_PREFIX_MAP = {
   blik: "+48",
 };
 
+// Methods offered in several countries (see NATIONAL_OPTIONS) whose prefix
+// depends on the country picked in the wizard. With no known country (e.g.
+// editing a saved PM, or a currency without a country step) any listed prefix
+// is accepted.
+const PHONE_PREFIX_BY_COUNTRY = {
+  mobilePay: { DK: "+45", FI: "+358" },
+  satispay: { IT: "+39", FR: "+33", DE: "+49" },
+};
+
+export function getPhonePrefix(methodId, country) {
+  const byCountry = PHONE_PREFIX_BY_COUNTRY[methodId];
+  if (byCountry) return byCountry[country] || Object.values(byCountry);
+  return PHONE_PREFIX_MAP[methodId] || null;
+}
+
 // ─── FIELD METADATA ─────────────────────────────────────────────────────────
 // Per-field-id rendering hints. Used by PMDetailsForm to turn an API field id
 // (like "iban") into a labelled input with the right placeholder/validator.

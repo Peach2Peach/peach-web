@@ -452,7 +452,8 @@ export function validateSolanaAddress(raw) {
  * - Spaces, dashes, and dots are stripped before validation
  *
  * When a payment method provides a country-specific placeholder (e.g. +34 for Bizum),
- * the caller can optionally pass `expectedPrefix` to enforce it.
+ * the caller can optionally pass `expectedPrefix` to enforce it. It may also be
+ * an array of prefixes, any of which is accepted.
  */
 const DIGITS_ONLY_RE = /^\d{7,15}$/;
 
@@ -465,8 +466,9 @@ export function validatePhone(raw, expectedPrefix) {
   const digits = clean.slice(1);
   if (!DIGITS_ONLY_RE.test(digits)) return { valid: false, error: "Phone number must be 7–15 digits after +" };
 
-  if (expectedPrefix && !clean.startsWith(expectedPrefix)) {
-    return { valid: false, error: `Expected country prefix ${expectedPrefix}` };
+  const prefixes = [].concat(expectedPrefix || []);
+  if (prefixes.length && !prefixes.some((p) => clean.startsWith(p))) {
+    return { valid: false, error: `Expected country prefix ${prefixes.join(" or ")}` };
   }
 
   return { valid: true, error: null };

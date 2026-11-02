@@ -10,7 +10,7 @@
 import { useState, useEffect } from "react";
 import { validatePhone, validatePaymentReference, isPhoneAllowed, makeBlurHandler } from "../peach-validators.js";
 import {
-  PHONE_PREFIX_MAP, getFieldMeta, getTabLabel, fieldsForTab, parseSections,
+  getPhonePrefix, getFieldMeta, getTabLabel, fieldsForTab, parseSections,
   normalizeApiPaymentMethods,
 } from "../data/paymentMethodMeta.js";
 import { getPaymentLogo } from "../assets/logos/index.ts";
@@ -590,7 +590,7 @@ export function AddPMFlow({ methods, meetupEvents = [], existingPMs = [], onSave
   function handleSave() {
     if (isCash) { handleSaveCash(); return; }
     const newErrors = {};
-    const phonePrefix = PHONE_PREFIX_MAP[selMethodId];
+    const phonePrefix = getPhonePrefix(selMethodId, selCountry);
     // Mandatory fields: must be non-empty + pass per-field validator from meta.
     for (const fid of mandatoryFields) {
       const val = (details[fid] || "").trim();
@@ -1026,7 +1026,7 @@ export function AddPMFlow({ methods, meetupEvents = [], existingPMs = [], onSave
                 {(() => {
                   const renderField = (fid, isOptional) => {
                     const meta = getFieldMeta(fid);
-                    const phonePrefix = meta.validatorWithPrefix ? PHONE_PREFIX_MAP[selMethodId] : null;
+                    const phonePrefix = meta.validatorWithPrefix ? getPhonePrefix(selMethodId, selCountry) : null;
                     const hasValidator = !!meta.validator || !!meta.validatorWithPrefix;
 
                     function handleFieldBlur() {
