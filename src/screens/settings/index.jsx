@@ -11,7 +11,7 @@ import { SettingsRow, SettingsSection } from "./components.jsx";
 import { IS_REGTEST } from "../../utils/network.js";
 import {
   ProfileSubScreen, ReferralsSubScreen, BackupsSubScreen,
-  NetworkFeesSubScreen, TxBatchingSubScreen,
+  NetworkFeesSubScreen,
   PayoutWalletSubScreen, BlockUsersSubScreen,
   NotificationsSubScreen,
   LanguageSubScreen, NodeSubScreen, ContactSubScreen, AboutSubScreen,
@@ -24,7 +24,7 @@ export default function SettingsScreen() {
 
   // Reset to main view when sidenav "Settings" is clicked (same-route navigation).
   // When the avatar's "Profile" shortcut sets state.openProfile, jump straight to that sub-view.
-  // state.openSection ("payout", "tx-batching", etc.) is a generic deep-link into any sub-view.
+  // state.openSection ("payout", "network-fees", etc.) is a generic deep-link into any sub-view.
   useEffect(() => {
     if (location.state?.openProfile) setCurrentView("profile");
     else if (location.state?.openSection) setCurrentView(location.state.openSection);
@@ -42,7 +42,6 @@ export default function SettingsScreen() {
     if (currentView === "referrals")    return <ReferralsSubScreen   onBack={() => setCurrentView("main")}/>;
     if (currentView === "backups")      return <BackupsSubScreen     onBack={() => setCurrentView("main")}/>;
     if (currentView === "network-fees") return <NetworkFeesSubScreen onBack={() => setCurrentView("main")}/>;
-    if (currentView === "tx-batching")  return <TxBatchingSubScreen  onBack={() => setCurrentView("main")}/>;
     if (currentView === "payout")       return <PayoutWalletSubScreen  onBack={() => setCurrentView("main")}/>;
     if (currentView === "block-users")  return <BlockUsersSubScreen  onBack={() => setCurrentView("main")}/>;
     if (currentView === "notifications")    return <NotificationsSubScreen    onBack={() => setCurrentView("main")}/>;
@@ -79,9 +78,6 @@ export default function SettingsScreen() {
           <SettingsRow icon="⛏️" label="Network Fees"
             description="Set your preferred on-chain fee rate"
             onClick={() => setCurrentView("network-fees")}/>
-          <SettingsRow icon="📦" label="Transaction Batching"
-            description="Combine payouts to save on fees"
-            onClick={() => setCurrentView("tx-batching")}/>
           <SettingsRow icon="📤" label="Custom Payout Address"
             description="Send your sats to an external wallet automatically"
             onClick={() => setCurrentView("payout")}

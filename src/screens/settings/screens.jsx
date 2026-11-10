@@ -13,14 +13,13 @@ import PayoutAddressWizard from "../../components/PayoutAddressWizard.jsx";
 import { validateFeeRate } from "../../peach-validators.js";
 import {
   IconExternalLink, IconShield,
-  Toggle, SettingsRow, SettingsSection, SubScreenWrapper,
+  SettingsRow, SettingsSection, SubScreenWrapper,
   CopyBtn, PrimaryBtn, OutlineBtn, FieldError, makeBlurHandler,
 } from "./components.jsx";
 import PeachRating from "../../components/PeachRating.jsx";
 import Avatar from "../../components/Avatar.jsx";
 import { toPeaches } from "../../utils/format.js";
-import InfoPopup, { InfoDot, BadgesInfoPopup, TradingLimitsInfoPopup } from "../../components/InfoPopup.jsx";
-import ConfirmModal from "../../components/ConfirmModal.jsx";
+import { InfoDot, BadgesInfoPopup, TradingLimitsInfoPopup } from "../../components/InfoPopup.jsx";
 
 // ── ProfileSubScreen ─────────────────────────────────────────────────────────
 
@@ -558,151 +557,6 @@ export function NetworkFeesSubScreen({ onBack }) {
       </div>
       {errors.save && <div style={{ marginBottom:12 }}><FieldError error={errors.save}/></div>}
       <PrimaryBtn label={submitting ? "SAVING…" : (saved ? "FEE RATE SET" : "SET FEE RATE")} onClick={handleSave} disabled={!canSave}/>
-    </SubScreenWrapper>
-  );
-}
-
-// ── TxBatchingSubScreen ──────────────────────────────────────────────────────
-
-export function TxBatchingSubScreen({ onBack }) {
-  const { get, post, auth } = useApi();
-  const [batching, setBatching] = useState(
-    auth?.profile?.isBatchingEnabled ?? false
-  );
-  const [showInfo, setShowInfo] = useState(false);
-  // When the user turns batching off while payouts are queued, hold the toggle
-  // and surface an inline confirmation instead of a native browser dialog.
-  const [confirmAccelerate, setConfirmAccelerate] = useState(false);
-
-  useEffect(() => {
-    if (!auth) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await get('/user/me');
-        if (!res.ok) return;
-        const profile = await res.json();
-        if (cancelled) return;
-        if (window.__PEACH_AUTH__) window.__PEACH_AUTH__.profile = profile;
-        setBatching(!!profile.isBatchingEnabled);
-      } catch {}
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  async function applyBatching(value) {
-    const body = value
-      ? { enableBatching: true }
-      : { enableBatching: false, riskAcknowledged: true };
-    try {
-      await post('/user/batching', body);
-      if (window.__PEACH_AUTH__?.profile) {
-        window.__PEACH_AUTH__.profile.isBatchingEnabled = value;
-      }
-    } catch {}
-  }
-
-  async function handleBatchingChange(value) {
-    setBatching(value);
-
-    if (!auth) return;
-
-    if (value === false) {
-      let hasPending = false;
-      try {
-        const res = await get('/contracts/summary');
-        if (res.ok) {
-          const list = await res.json();
-          hasPending = Array.isArray(list)
-            && list.some(c => c.tradeStatus === 'payoutPending');
-        }
-      } catch {}
-      if (hasPending) {
-        // Pause here; the inline ConfirmModal drives the next step.
-        setConfirmAccelerate(true);
-        return;
-      }
-    }
-
-    applyBatching(value);
-  }
-
-  return (
-    <SubScreenWrapper
-      title={
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-          Transaction Batching
-          <InfoDot ariaLabel="About transaction batching" onClick={() => setShowInfo(true)} />
-        </span>
-      }
-      onBack={onBack}
-    >
-      {showInfo && (
-        <InfoPopup title="Payout fees" onClose={() => setShowInfo(false)}>
-          <p className="ip-text">
-            Escrows are paid in batched transactions with a half-hour fee by default. You can opt out, but understand the risks.
-          </p>
-          <p className="ip-text">
-            Peach incurs additional consolidation costs, which the user covers. Calculated as 30-minute fee × 68. Since fees are dynamic, costs can become a significant part of the trade.
-          </p>
-        </InfoPopup>
-      )}
-      {confirmAccelerate && (
-        <ConfirmModal
-          title="Turn off batching"
-          body="You have payouts queued in the batching program. Turning off batching will trigger an immediate payout at higher fees. Continue?"
-          confirmLabel="Turn off batching"
-          tone="danger"
-          onConfirm={() => {
-            setConfirmAccelerate(false);
-            applyBatching(false);
-          }}
-          onCancel={() => {
-            setConfirmAccelerate(false);
-            setBatching(true);
-          }}
-        />
-      )}
-      {batching ? (
-        <>
-          <p style={{ fontSize:".9rem", color:"var(--black)", marginBottom:8, lineHeight:1.6 }}>
-            Escrow payouts are delayed. Free Trades pay instantly.
-          </p>
-          <p style={{ fontSize:".9rem", color:"var(--black)", marginBottom:16, lineHeight:1.6 }}>
-            You'll be warned if mining fees exceed 10%.
-          </p>
-          <div style={{ background:"var(--primary-mild)", border:"1.5px solid var(--primary)", borderRadius:12, padding:"14px 16px", marginBottom:24 }}>
-            <span style={{ fontWeight:800, color:"var(--primary)" }}>Save up to 23%</span>
-            <span style={{ fontSize:".82rem", color:"var(--black-75)", marginLeft:4, lineHeight:1.6 }}>
-              in network fees
-            </span>
-          </div>
-        </>
-      ) : (
-        <>
-          <p style={{ fontSize:".9rem", color:"var(--black)", marginBottom:16, lineHeight:1.6 }}>
-            Escrow payouts are instant
-          </p>
-          <div style={{ background:"var(--primary-mild)", border:"1.5px solid var(--primary)", borderRadius:12, padding:"14px 16px", marginBottom:24 }}>
-            <span style={{ fontWeight:800, color:"var(--primary)" }}>Caution!</span>
-            <span style={{ fontSize:".82rem", color:"var(--black-75)", marginLeft:4, lineHeight:1.6 }}>
-              You cover Peach's additional costs. Costs are dynamic and can spike. Ensure you understand this!
-            </span>
-          </div>
-        </>
-      )}
-      <div style={{ background:"var(--surface)", border:"1px solid var(--black-10)", borderRadius:12, padding:"16px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
-        <span style={{ fontSize:".9rem", fontWeight:700, color:"var(--black)" }}>transaction batching</span>
-        <Toggle checked={batching} onChange={handleBatchingChange}/>
-      </div>
-      <p style={{ fontSize:".85rem", fontWeight:500, color:"var(--black-75)", lineHeight:1.55, margin:"0 4px 20px" }}>
-        Un-toggle to accelerate your pending payouts. This will incur a small fee.
-      </p>
-      <div style={{ background:"var(--black-5)", borderRadius:10, padding:"12px 16px" }}>
-        <p style={{ fontSize:".76rem", color:"var(--black-65)", lineHeight:1.5, margin:0 }}>
-          Transaction batching (GroupHug) combines multiple payouts into a single Bitcoin transaction, reducing on-chain fees per payout. When disabled, your escrow payout is broadcast immediately as its own transaction.
-        </p>
-      </div>
     </SubScreenWrapper>
   );
 }

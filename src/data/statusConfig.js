@@ -19,6 +19,8 @@ export const STATUS_CONFIG = {
   offerHiddenWithMatchesAvailable: { label: "Hidden (Requests)", bg: "var(--primary-mild)", color: "var(--primary-dark)", action: true },
   hasMatchesAvailable: { label: "Select request",        bg: "var(--primary-mild)", color: "var(--primary-dark)", action: true  },
   acceptTradeRequest:  { label: "Accept Trade Request",  bg: "var(--primary-mild)", color: "var(--primary-dark)", action: true  },
+  // Client-side status, not sent by the API: own Buy Offer with `publicKey: null`.
+  awaitingMobileConfirmation: { label: "Waiting for confirmation on mobile app", bg: "var(--primary-mild)", color: "var(--primary-dark)", action: true },
 
   // ── Active (contract stage) ──
   createEscrow:        { label: "Create Escrow",         bg: "var(--warning-soft)", color: "var(--warning)", action: true  },
@@ -103,6 +105,7 @@ export const FINISHED_STATUSES = new Set([
 // Statuses that represent a pending/open offer → Pending Offers tab
 export const PENDING_STATUSES = new Set([
   "fundEscrow",
+  "awaitingMobileConfirmation",
   "searchingForPeer", "waitingForTradeRequest",
   "hasMatchesAvailable", "acceptTradeRequest",
   "offerHidden", "offerHiddenWithMatchesAvailable",

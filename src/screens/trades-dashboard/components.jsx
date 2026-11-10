@@ -91,6 +91,7 @@ export const PILL_CONFIG = {
   hasMatchesAvailable: { bg:"var(--primary)",    color:"white",              label:"View requests",         passive:false },
   acceptTradeRequest:  { bg:"var(--primary)",    color:"white",              label:"Accept trade request",  passive:false },
   offerHiddenWithMatchesAvailable: { bg:"var(--primary)", color:"white",    label:"View requests",         passive:false },
+  awaitingMobileConfirmation: { bg:"var(--primary)", color:"white",         label:"Waiting for confirmation on mobile app", passive:false },
   // Sent trade request (synthetic — user performed a trade request on a counterparty's offer)
   tradeRequestSent:  { bg:"var(--primary-bg)", color:"var(--primary-dark)", label:"Request sent",         passive:true  },
   // Escrow stage

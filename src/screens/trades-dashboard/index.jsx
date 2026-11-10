@@ -7,7 +7,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { SatsAmount } from "../../components/BitcoinAmount.jsx";
 import { useAuth } from "../../hooks/useAuth.js";
 import { useApi, getCached, setCache, clearCache } from "../../hooks/useApi.js";
-import { useCurrency } from "../../components/AppLayout.jsx";
+import { useCurrency } from "../../hooks/useCurrency.js";
 import { useUserPMs } from "../../hooks/useUserPMs.js";
 import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 import MobileSigningModal from "../../components/MobileSigningModal.jsx";
@@ -58,6 +58,7 @@ import { normalizeOffer, normalizeContract, hasInstantTradeEnabled } from "../..
 import RequestedOfferPopup from "../../components/RequestedOfferPopup.jsx";
 import { RefreshIndicator } from "../../components/RefreshIndicator.jsx";
 import InfoPopup, { InfoDot, TradingLimitsInfoPopup } from "../../components/InfoPopup.jsx";
+import { canCreateOffers } from "../../utils/offerCreationGate.js";
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const CSS = `
@@ -635,7 +636,8 @@ export default function TradesDashboard() {
 
   const { byContract: liveUnread } = useUnread();
   // AppLayout owns Topbar/SideNav state. Dashboard only needs isLoggedIn for guards.
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, auth: authState } = useAuth();
+  const showCreateOffer = isLoggedIn && canCreateOffers(authState?.profile);
   const { allPrices, selectedCurrency, btcPrice } = useCurrency();
 
   // ── NORMALIZE HELPERS (stable across renders — only depend on auth.peachId) ──
@@ -2422,13 +2424,15 @@ export default function TradesDashboard() {
               </span>
             </div>
           )}
-          <button
-            className="btn-cta"
-            onClick={() => navigate("/offer/new")}
-            style={{ flexShrink: 0 }}
-          >
-            + Create Offer
-          </button>
+          {showCreateOffer && (
+            <button
+              className="btn-cta"
+              onClick={() => navigate("/offer/new")}
+              style={{ flexShrink: 0 }}
+            >
+              + Create Offer
+            </button>
+          )}
         </div>
 
         {/* ── PENDING OFFERS ── */}

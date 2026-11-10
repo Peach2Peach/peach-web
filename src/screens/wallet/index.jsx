@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useAuth } from "../../hooks/useAuth.js";
-import { useCurrency } from "../../components/AppLayout.jsx";
+import { useCurrency } from "../../hooks/useCurrency.js";
 import { useWallet } from "../../hooks/useWallet.js";
 import { getEsploraNet } from "../../utils/wallet.js";
 import { CSS } from "./styles.js";

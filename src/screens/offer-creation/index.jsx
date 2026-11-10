@@ -7,7 +7,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { SatsAmount } from "../../components/BitcoinAmount.jsx";
 import { useAuth } from "../../hooks/useAuth.js";
 import { useApi, clearCache } from "../../hooks/useApi.js";
-import { useCurrency } from "../../components/AppLayout.jsx";
+import { useCurrency } from "../../hooks/useCurrency.js";
 import { useMarketStats } from "../../hooks/useMarketStats.js";
 import { useUserPMs } from "../../hooks/useUserPMs.js";
 import { useMeetupEvents } from "../../hooks/useMeetupEvents.js";
@@ -30,11 +30,14 @@ import {
   AddPMFlow, methodLabel, normalizeApiPaymentMethods,
 } from "../../components/AddPMFlow.jsx";
 import InfoPopup, { InfoDot } from "../../components/InfoPopup.jsx";
-import TradingConditionsBanner from "../../components/TradingConditionsUpdate.jsx";
 import { CurrencyDropdown } from "../../components/Navbars.jsx";
 import MobilePendingButton from "../../components/MobilePendingButton.jsx";
 import { syncPMsToServer } from "../../utils/pmSync.js";
 import Toast from "../../components/Toast.jsx";
+
+// POST /v069/buyOffer (version 2) answers `{ ids: [...] }` instead of the offer.
+// Each request here creates a single offer, so the first id is the one.
+const createdBuyOfferId = (data) => String(data?.ids?.[0] ?? "");
 
 // ─── Help-popup copy (verbatim from mobile app) ─────────────────────────────
 const INFO_COPY = {
@@ -1074,6 +1077,7 @@ export default function OfferCreation({ initialType="buy" }) {
 
         const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
         const buyBody = JSON.stringify({
+          version: 2,
           amount: form.amtFixed,
           meansOfPayment,
           paymentData,
@@ -1097,7 +1101,7 @@ export default function OfferCreation({ initialType="buy" }) {
               }).then(async r => {
                 const d = await r.json().catch(() => null);
                 if (!r.ok) throw new Error(d?.error || d?.message || `Error ${r.status}`);
-                return { status: "created", offerId: String(d?.id ?? d?.offerId ?? ""), error: null };
+                return { status: "created", offerId: createdBuyOfferId(d), error: null };
               })
             )
           );
@@ -1122,7 +1126,7 @@ export default function OfferCreation({ initialType="buy" }) {
           if(!res.ok){
             throw new Error(data?.error || data?.message || `Server error ${res.status}`);
           }
-          setMultiResults([{ status: "created", offerId: String(data?.id ?? data?.offerId ?? ""), error: null }]);
+          setMultiResults([{ status: "created", offerId: createdBuyOfferId(data), error: null }]);
           setDone(true);
         }
       }catch(err){
@@ -1160,6 +1164,7 @@ export default function OfferCreation({ initialType="buy" }) {
     }
     const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
     const buyBody = JSON.stringify({
+      version: 2,
       amount: form.amtFixed, meansOfPayment, paymentData,
       premium: parseFloat(form.premium) || 0,
       ...(buildInstantTradeCriteria() ? { instantTradeCriteria: buildInstantTradeCriteria() } : {}),
@@ -1175,7 +1180,7 @@ export default function OfferCreation({ initialType="buy" }) {
         }).then(async r => {
           const d = await r.json().catch(()=>null);
           if(!r.ok) throw new Error(d?.error||d?.message||`Error ${r.status}`);
-          return { status:"created", offerId:String(d?.id??d?.offerId??""), error:null };
+          return { status:"created", offerId:createdBuyOfferId(d), error:null };
         })
       )
     );
@@ -1273,30 +1278,24 @@ export default function OfferCreation({ initialType="buy" }) {
         justifyContent:"center",minHeight:"100vh",gap:22,padding:40,
         marginLeft: 68,
         textAlign:"center",animation:"stepFwd .4s ease both"}}>
-        <div className="success-icon">✓</div>
-        <div style={{fontSize:"1.45rem",fontWeight:800,color:"var(--success)"}}>
-          {multiResults && multiResults.length > 1
-            ? `All ${multiResults.length} offers published!`
-            : "Offer published!"}
+        <div style={{fontSize:"1.45rem",fontWeight:800,color:"var(--black)"}}>
+          Confirm on your phone
         </div>
         <p style={{fontSize:".88rem",color:"var(--black-65)",lineHeight:1.65,maxWidth:360}}>
           {multiResults && multiResults.length > 1
-            ? <>{multiResults.length} buy offers for <strong style={{color:"var(--black)"}}>{fmt(form.amtFixed)} sats</strong> each are live in the market. You'll be notified when sellers send a trade request.</>
-            : <>Your buy offer for <strong style={{color:"var(--black)"}}>{fmt(form.amtFixed)} sats</strong> is live in the market. You'll be notified when a seller sends a trade request.</>
+            ? <>Your {multiResults.length} buy offers for <strong style={{color:"var(--black)"}}>{fmt(form.amtFixed)} sats</strong> each were created, but they won't be visible in the market until you confirm them in the Peach mobile app.</>
+            : <>Your buy offer for <strong style={{color:"var(--black)"}}>{fmt(form.amtFixed)} sats</strong> was created, but it won't be visible in the market until you confirm it in the Peach mobile app.</>
           }
         </p>
+        <div style={{width:"100%",maxWidth:320}}>
+          <MobilePendingButton label="Open the Peach app to confirm" />
+        </div>
         <div style={{display:"flex",gap:12}}>
-          <button onClick={() => {
-            const ids = (multiResults ?? [])
-              .filter(r => r.status !== "failed" && r.offerId)
-              .map(r => String(r.offerId));
-            navigate("/market", {
-              state: { highlightOfferIds: ids, highlightDirection: "buy" },
-            });
-          }} style={{padding:"10px 28px",borderRadius:999,
+          <button onClick={() => navigate("/trades", { state: { refresh: true } })}
+            style={{padding:"10px 28px",borderRadius:999,
             border:"1.5px solid var(--black-10)",background:"transparent",color:"var(--black-65)",
             cursor:"pointer",fontFamily:"var(--font)",fontSize:".88rem",fontWeight:700}}>
-            View in market
+            View my trades
           </button>
           <button onClick={reset} style={{padding:"10px 28px",borderRadius:999,
             background:"var(--grad)",color:"white",border:"none",cursor:"pointer",
@@ -1396,14 +1395,6 @@ export default function OfferCreation({ initialType="buy" }) {
               </div>
             ))}
           </div>
-
-          {/* Temporary trading-conditions notice — buy side only (the buyer is
-              the one relying on the seller-controlled escrow). */}
-          {!isSell && (
-            <div className="oc-banner-wrap" style={{marginBottom:16}}>
-              <TradingConditionsBanner/>
-            </div>
-          )}
 
           {/* ── STEP 0: CONFIGURE (single card, 3 sections) ── */}
           {step===0&&(
@@ -1840,7 +1831,7 @@ export default function OfferCreation({ initialType="buy" }) {
                 fontWeight:500,lineHeight:1.6}}>
                 {isSell
                   ? "Check everything carefully — payment method can't be changed after publishing. You'll have to fund the escrow in the next step for the offer to be published."
-                  : "Check everything carefully — payment method and amount can't be changed after publishing."}
+                  : "Check everything carefully — payment method and amount can't be changed after publishing. You'll have to confirm the offer in the Peach mobile app for it to be published."}
               </div>
               <div className="review-card">
                 {[
@@ -1967,7 +1958,7 @@ export default function OfferCreation({ initialType="buy" }) {
                 <div style={{marginTop:16,padding:"14px 16px",borderRadius:12,
                   background:"var(--error-bg)",border:"1px solid var(--error)"}}>
                   <div style={{fontSize:".82rem",fontWeight:700,color:"var(--error)",marginBottom:8}}>
-                    {multiResults.filter(r=>r.status==="created").length} of {multiResults.length} offers published
+                    {multiResults.filter(r=>r.status==="created").length} of {multiResults.length} offers {isSell ? "published" : "created — confirm them on your phone"}
                   </div>
                   <div style={{fontSize:".72rem",color:"var(--black-65)",fontWeight:500,lineHeight:1.5,marginBottom:10}}>
                     {multiResults.filter(r=>r.status==="failed").length} offer{multiResults.filter(r=>r.status==="failed").length>1?"s":""} failed.

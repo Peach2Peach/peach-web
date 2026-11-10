@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { SatsAmount } from "../../components/BitcoinAmount.jsx";
 import { useAuth } from "../../hooks/useAuth.js";
 import { useApi } from "../../hooks/useApi.js";
-import { useCurrency } from "../../components/AppLayout.jsx";
+import { useCurrency } from "../../hooks/useCurrency.js";
 import MobileSigningModal, {
   hasPendingTask,
   savePendingTask,
@@ -47,11 +47,9 @@ import {
   ActionPanel,
   RatingPanel,
   TradeCompleteModal,
-  BatchInfoModal,
   TradeBreakdownPopup,
   ChatPanel,
   DisputeFlow,
-  BuyerGroupHugDisplay,
   BuyerPayoutAddressSelect,
   SuccessBanner,
   ActionBanner,
@@ -257,11 +255,6 @@ const CSS = `
     animation:payoutCelebIn .35s cubic-bezier(.34,1.56,.64,1),
               payoutCelebOut .4s ease 2s forwards;
   }
-  .payout-batching-link{
-    background:none;border:none;padding:0;font:inherit;
-    color:var(--primary-dark);text-decoration:underline;cursor:pointer;
-  }
-  .payout-batching-link:hover{opacity:.8}
   /* The SuccessBanner already provides marginBottom: 12 inline — drop it
      inside the modal so the card sits flush in the center. */
   .payout-celeb-card > div{margin-bottom:0!important}
@@ -322,8 +315,8 @@ const CSS = `
   .tc-checkmark{font-size:2.6rem;color:var(--success);font-weight:800;margin-bottom:6px}
 
   /* ── Trade breakdown popup ── */
-  /* Card shell + rows reuse the BatchInfoModal vocabulary (.bi-modal-card,
-     .bi-row*). Only the few popup-specific bits live here. */
+  /* Card shell + rows use the shared .bi-modal-card / .bi-row* classes
+     below. Only the few popup-specific bits live here. */
   .tb-headline{
     font-size:1.1rem;font-weight:800;color:var(--black);
     margin-bottom:6px;
@@ -347,7 +340,7 @@ const CSS = `
   }
   .tb-link-inline:hover{opacity:.85}
 
-  /* ── Batch info (GroupHug) modal ── */
+  /* ── Modal card + rows (used by the trade breakdown popup) ── */
   .bi-modal-card{
     position:relative;background:var(--surface);
     border:1.5px solid var(--black-10);
@@ -356,29 +349,12 @@ const CSS = `
     box-shadow:0 24px 70px rgba(0,0,0,.28);
     animation:modalIn .22s ease;
   }
-  .bi-headline{font-size:1.1rem;font-weight:800;color:var(--success);margin-bottom:6px}
-  .bi-sub{font-size:.85rem;color:var(--black-65);line-height:1.5;margin-bottom:18px}
   .bi-row{
     display:flex;justify-content:space-between;align-items:center;gap:10px;
     padding:10px 0;border-top:1px solid var(--black-10);
   }
   .bi-row-label{font-size:.78rem;color:var(--black-65);font-weight:600}
   .bi-row-value{font-size:.82rem;color:var(--black);font-weight:600}
-  .bi-mono{font-family:monospace}
-  .bi-addr{
-    background:none;border:none;cursor:pointer;color:var(--black);
-    display:inline-flex;align-items:center;gap:6px;padding:0;font:inherit;font-weight:600;
-  }
-  .bi-addr:hover{opacity:.75}
-  .bi-copy{color:var(--primary-dark);font-size:.95rem}
-  .bi-accel{
-    display:block;margin-top:14px;width:100%;
-    background:none;border:1.5px solid var(--primary);
-    color:var(--primary-dark);
-    border-radius:999px;padding:9px 14px;
-    font:inherit;font-weight:700;font-size:.82rem;cursor:pointer;
-  }
-  .bi-accel:hover{background:var(--primary-mild)}
 
   /* ── Chat ── */
   .chat-panel{display:flex;flex-direction:column;flex:1;overflow:hidden}
@@ -581,7 +557,6 @@ export default function TradeExecution() {
   const [celebrationOpen, setCelebrationOpen] = useState(false);
   const [celebrationDismissed, setCelebrationDismissed] = useState(null);
   const [payoutCelebOpen, setPayoutCelebOpen] = useState(false);
-  const [batchInfoOpen, setBatchInfoOpen] = useState(false);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
 
   // Load the buyer's saved custom payout address from /v069/selfUser once
@@ -918,28 +893,6 @@ export default function TradeExecution() {
             prev ? { ...prev, unreadMessages: c.unreadMessages } : prev,
           );
         }
-        // Always sync batchInfo — its participants/timeRemaining tick while the
-        // trade sits in payoutPending and the tradeStatus stays unchanged.
-        {
-          const prevBI = liveContract.contract?.batchInfo ?? null;
-          const nextBI = c.batchInfo ?? null;
-          const changed =
-            (prevBI == null) !== (nextBI == null) ||
-            (prevBI && nextBI && (
-              prevBI.participants !== nextBI.participants ||
-              prevBI.maxParticipants !== nextBI.maxParticipants ||
-              prevBI.timeRemaining !== nextBI.timeRemaining ||
-              prevBI.completed !== nextBI.completed ||
-              prevBI.txId !== nextBI.txId
-            ));
-          if (changed) {
-            setLiveContract((prev) =>
-              prev
-                ? { ...prev, contract: { ...prev.contract, batchInfo: nextBI } }
-                : prev,
-            );
-          }
-        }
         // Always sync release-tx fields — the buyer's contract response
         // gains `releaseTransaction` / `releaseTxId` once the seller has
         // signed and broadcast; that often arrives without a status change.
@@ -1239,7 +1192,6 @@ export default function TradeExecution() {
             ratingBuyer: c.ratingBuyer ?? null,
             ratingSeller: c.ratingSeller ?? null,
             buyOffer69Id: c.buyOffer69Id ?? null,
-            batchInfo: c.batchInfo ?? null,
             mobileActionPaymentMadeIsEffective:
               c.mobileActionPaymentMadeIsEffective ?? null,
             mobileActionPaymentConfirmedWasTriggered:
@@ -1616,35 +1568,8 @@ export default function TradeExecution() {
 
   const unreadCount = liveContract?.unreadMessages ?? 0;
 
-  const hasBatchInfo = !!contract?.batchInfo;
-  const payoutPendingSubtitle = (
-    <>
-      Your sats are{" "}
-      {hasBatchInfo ? (
-        <button
-          type="button"
-          className="payout-batching-link"
-          onClick={() => setBatchInfoOpen(true)}
-        >
-          on their way to your wallet
-        </button>
-      ) : (
-        "on their way to your wallet"
-      )}
-      . This may take a few minutes, especially if you use our batching system.
-      Accelerate your payout in the{" "}
-      <button
-        type="button"
-        className="payout-batching-link"
-        onClick={() =>
-          navigate("/settings", { state: { openSection: "tx-batching" } })
-        }
-      >
-        settings
-      </button>{" "}
-      for a small extra fee.
-    </>
-  );
+  const payoutPendingSubtitle =
+    "Your sats are on their way to your wallet. This may take a few minutes.";
 
   const counterpartyCard = (
     <div
@@ -2860,16 +2785,14 @@ export default function TradeExecution() {
                     </div>
                   )}
 
-                  {/* Buyer-only: GroupHug widget, just above the "I've sent the
-                      payment" slider. Read-only mirror of the user's batching
-                      setting (editable from Settings). */}
+                  {/* Buyer-only: payout address choice, just above the "I've
+                      sent the payment" slider. */}
                   {status === "paymentRequired" &&
                     role === "buyer" &&
                     !scenario.paymentTimedOut &&
                     !scenario.cancelationRequested &&
                     pendingTaskType !== "confirmPayment" && (
                       <>
-                        <BuyerGroupHugDisplay />
                         <BuyerPayoutAddressSelect
                           selection={useCustomPayout ? "custom" : "peach"}
                           onChange={(next) =>
@@ -3340,18 +3263,6 @@ export default function TradeExecution() {
           }}
         />
       )}
-
-      {/* ── BATCH INFO (GROUPHUG) MODAL ── */}
-      <BatchInfoModal
-        open={batchInfoOpen}
-        onClose={() => setBatchInfoOpen(false)}
-        batchInfo={contract?.batchInfo}
-        payoutAddress={liveContract?.releaseAddress}
-        onAccelerate={() => {
-          setBatchInfoOpen(false);
-          navigate("/settings", { state: { openSection: "tx-batching" } });
-        }}
-      />
 
       {/* ── TRADE BREAKDOWN POPUP (buyer only) ── */}
       {breakdownOpen && role === "buyer" && contract && (

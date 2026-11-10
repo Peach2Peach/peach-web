@@ -22,7 +22,7 @@ import { getTopbarPeachId } from "../../components/Navbars.jsx";
 import Avatar from "../../components/Avatar.jsx";
 import PeachRating from "../../components/PeachRating.jsx";
 import { methodDisplayName } from "../../data/paymentMethodMeta.js";
-import { useCurrency } from "../../components/AppLayout.jsx";
+import { useCurrency } from "../../hooks/useCurrency.js";
 
 export const CURRENCY_SYMBOL = {
   EUR: "€", GBP: "£", USD: "$", CHF: "CHF", JPY: "¥", SEK: "kr", NOK: "kr", DKK: "kr",

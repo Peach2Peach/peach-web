@@ -14,8 +14,9 @@ import { RefreshIndicator } from "../components/RefreshIndicator.jsx";
 import { AttentionStrip, AttentionPill } from "../components/AttentionIndicators.jsx";
 import { API_V1 } from "../utils/network.js";
 import { useActiveDisputes } from "../hooks/useActiveDisputes.js";
-import { useCurrency } from "../components/AppLayout.jsx";
+import { useCurrency } from "../hooks/useCurrency.js";
 import { BadgesInfoPopup } from "../components/InfoPopup.jsx";
+import { canCreateOffers } from "../utils/offerCreationGate.js";
 
 const ATTENTION_DISMISS_KEY = "peach.attention.dismissed";
 
@@ -330,6 +331,7 @@ export default function PeachHome() {
   const { get } = useApi();
   const { allPrices } = useCurrency();
   const liveProfile = auth?.profile ?? null;
+  const showCreateOffer = canCreateOffers(liveProfile);
   // Build user profile — live data when logged in, empty defaults when logged out.
   // Some fields (preferredMethods, totalVolumeBtc, etc.) are not yet returned by
   // the API, so we show "—" / empty defaults.
@@ -603,7 +605,9 @@ export default function PeachHome() {
                   )}
                   <div className="welcome-actions">
                     <button className="btn-ghost" onClick={() => navigate("/trades")}>View Trades</button>
-                    <button className="btn-grad" onClick={() => navigate("/offer/new")}>+ Create Offer</button>
+                    {showCreateOffer && (
+                      <button className="btn-grad" onClick={() => navigate("/offer/new")}>+ Create Offer</button>
+                    )}
                   </div>
                 </>
               ) : (
@@ -713,11 +717,15 @@ export default function PeachHome() {
                   <span className="oo-market-link" onClick={() => navigate("/market", { state: { marketTab: "buy" } })}>See market →</span>
                 </div>
               </div>
-              <div className="oo-hr" />
-              <div className="oo-actions">
-                <button className="oo-btn oo-btn-buy"  onClick={() => navigate("/offer/new?type=buy")}>CREATE BUY OFFER</button>
-                <button className="oo-btn oo-btn-sell" onClick={() => navigate("/offer/new?type=sell")}>CREATE SELL OFFER</button>
-              </div>
+              {showCreateOffer && (
+                <>
+                  <div className="oo-hr" />
+                  <div className="oo-actions">
+                    <button className="oo-btn oo-btn-buy"  onClick={() => navigate("/offer/new?type=buy")}>CREATE BUY OFFER</button>
+                    <button className="oo-btn oo-btn-sell" onClick={() => navigate("/offer/new?type=sell")}>CREATE SELL OFFER</button>
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="card" style={{flex:"1 1 360px",minWidth:0,width:"auto"}}>

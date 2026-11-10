@@ -12,12 +12,14 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { formatPeachId } from "./Navbars.jsx";
 import { SatsAmount } from "./BitcoinAmount.jsx";
 import { useApi } from "../hooks/useApi.js";
-import { useCurrency } from "./AppLayout.jsx";
+import { useCurrency } from "../hooks/useCurrency.js";
 import { useUserPMs } from "../hooks/useUserPMs.js";
 import { useMeetupEvents } from "../hooks/useMeetupEvents.js";
 import { syncPMsToServer } from "../utils/pmSync.js";
 import { markSentRequestCreated } from "../hooks/useNotifications.js";
 import { fetchWithSessionCheck } from "../utils/sessionGuard.js";
+import { deriveReturnAddress } from "../utils/escrow.js";
+import { computeReturnAddressBaseIndex } from "../utils/returnAddressIndex.js";
 import {
   generateSymmetricKey, encryptForRecipients, encryptSymmetric,
   signPGPMessage, hashPaymentFields,
@@ -270,6 +272,10 @@ export default function OfferDetailPopup({
     const isOwn = offer.isOwn;
     const isSell = offer.type === "ask";
     const offerTypePath = isSell ? "sellOffer" : "buyOffer";
+    // Only sell offers can be matched to the viewer's contracts. A buy offer's
+    // id has no relation to contract ids / ContractSummary.offerId, so matching
+    // on it produces false "Trade accepted" states for unrelated trades.
+    const matchContracts = isSell && !isOwn;
     let cancelled = false;
     setDetailsLoading(true);
     setOfferDetails(null);
@@ -285,9 +291,9 @@ export default function OfferDetailPopup({
           isOwn
             ? Promise.resolve(null)
             : fetchWithSessionCheck(`${v069Base}/${offerTypePath}/${offerId}/tradeRequestPerformed`, { headers: hdrs }),
-          isOwn
-            ? Promise.resolve(null)
-            : get('/contracts/summary'),
+          matchContracts
+            ? get('/contracts/summary')
+            : Promise.resolve(null),
         ]);
         if (cancelled) return;
         const details = detailsRes && detailsRes.ok ? await detailsRes.json().catch(() => null) : null;
@@ -305,7 +311,9 @@ export default function OfferDetailPopup({
           }
         }
         let acceptedContract = null;
-        let contractsConfirmedNoMatch = false;
+        // Buy offers never match a contract, so treat them as a confirmed
+        // "no match": a vanished trade request then closes the popup as usual.
+        let contractsConfirmedNoMatch = !isSell;
         if (contractsRes && contractsRes.ok) {
           const list = await contractsRes.json().catch(() => null);
           if (Array.isArray(list)) {
@@ -529,6 +537,25 @@ export default function OfferDetailPopup({
     else executeRequestTrade(offer);
   }
 
+  // Trading against a buy offer (trade request or instant trade) makes us the
+  // seller, so the server needs a refund (return) address up front. Pick it
+  // exactly like sell-offer creation: the next contiguous change-chain slot of
+  // the Peach Wallet. Returns null (after showing a toast) when it can't be
+  // computed — a guessed index can strand refunds past the wallet's gap limit.
+  async function resolveSellerReturnAddress() {
+    if (!auth?.xpub) {
+      onToast("Wallet not loaded — cannot derive a return address", "error");
+      return null;
+    }
+    try {
+      const returnIdx = await computeReturnAddressBaseIndex(auth, get);
+      return deriveReturnAddress(auth.xpub, returnIdx);
+    } catch {
+      onToast("Could not determine a return address — please try again", "error");
+      return null;
+    }
+  }
+
   async function executeRequestTrade(offer) {
     if (!auth?.pgpPrivKey || !selectedPM || !popupCurrency || tradeLoading) return;
     setTradeLoading(true);
@@ -572,6 +599,13 @@ export default function OfferDetailPopup({
       }
 
       const offerType = offer.type === "bid" ? "buyOffer" : "sellOffer";
+
+      let returnAddress = null;
+      if (offerType === "buyOffer") {
+        returnAddress = await resolveSellerReturnAddress();
+        if (!returnAddress) { setTradeLoading(false); return; }
+      }
+
       const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
       const res = await fetchWithSessionCheck(`${v069Base}/${offerType}/${offer.id}/tradeRequestPerformed`, {
         method: "POST",
@@ -589,7 +623,7 @@ export default function OfferDetailPopup({
           symmetricKeySignature,
           // Trading against a buy offer means we're the seller, so the escrow
           // the server sets up for this trade must be a v2 escrow.
-          ...(offerType === "buyOffer" ? { escrowVersion: 2 } : {}),
+          ...(offerType === "buyOffer" ? { escrowVersion: 2, returnAddress } : {}),
         }),
       });
 
@@ -667,6 +701,13 @@ export default function OfferDetailPopup({
       console.log("[InstantTrade] encryption done, paymentDataEncrypted:", !!paymentDataEncrypted);
 
       const offerType = offer.type === "bid" ? "buyOffer" : "sellOffer";
+
+      let returnAddress = null;
+      if (offerType === "buyOffer") {
+        returnAddress = await resolveSellerReturnAddress();
+        if (!returnAddress) return; // finally{} clears tradeLoading
+      }
+
       const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 30000);
@@ -686,7 +727,7 @@ export default function OfferDetailPopup({
           symmetricKeySignature,
           // Trading against a buy offer means we're the seller, so the escrow
           // the server sets up for this trade must be a v2 escrow.
-          ...(offerType === "buyOffer" ? { escrowVersion: 2 } : {}),
+          ...(offerType === "buyOffer" ? { escrowVersion: 2, returnAddress } : {}),
         }),
         signal: controller.signal,
       });

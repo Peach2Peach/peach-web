@@ -9,8 +9,8 @@ import {
 describe("STATUS_CONFIG", () => {
   const keys = Object.keys(STATUS_CONFIG);
 
-  it("has 29 status entries", () => {
-    expect(keys.length).toBe(29);
+  it("has 30 status entries", () => {
+    expect(keys.length).toBe(30);
   });
 
   it("every entry has required fields", () => {

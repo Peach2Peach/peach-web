@@ -1,17 +1,10 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Topbar, SideNav, CurrencyDropdown } from "./Navbars.jsx";
 import { IcoBtc } from "./BitcoinAmount.jsx";
 import { useAuth } from "../hooks/useAuth.js";
 import { useApi, getCached, setCache } from "../hooks/useApi.js";
-
-const CurrencyContext = createContext(null);
-
-export function useCurrency() {
-  const ctx = useContext(CurrencyContext);
-  if (!ctx) throw new Error("useCurrency must be used inside <AppLayout>");
-  return ctx;
-}
+import { CurrencyContext } from "../hooks/useCurrency.js";
 
 export default function AppLayout({ children }) {
   const navigate = useNavigate();

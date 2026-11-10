@@ -196,7 +196,10 @@ export default function RequestedOfferPopup({
         // counterparty just accepted (offer became a contract) or rejected.
         // Check /contracts/summary directly so we surface acceptance fast,
         // independent of the parent's polling offset.
+        // Sell offers only: a buy offer's id has no relation to contract ids,
+        // so matching on it would flag unrelated trades as "accepted".
         if (
+          isSell &&
           tradeReqEmpty &&
           tradeRequestSeenRef.current &&
           !acceptedContractId &&

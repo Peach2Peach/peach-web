@@ -12,6 +12,7 @@ import ServerNotificationPanel from "./ServerNotificationPanel.jsx";
 import { getNotifTarget } from "../data/notificationConfig.js";
 import Avatar from "./Avatar.jsx";
 import peachLogo from "../assets/PEACH WEB-LOGO.svg";
+import { canCreateOffers } from "../utils/offerCreationGate.js";
 
 // ─── PEACH ID FORMATTING ─────────────────────────────────────────────────────
 export function formatPeachId(rawId) {
@@ -94,6 +95,7 @@ export function SideNav({ active: activeProp, mobileOpen, onClose, onNavigate, m
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const active = activeProp ?? routeToNavId(location.pathname);
+  const showCreateOffer = canCreateOffers(window.__PEACH_AUTH__?.profile);
 
   // Create button → Buy/Sell options. Desktop: hover opens a popover to the right.
   // Mobile: the Create row is split — tapping the icon+label navigates to the create
@@ -134,6 +136,7 @@ export function SideNav({ active: activeProp, mobileOpen, onClose, onNavigate, m
       <nav className={`sidenav${mobileOpen ? " sidenav-mobile-open" : ""}`}>
         {NAV_ITEMS.map(({ id, label, icon }) => {
           if (id === "create") {
+            if (!showCreateOffer) return null;
             return (
               <div key={id} className="sidenav-create-wrap" ref={createWrapRef}>
                 <div className="sidenav-create-row">

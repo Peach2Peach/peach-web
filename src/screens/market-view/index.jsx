@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { SatsAmount } from "../../components/BitcoinAmount.jsx";
 import { useAuth } from "../../hooks/useAuth.js";
 import { useApi } from "../../hooks/useApi.js";
-import { useCurrency } from "../../components/AppLayout.jsx";
+import { useCurrency } from "../../hooks/useCurrency.js";
 import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 import { getCached, setCache, clearCache } from "../../hooks/useApi.js";
 import { fmtPct, fmtFiat, formatTradeId, toPeaches, hasPrice, PRICE_PLACEHOLDER } from "../../utils/format.js";
@@ -19,6 +19,7 @@ import { BadgesInfoPopup } from "../../components/InfoPopup.jsx";
 import { CSS } from "./styles.js";
 import { premiumStats, premiumCls, currSym, MultiSelect, Chips, RepCell, AmountCell, PriceCell, OfferIdCopy } from "./components.jsx";
 import { CATEGORY_META } from "../../components/AddPMFlow.jsx";
+import { canCreateOffers } from "../../utils/offerCreationGate.js";
 import {
   PM_NAMES, PM_CATEGORIES,
   METHOD_ID_BY_DISPLAY, methodDisplayName,
@@ -119,7 +120,8 @@ export default function PeachMarket() {
   const [pmCatalogue,  setPmCatalogue]  = useState(() => getCached("pm-catalogue")?.data ?? null);
 
   // AppLayout owns Topbar/SideNav state. Market only needs isLoggedIn for popup gating.
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, auth: authState } = useAuth();
+  const showCreateOffer = isLoggedIn && canCreateOffers(authState?.profile);
 
   // Close info popup on outside click
   useEffect(() => {
@@ -814,10 +816,9 @@ export default function PeachMarket() {
               </button>
             )}
             <div className="cta-wrap">
-              {isLoggedIn
-                ? <button className="cta-btn" onClick={() => navigate(isSellTab ? "/offer/new?type=sell" : "/offer/new")}>+ Create Offer</button>
-                : <button className="cta-btn-disabled">+ Create Offer</button>
-              }
+              {showCreateOffer && (
+                <button className="cta-btn" onClick={() => navigate(isSellTab ? "/offer/new?type=sell" : "/offer/new")}>+ Create Offer</button>
+              )}
               <a className="how-to-start" href="https://peachbitcoin.com/support/" target="_blank" rel="noopener noreferrer">How to start</a>
             </div>
 

@@ -1,4 +1,4 @@
-import { deriveDisplayStatus } from "../data/statusConfig.js";
+import { deriveDisplayStatus, FINISHED_STATUSES } from "../data/statusConfig.js";
 import { formatTradeId } from "./format.js";
 
 export function hasInstantTradeEnabled(paymentData) {
@@ -49,7 +49,12 @@ export function normalizeOffer(o, { allPrices = null } = {}) {
   const currency = firstCurrency ?? "";
   const amt =
     o.amountSats ?? (Array.isArray(o.amount) ? o.amount[0] : (o.amount ?? 0));
-  const status = o.tradeStatusNew ?? o.tradeStatus ?? o.status ?? "unknown";
+  const serverStatus = o.tradeStatusNew ?? o.tradeStatus ?? o.status ?? "unknown";
+  // Strict null: only the owner's v069 payload has this field; sell offers omit it.
+  const status =
+    isBuy && o.publicKey === null && !FINISHED_STATUSES.has(serverStatus)
+      ? "awaitingMobileConfirmation"
+      : serverStatus;
   return {
     id: o.id,
     tradeId: formatTradeId(o.id, "offer"),
