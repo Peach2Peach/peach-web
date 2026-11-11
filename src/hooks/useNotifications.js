@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { STATUS_CONFIG, PENDING_STATUSES } from "../data/statusConfig.js";
+import { STATUS_CONFIG, PENDING_STATUSES, isWaitingForBuyerRefund } from "../data/statusConfig.js";
 import { fetchWithSessionCheck } from "../utils/sessionGuard.js";
 import { API_V1 } from "../utils/network.js";
 import { getCached, setCache } from "./useApi.js";
@@ -604,7 +604,8 @@ async function _poll(auth, base) {
       const isBuyer  = rawType === "bid" || rawType === "buy" || (c.buyer?.id ?? c.buyerId) === peachId;
       const isSeller = !isBuyer;
       const sellerOv = isSeller ? SELLER_OVERRIDE[status] : null;
-      const suppressEmit = acceptedContractIds.has(String(c.id));
+      // Buyer-escrow refunds are done by the buyer — don't ask the seller to sign.
+      const suppressEmit = acceptedContractIds.has(String(c.id)) || isWaitingForBuyerRefund(c, isSeller);
 
       if (prev) {
         // Seller granted more time after the buyer missed the payment window:

@@ -545,6 +545,7 @@ export function HorizontalStepper({
     refundAddressRequired: 2,
     refundOrReviveRequired: 2,
     refundTxSignatureRequired: 2,
+    waitingForBuyerRefund: 2,
   };
   const isDispute =
     status === "dispute" || status === "disputeWithoutEscrowFunded";
@@ -685,7 +686,11 @@ const MONO_FIELDS = new Set([
   "receiveAddressEthereum",
 ]);
 
-export function PaymentDetailsCard({ details, compact = false }) {
+export function PaymentDetailsCard({
+  details,
+  compact = false,
+  masked = false,
+}) {
   const [copied, setCopied] = useState(null);
 
   function copy(val, key) {
@@ -782,29 +787,31 @@ export function PaymentDetailsCard({ details, compact = false }) {
                 fontSize: ".85rem",
                 fontWeight: 600,
                 color: "var(--black)",
-                fontFamily: r.mono ? "monospace" : "inherit",
+                fontFamily: r.mono && !masked ? "monospace" : "inherit",
                 wordBreak: "break-all",
               }}
             >
-              {r.value}
+              {masked ? "*****" : r.value}
             </div>
           </div>
-          <button
-            style={{
-              border: "none",
-              background: "transparent",
-              cursor: "pointer",
-              color: copied === r.fid ? "var(--success)" : "var(--black-65)",
-              padding: 4,
-              borderRadius: 6,
-              transition: "color .2s",
-              flexShrink: 0,
-            }}
-            onClick={() => copy(r.value, r.fid)}
-            title="Copy"
-          >
-            {copied === r.fid ? <IconCheck /> : <IconCopy />}
-          </button>
+          {!masked && (
+            <button
+              style={{
+                border: "none",
+                background: "transparent",
+                cursor: "pointer",
+                color: copied === r.fid ? "var(--success)" : "var(--black-65)",
+                padding: 4,
+                borderRadius: 6,
+                transition: "color .2s",
+                flexShrink: 0,
+              }}
+              onClick={() => copy(r.value, r.fid)}
+              title="Copy"
+            >
+              {copied === r.fid ? <IconCheck /> : <IconCopy />}
+            </button>
+          )}
         </div>
       ))}
     </div>

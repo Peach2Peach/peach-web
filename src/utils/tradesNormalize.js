@@ -97,6 +97,8 @@ export function normalizeContract(c, { peachId = null } = {}) {
         tradeStatus,
         direction,
         tradeStatusNew: c.tradeStatusNew,
+        escrowVersion: c.escrowVersion,
+        canceledBy: c.canceledBy,
       });
   return {
     id: c.id,

@@ -4,13 +4,14 @@ import {
   FINISHED_STATUSES,
   PENDING_STATUSES,
   LIFECYCLE,
+  deriveDisplayStatus,
 } from "./statusConfig.js";
 
 describe("STATUS_CONFIG", () => {
   const keys = Object.keys(STATUS_CONFIG);
 
-  it("has 30 status entries", () => {
-    expect(keys.length).toBe(30);
+  it("has 31 status entries", () => {
+    expect(keys.length).toBe(31);
   });
 
   it("every entry has required fields", () => {
@@ -65,5 +66,22 @@ describe("LIFECYCLE", () => {
     for (const step of LIFECYCLE) {
       expect(STATUS_CONFIG, `missing lifecycle id: ${step.id}`).toHaveProperty(step.id);
     }
+  });
+});
+
+describe("deriveDisplayStatus — buyer escrow (escrowVersion 3)", () => {
+  const base = { direction: "sell", escrowVersion: 3, canceledBy: "buyer" };
+
+  it("seller waits for the buyer when the buyer cancelled", () => {
+    expect(deriveDisplayStatus({ ...base, tradeStatus: "refundTxSignatureRequired" })).toBe("waitingForBuyerRefund");
+    expect(deriveDisplayStatus({ ...base, tradeStatus: "refundOrReviveRequired" })).toBe("waitingForBuyerRefund");
+    expect(deriveDisplayStatus({ ...base, tradeStatus: "tradeCanceled", tradeStatusNew: "refundOrReviveRequired" })).toBe("waitingForBuyerRefund");
+  });
+
+  it("keeps the server status otherwise", () => {
+    expect(deriveDisplayStatus({ ...base, escrowVersion: 2, tradeStatus: "refundTxSignatureRequired" })).toBe("refundTxSignatureRequired");
+    expect(deriveDisplayStatus({ ...base, canceledBy: "seller", tradeStatus: "refundTxSignatureRequired" })).toBe("refundTxSignatureRequired");
+    expect(deriveDisplayStatus({ ...base, direction: "buy", tradeStatus: "refundTxSignatureRequired" })).toBe("refundTxSignatureRequired");
+    expect(deriveDisplayStatus({ ...base, tradeStatus: "tradeCanceled" })).toBe("tradeCanceled");
   });
 });

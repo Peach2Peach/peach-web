@@ -50,6 +50,8 @@ export const STATUS_CONFIG = {
   refundAddressRequired:     { label: "Refund Address Needed", bg: "var(--primary-mild)", color: "var(--primary-dark)", action: true  },
   refundOrReviveRequired:    { label: "Refund or Re-publish",      bg: "var(--warning-soft)", color: "var(--warning)", action: true  },
   refundTxSignatureRequired: { label: "Sign Refund",           bg: "var(--primary-mild)", color: "var(--primary-dark)", action: true  },
+  // Client-side status, not sent by the API: see isWaitingForBuyerRefund().
+  waitingForBuyerRefund:     { label: "Waiting for buyer refund", bg: "var(--black-5)", color: "var(--black-65)", action: false },
 };
 
 // Direction-aware fused labels for the trade-execution header pill.
@@ -88,6 +90,7 @@ export const FUSED_STATUS_LABEL = {
   refundAddressRequired:     { buy: "Refund address needed", sell: "Refund address needed" },
   refundOrReviveRequired:    { buy: "Refund or republish",   sell: "Refund or republish" },
   refundTxSignatureRequired: { buy: "Sign refund",           sell: "Sign refund" },
+  waitingForBuyerRefund:     { buy: "Waiting for buyer refund", sell: "Waiting for buyer refund" },
 };
 
 // Statuses that represent a finished state → Trade History tab
@@ -130,10 +133,27 @@ export const REFUND_ACTION_PENDING_STATUSES = new Set([
 //   - `tradeStatusNew === "refundOrReviveRequired"` from /contracts/summary
 //   - `escrowFundingTimeLimitExpired === false` from /contract/:id
 // Without either, we return the raw status (default-conservative).
+// Buyer-escrow contracts (escrowVersion 3) live in the buyer's escrow, so when
+// the buyer cancels it is the buyer who refunds — the seller can only wait.
+// The server still reports the seller-side refund statuses for these.
+export function isWaitingForBuyerRefund(c, isSell) {
+  const ts = c.tradeStatus ?? c.status;
+  return (
+    isSell &&
+    Number(c.escrowVersion) === 3 &&
+    c.canceledBy === "buyer" &&
+    (ts === "refundTxSignatureRequired" ||
+      ts === "refundOrReviveRequired" ||
+      c.tradeStatusNew === "refundOrReviveRequired")
+  );
+}
+
 export function deriveDisplayStatus(c) {
   const ts = c.tradeStatus ?? c.status;
   const isSell = c.direction === "sell" || c.type === "ask";
   if (!isSell) return ts;
+
+  if (isWaitingForBuyerRefund(c, isSell)) return "waitingForBuyerRefund";
 
   // Hard bail: seller never funded escrow — nothing to refund, nothing to revive.
   if (c.escrowFundingTimeLimitExpired) return ts;

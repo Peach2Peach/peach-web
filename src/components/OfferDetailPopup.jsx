@@ -1182,10 +1182,14 @@ export default function OfferDetailPopup({
             </>
           )}
 
-          {/* Temporary trading-conditions notice — buyer side only, i.e. when
-              requesting a trade on someone else's sell offer. */}
-          {!isOwn && offer.type === "ask" && (
-            <TradingConditionsBanner style={{marginTop:16}}/>
+          {/* Temporary trading-conditions notice when requesting a trade on
+              someone else's offer. Copy depends on who controls the escrow:
+              the seller on sell offers, the buyer on (v2) buy offers. */}
+          {!isOwn && (
+            <TradingConditionsBanner
+              style={{marginTop:16}}
+              side={offer.type === "ask" ? "buyer" : "seller"}
+            />
           )}
 
         </div>

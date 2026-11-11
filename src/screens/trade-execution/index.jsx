@@ -815,6 +815,8 @@ export default function TradeExecution() {
                 tradeStatus: c.tradeStatus,
                 direction: prev.contract?.direction,
                 escrowFundingTimeLimitExpired: c.escrowFundingTimeLimitExpired,
+                escrowVersion: c.escrowVersion,
+                canceledBy: c.canceledBy,
               }) ?? prev.tradeStatus;
             return {
               ...prev,
@@ -851,6 +853,8 @@ export default function TradeExecution() {
           tradeStatus: c.tradeStatus,
           direction: isBuyer ? "buy" : "sell",
           escrowFundingTimeLimitExpired: c.escrowFundingTimeLimitExpired,
+          escrowVersion: c.escrowVersion,
+          canceledBy: c.canceledBy,
         });
         // Catches the buyer's payment-made action being overtaken while they
         // sit on the pending button — no status change accompanies it.
@@ -883,6 +887,8 @@ export default function TradeExecution() {
           tradeStatus: c.tradeStatus ?? c.status,
           direction: isBuyer ? "buy" : "sell",
           escrowFundingTimeLimitExpired: c.escrowFundingTimeLimitExpired,
+          escrowVersion: c.escrowVersion,
+          canceledBy: c.canceledBy,
         });
         // Always sync unreadMessages — independent of status change
         if (
@@ -1050,6 +1056,8 @@ export default function TradeExecution() {
                 tradeStatus: c.tradeStatus,
                 direction: prev.contract?.direction,
                 escrowFundingTimeLimitExpired: c.escrowFundingTimeLimitExpired,
+                escrowVersion: c.escrowVersion,
+                canceledBy: c.canceledBy,
               }) ?? "tradeCanceled";
             return { ...prev, canceled: true, tradeStatus: nextStatus };
           });
@@ -1061,6 +1069,8 @@ export default function TradeExecution() {
                 tradeStatus: "tradeCanceled",
                 direction: prev.contract?.direction,
                 escrowFundingTimeLimitExpired: prev.escrowFundingTimeLimitExpired,
+                escrowVersion: prev.escrowVersion,
+                canceledBy: prev.canceledBy,
               }) ?? "tradeCanceled";
             return { ...prev, canceled: true, tradeStatus: nextStatus };
           });
@@ -1165,6 +1175,8 @@ export default function TradeExecution() {
             tradeStatus: c.tradeStatus ?? c.status,
             direction: isBuyer ? "buy" : "sell",
             escrowFundingTimeLimitExpired: c.escrowFundingTimeLimitExpired,
+            escrowVersion: c.escrowVersion,
+            canceledBy: c.canceledBy,
           }) ?? "fundEscrow";
         setLiveContract({
           id: c.id,
@@ -1234,6 +1246,7 @@ export default function TradeExecution() {
           cancelationRequested: c.cancelationRequested ?? false,
           canceled: c.canceled ?? false,
           canceledBy: c.canceledBy ?? null,
+          escrowVersion: c.escrowVersion ?? null,
           paymentMade: c.paymentMade ?? null,
           escrowFundingTimeLimitExpired:
             c.escrowFundingTimeLimitExpired ?? false,
@@ -2051,6 +2064,32 @@ export default function TradeExecution() {
                   </div>
                 )}
 
+                {/* Buyer-escrow contract cancelled by the buyer — the buyer refunds */}
+                {status === "waitingForBuyerRefund" && role === "seller" && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      background: "var(--black-5)",
+                      border: "1px solid var(--black-10)",
+                      borderRadius: 8,
+                      padding: "10px 12px",
+                      marginBottom: 12,
+                      fontSize: ".83rem",
+                      color: "var(--black-65)",
+                      fontWeight: 600,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    <span>
+                      The buyer cancelled this trade. Waiting for the buyer to
+                      perform the refund — the escrowed bitcoin will be sent back
+                      to your refund address.
+                    </span>
+                  </div>
+                )}
+
                 {/* Trade cancelled — final state */}
                 {(status === "tradeCanceled" || status === "confirmCancelation") && (() => {
                   const message = (() => {
@@ -2362,6 +2401,8 @@ export default function TradeExecution() {
                                       tradeStatus: c.tradeStatus,
                                       direction: prev.contract?.direction,
                                       escrowFundingTimeLimitExpired: c.escrowFundingTimeLimitExpired,
+                                      escrowVersion: c.escrowVersion,
+                                      canceledBy: c.canceledBy,
                                     }) ?? prev.tradeStatus;
                                   return { ...prev, tradeStatus: nextStatus };
                                 });
@@ -2495,6 +2536,7 @@ export default function TradeExecution() {
                     "tradeCanceled",
                     "confirmCancelation",
                     "refundOrReviveRequired",
+                    "waitingForBuyerRefund",
                   ].includes(status) &&
                   ![
                     "createEscrow",
@@ -2570,6 +2612,7 @@ export default function TradeExecution() {
                         <PaymentDetailsCard
                           details={paymentDetails}
                           compact={status === "tradeCompleted"}
+                          masked={paymentDetailsHashMismatch}
                         />
                       </div>
                       {ownPaymentDetails && (
@@ -3114,6 +3157,7 @@ export default function TradeExecution() {
                     "tradeCanceled",
                     "confirmCancelation",
                     "refundOrReviveRequired",
+                    "waitingForBuyerRefund",
                   ].includes(status) &&
                   !(
                     role === "buyer" &&

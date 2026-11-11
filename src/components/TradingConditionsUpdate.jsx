@@ -1,6 +1,6 @@
 // ─── TRADING CONDITIONS UPDATE ──────────────────────────────────────────────
-// Temporary notice shown wherever a user is about to enter a trade as a buyer:
-// creating a buy offer, or requesting a trade on someone's sell offer.
+// Temporary notice shown when requesting a trade on someone else's offer:
+// on a sell offer (side="buyer") or on a buy offer (side="seller").
 // Mirrors the mobile app's blue info banner + popup (copy is verbatim).
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState } from "react";
@@ -26,20 +26,39 @@ const BANNER_CSS = `
 // mobile copy exactly ("tradingConditionsUpdate.text.bold").
 const BOLD = "Peach's escrow system doesn't have any control from Peach's part";
 
-export function TradingConditionsInfoPopup({ onClose }) {
+// Copy per side of the trade. "buyer" = requesting a trade on a sell offer
+// (the seller controls the escrow). "seller" = requesting a trade on a buy
+// offer (v2 buy offers escrow to the buyer's key, so the buyer controls it).
+const COPY = {
+  buyer: {
+    trusted:
+      "First of all: only very highly trusted sellers with a long reputation at Peach can sell. Peach created a very demanding set of criteria to allow sellers to participate.",
+    controller: "the seller fully controls the escrowed BTC.",
+    counterparty: "seller",
+  },
+  seller: {
+    trusted:
+      "First of all: only very highly trusted buyers with a long reputation at Peach can create buy offers. Peach created a very demanding set of criteria to allow buyers to participate.",
+    controller:
+      "the escrow is created with the buyer's key, so the buyer fully controls the BTC you fund it with.",
+    counterparty: "buyer",
+  },
+};
+
+export function TradingConditionsInfoPopup({ onClose, side = "buyer" }) {
+  const c = COPY[side] || COPY.buyer;
   return (
     <InfoPopup title="trading conditions updated" onClose={onClose}>
       <p className="ip-text">Peach has some temporary changes to its trading system.</p>
       <p className="ip-text">
-        First of all: only very highly trusted sellers with a long reputation at Peach can sell.
-        Peach created a very demanding set of criteria to allow sellers to participate.
+        {c.trusted}
       </p>
       <p className="ip-text">
-        Temporarily, <strong>{BOLD}</strong>: the seller fully controls the escrowed BTC.
+        Temporarily, <strong>{BOLD}</strong>: {c.controller}
       </p>
       <p className="ip-text">
         In case of dispute, Peach is still available to assist and mediate the dispute, and in
-        ultimate cases provide full support if the seller is acting wrongfully.
+        ultimate cases provide full support if the {c.counterparty} is acting wrongfully.
       </p>
       <p className="ip-text">Any questions, please contact us directly!</p>
     </InfoPopup>
@@ -48,7 +67,7 @@ export function TradingConditionsInfoPopup({ onClose }) {
 
 // Self-contained: renders the clickable banner and owns its popup state, so
 // call sites only need to drop it in where the notice belongs.
-export default function TradingConditionsBanner({ style }) {
+export default function TradingConditionsBanner({ style, side = "buyer" }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -57,7 +76,7 @@ export default function TradingConditionsBanner({ style }) {
         <span className="tcu-banner-ico" aria-hidden="true">i</span>
         <span>Peach has updated the trading conditions, press to read more!</span>
       </button>
-      {open && <TradingConditionsInfoPopup onClose={() => setOpen(false)} />}
+      {open && <TradingConditionsInfoPopup side={side} onClose={() => setOpen(false)} />}
     </>
   );
 }

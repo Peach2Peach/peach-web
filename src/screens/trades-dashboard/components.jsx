@@ -123,6 +123,7 @@ export const PILL_CONFIG = {
   refundAddressRequired:     { bg:"var(--primary)", color:"white", label:"Refund address needed", passive:false },
   refundOrReviveRequired:    { bg:"var(--primary)", color:"white", label:"Refund or re-publish",      passive:false },
   refundTxSignatureRequired: { bg:"var(--primary)", color:"white", label:"Sign refund",           passive:false },
+  waitingForBuyerRefund:     { bg:"var(--primary-bg)", color:"var(--primary-dark)", label:"Waiting for buyer refund", passive:true },
 };
 
 // Direction-aware label overrides (buyer vs seller see different labels)
