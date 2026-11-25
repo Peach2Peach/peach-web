@@ -16,6 +16,8 @@ import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
 import { isApiError, hashPaymentFields, encryptForPublicKey, encryptPGPMessage, signPGPMessage } from "../../utils/pgp.js";
 import { deriveEscrowPubKey, deriveReturnAddress } from "../../utils/escrow.js";
 import { computeReturnAddressBaseIndex } from "../../utils/returnAddressIndex.js";
+import { submitInstantTradeSignature } from "../../utils/instantTradeSignature.js";
+import { useSubmitMissingInstantTradeSignature } from "../../hooks/useSubmitMissingInstantTradeSignature.js";
 import { QRCodeSVG } from "qrcode.react";
 import { SAT, fmt, satsToFiatRaw as satsToFiat, fmtFiat as fmtEur, formatTradeId, truncateAddress, hasPrice, PRICE_PLACEHOLDER } from "../../utils/format.js";
 import { fetchSavedCustomPayoutAddress } from "../../utils/customPayoutAddressSync.js";
@@ -327,6 +329,8 @@ export default function OfferCreation({ initialType="buy" }) {
   const [publishError, setPublishError] = useState(null);
   const [escrowAddress, setEscrowAddress] = useState(null);
   const [sellOfferId,   setSellOfferId]   = useState(null);
+  // instantTradeSignature from /offer/:id/details (undefined until loaded, null = not declared)
+  const [sellOfferDeclaration, setSellOfferDeclaration] = useState(undefined);
   const [fundMobileLoading, setFundMobileLoading] = useState(false);
   // Pending-action id from server. null = not yet triggered. Truthy means
   // POST succeeded; on phone we render an "Open Peach App" deep-link button.
@@ -642,6 +646,7 @@ export default function OfferCreation({ initialType="buy" }) {
           const details = await detailsRes.json();
           const maId = details?.mobileActionFundEscrowWasTriggered;
           if (typeof maId === "number") setFundMobileActionId(maId);
+          setSellOfferDeclaration(details?.instantTradeSignature);
           if (
             details?.tradeStatus === "fundingAmountDifferent" ||
             details?.funding?.status === "WRONG_FUNDING_AMOUNT"
@@ -685,6 +690,12 @@ export default function OfferCreation({ initialType="buy" }) {
     iv = setInterval(check, 10000);
     return () => { cancelled = true; clearInterval(iv); };
   }, [step, sellOfferId, auth, navigate, escrowFunded]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fund escrow step: re-declare instant trade if the creation-time submission
+  // didn't make it (the server reports instantTradeSignature: null).
+  useSubmitMissingInstantTradeSignature(
+    step === 2 && sellOfferId ? [{ id: sellOfferId, instantTradeSignature: sellOfferDeclaration }] : [],
+  );
 
   // Invalidate trades + market caches once an offer is published. Without this,
   // the user's just-created offer would be missing on trades-dashboard and
@@ -753,7 +764,7 @@ export default function OfferCreation({ initialType="buy" }) {
   function setF(k,v){ setForm(f=>({...f,[k]:v})); }
 
   function reset(){
-    setStep(0);setDone(false);setEscrowFunded(false);setFundingStatus(null);setPublishError(null);setEscrowAddress(null);setSellOfferId(null);
+    setStep(0);setDone(false);setEscrowFunded(false);setFundingStatus(null);setPublishError(null);setEscrowAddress(null);setSellOfferId(null);setSellOfferDeclaration(undefined);
     // Preserve shared params (amount, premium, advanced options, PMs) across
     // resets so Buy↔Sell switches and post-publish resets don't lose them.
     setForm(f => { const base = initForm(f.selectedMethodIds);
@@ -993,6 +1004,8 @@ export default function OfferCreation({ initialType="buy" }) {
                 if(!offerRes.ok) throw new Error(offerData?.error || offerData?.message || `Server error ${offerRes.status}`);
 
                 const newOfferId = offerData.offerId || offerData.id;
+                // Not awaited — never blocks escrow setup. Decided from the paymentData we sent.
+                submitInstantTradeSignature({ id: newOfferId, paymentData });
                 const pubKeyHex = deriveEscrowPubKey(auth.multisigXpub, Number(newOfferId));
 
                 const escrowRes = await post(`/offer/${newOfferId}/escrow`, {
@@ -1031,6 +1044,8 @@ export default function OfferCreation({ initialType="buy" }) {
             if(!offerRes.ok) throw new Error(offerData?.error || offerData?.message || `Server error ${offerRes.status}`);
 
             const newOfferId = offerData.offerId || offerData.id;
+            // Not awaited — never blocks escrow setup. Decided from the paymentData we sent.
+            submitInstantTradeSignature({ id: newOfferId, paymentData });
             const pubKeyHex = deriveEscrowPubKey(auth.multisigXpub, Number(newOfferId));
 
             const escrowRes = await post(`/offer/${newOfferId}/escrow`, {
@@ -1243,6 +1258,8 @@ export default function OfferCreation({ initialType="buy" }) {
         const offerData = await offerRes.json().catch(()=>null);
         if(!offerRes.ok) throw new Error(offerData?.error||offerData?.message||`Error ${offerRes.status}`);
         const newOfferId = offerData.offerId||offerData.id;
+        // Not awaited — never blocks escrow setup. Decided from the paymentData we sent.
+        submitInstantTradeSignature({ id: newOfferId, paymentData });
         const pubKeyHex = deriveEscrowPubKey(auth.multisigXpub, Number(newOfferId));
         const escrowRes = await post(`/offer/${newOfferId}/escrow`, { publicKey:pubKeyHex, derivationPathVersion:2 });
         const escrowData = await escrowRes.json().catch(()=>null);

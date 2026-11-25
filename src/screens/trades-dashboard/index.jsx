@@ -59,6 +59,7 @@ import RequestedOfferPopup from "../../components/RequestedOfferPopup.jsx";
 import { RefreshIndicator } from "../../components/RefreshIndicator.jsx";
 import InfoPopup, { InfoDot, TradingLimitsInfoPopup } from "../../components/InfoPopup.jsx";
 import { canCreateOffers } from "../../utils/offerCreationGate.js";
+import { useSubmitMissingInstantTradeSignature } from "../../hooks/useSubmitMissingInstantTradeSignature.js";
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const CSS = `
@@ -1415,6 +1416,18 @@ export default function TradesDashboard() {
     detailSource?.direction,
     detailSource?.tradeStatus,
   ]);
+
+  // Own sell offer popup (fund escrow) and matches popup (trade requests on
+  // my sell offer) both poll /offer/:id/details. If it reports no instant
+  // trade declaration yet, submit one — once per offer while mounted. The
+  // offer's paymentData is fetched from /v069/sellOffer/:id by the helper.
+  useSubmitMissingInstantTradeSignature(
+    detailSource?.direction === "sell" &&
+      offerDetails &&
+      String(offerDetails.id ?? detailSource.id) === String(detailSource.id)
+      ? [{ id: detailSource.id, instantTradeSignature: offerDetails.instantTradeSignature }]
+      : [],
+  );
 
   // Determine whether a sell offer's refund address was derived from the user's
   // own Peach Wallet xpub (first 100 indexes of the /1/ branch) or from an

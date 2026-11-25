@@ -12,7 +12,7 @@ import { dispatchTamperDetected } from "./tamperGuard.js";
 const PGP_HEADER = "-----BEGIN PGP MESSAGE-----";
 
 // GopenPGP (mobile) compatibility — disable openpgp.js v6 features it can't handle
-const GOPENPGP_COMPAT = {
+export const GOPENPGP_COMPAT = {
   preferredHashAlgorithm: openpgp.enums.hash.sha256,
   preferredSymmetricAlgorithm: openpgp.enums.symmetric.aes256,
   nonDeterministicSignaturesViaNotation: false,

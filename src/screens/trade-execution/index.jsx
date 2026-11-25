@@ -56,6 +56,7 @@ import {
   IconClock,
   DisputeBanner,
 } from "./components.jsx";
+import { declareInstantTradeIfMissing } from "../../utils/instantTradeSignature.js";
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const CSS = `
@@ -2934,6 +2935,10 @@ export default function TradeExecution() {
                               );
                               if (res.ok) {
                                 const data = await res.json().catch(() => ({}));
+                                // The republished offer has a new id and needs its
+                                // own declaration. Not awaited, never throws.
+                                if (data.newOfferId)
+                                  declareInstantTradeIfMissing(data.newOfferId);
                                 setLiveContract((prev) =>
                                   prev
                                     ? {

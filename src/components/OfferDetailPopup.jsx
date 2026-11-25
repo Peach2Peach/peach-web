@@ -25,6 +25,8 @@ import {
   signPGPMessage, hashPaymentFields,
 } from "../utils/pgp.js";
 import { fmtFiat, hasPrice, satsToFiatRaw, PRICE_PLACEHOLDER } from "../utils/format.js";
+import { createEncryptedTradeDetails, getOfferPrice } from "../utils/tradeDetails.js";
+import { useSubmitMissingInstantTradeSignature } from "../hooks/useSubmitMissingInstantTradeSignature.js";
 import PeachRating from "./PeachRating.jsx";
 import Avatar from "./Avatar.jsx";
 import RepeatTraderBadge from "./RepeatTraderBadge.jsx";
@@ -260,6 +262,15 @@ export default function OfferDetailPopup({
     }
     setPendingSelectId(null);
   }, [pendingSelectId, userPMs, offer, popupCurrency, selectedCurrency]);
+
+  // Own sell offer: /v069/sellOffer/:id (polled below) reports
+  // instantTradeSignature: null when it hasn't been declared yet — declare it.
+  const ownSellDetails = offer?.isOwn && offer?.type === "ask" ? offerDetails?.details : null;
+  useSubmitMissingInstantTradeSignature(
+    ownSellDetails && String(ownSellDetails.id ?? offer.id) === String(offer.id)
+      ? [{ ...ownSellDetails, id: offer.id }]
+      : [],
+  );
 
   // ── Fetch details + polling (mirrors market-view 183-300) ──
   useEffect(() => {
@@ -606,6 +617,36 @@ export default function OfferDetailPopup({
         if (!returnAddress) { setTradeLoading(false); return; }
       }
 
+      // Trade request to a sell offer: the server requires the trade terms,
+      // encrypted to the seller's PGP keys and signed by us (the buyer).
+      let tradeDetailsFields = {};
+      if (offerType === "sellOffer") {
+        const sellerId = offer._raw?.user?.id ?? offer._raw?.userId ?? offer.userId;
+        const amount = offer.amount;
+        const premium = offer._raw?.premium ?? offer.premium;
+        const price = getOfferPrice({ amount, premium, prices: allPrices, currency: popupCurrency });
+        if (!price) {
+          onToast(`No market price for ${popupCurrency} — please try again`, "error");
+          setTradeLoading(false);
+          return;
+        }
+        if (!sellerId || !auth.peachId) throw new Error("Missing buyer or seller id");
+        tradeDetailsFields = await createEncryptedTradeDetails(
+          {
+            buyer: auth.peachId,
+            seller: sellerId,
+            offerId: offer.id,
+            paymentMethod: pmObj.type,
+            amount,
+            price,
+            premium,
+            currency: popupCurrency,
+          },
+          counterpartyKeys,
+          auth.pgpPrivKey,
+        );
+      }
+
       const v069Base = auth.baseUrl.replace(/\/v1$/, '/v069');
       const res = await fetchWithSessionCheck(`${v069Base}/${offerType}/${offer.id}/tradeRequestPerformed`, {
         method: "POST",
@@ -624,6 +665,7 @@ export default function OfferDetailPopup({
           // Trading against a buy offer means we're the seller, so the escrow
           // the server sets up for this trade must be a v2 escrow.
           ...(offerType === "buyOffer" ? { escrowVersion: 2, returnAddress } : {}),
+          ...tradeDetailsFields,
         }),
       });
 
