@@ -193,6 +193,13 @@ export function transformTradeRequest(tr, offer, userProfile) {
       // Backend may echo it under either field name, so keep both.
       paymentDataHashed: tr.paymentDataHashed,
       paymentData: tr.paymentData,
+      // Sell offers: the buyer's trade details (encrypted to us) and their
+      // signature, countersigned by us on accept.
+      encryptedTradeDetails: tr.encryptedTradeDetails,
+      encryptedTradeDetailsBuyerSignature: tr.encryptedTradeDetailsBuyerSignature,
+      requesterPgpPublicKeys: (u.pgpPublicKeys ?? [])
+        .map((k) => (typeof k === "string" ? k : k?.publicKey))
+        .filter(Boolean),
       isTradeRequest: true, // flag to use v069 accept endpoint
       tradeRequestUserId: peachId,
     },

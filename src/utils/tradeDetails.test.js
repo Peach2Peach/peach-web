@@ -3,7 +3,9 @@ import * as openpgp from "openpgp";
 import {
   buildTradeDetailsPlaintext,
   createEncryptedTradeDetails,
+  countersignEncryptedTradeDetails,
   getOfferPrice,
+  InvalidTradeDetailsError,
 } from "./tradeDetails.js";
 
 const genKey = (name) =>
@@ -84,5 +86,70 @@ describe("createEncryptedTradeDetails", () => {
     await expect(createEncryptedTradeDetails(DETAILS, [], buyer.privateKey)).rejects.toThrow(
       "Seller has no PGP public keys",
     );
+  });
+});
+
+describe("countersignEncryptedTradeDetails", () => {
+  let buyer, seller, other, request;
+  const EXPECTED = {
+    seller: "03seller",
+    buyer: "02buyer",
+    offerId: "52",
+    amount: 30000,
+    paymentMethod: "wise",
+    currency: "EUR",
+  };
+  beforeAll(async () => {
+    [buyer, seller, other] = await Promise.all([genKey("buyer"), genKey("seller"), genKey("other")]);
+    request = await createEncryptedTradeDetails(DETAILS, [seller.publicKey], buyer.privateKey);
+  });
+
+  const countersign = (overrides = {}) =>
+    countersignEncryptedTradeDetails({
+      ...request,
+      buyerPgpPublicKeys: [buyer.publicKey],
+      expected: EXPECTED,
+      sellerPrivKey: seller.privateKey,
+      ...overrides,
+    });
+
+  it("signs the exact decrypted plaintext with the seller key", async () => {
+    const signature = await countersign({ buyerPgpPublicKeys: [other.publicKey, buyer.publicKey] });
+    expect(signature).toContain("-----BEGIN PGP SIGNATURE-----");
+    const { signatures } = await openpgp.verify({
+      message: await openpgp.createMessage({ text: buildTradeDetailsPlaintext(DETAILS) }),
+      signature: await openpgp.readSignature({ armoredSignature: signature }),
+      verificationKeys: await openpgp.readKey({ armoredKey: seller.publicKey }),
+    });
+    expect(await signatures[0].verified).toBe(true);
+  });
+
+  it("refuses when the details are missing", async () => {
+    await expect(countersign({ encryptedTradeDetails: undefined })).rejects.toThrow(InvalidTradeDetailsError);
+  });
+
+  it("refuses details not encrypted to the seller", async () => {
+    const toOther = await createEncryptedTradeDetails(DETAILS, [other.publicKey], buyer.privateKey);
+    await expect(countersign(toOther)).rejects.toThrow("could not decrypt trade details");
+  });
+
+  it("refuses when the buyer signature isn't from the buyer", async () => {
+    await expect(countersign({ buyerPgpPublicKeys: [other.publicKey] })).rejects.toThrow("invalid buyer signature");
+    await expect(countersign({ buyerPgpPublicKeys: [] })).rejects.toThrow("invalid buyer signature");
+  });
+
+  it("refuses details that describe a different trade", async () => {
+    await expect(
+      countersign({ expected: { ...EXPECTED, amount: 31000, buyer: "02someoneelse", currency: "CHF" } }),
+    ).rejects.toThrow("trade details mismatch: buyer, amount, currency");
+  });
+
+  it("doesn't compare price or premium", async () => {
+    const shifted = await createEncryptedTradeDetails(
+      { ...DETAILS, price: 17.2, premium: 2 },
+      [seller.publicKey],
+      buyer.privateKey,
+    );
+    await expect(countersign(shifted)).resolves.toContain("-----BEGIN PGP SIGNATURE-----");
   });
 });

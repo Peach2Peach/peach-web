@@ -60,6 +60,7 @@ import { RefreshIndicator } from "../../components/RefreshIndicator.jsx";
 import InfoPopup, { InfoDot, TradingLimitsInfoPopup } from "../../components/InfoPopup.jsx";
 import { canCreateOffers } from "../../utils/offerCreationGate.js";
 import { useSubmitMissingInstantTradeSignature } from "../../hooks/useSubmitMissingInstantTradeSignature.js";
+import { countersignEncryptedTradeDetails, InvalidTradeDetailsError } from "../../utils/tradeDetails.js";
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const CSS = `
@@ -2132,6 +2133,47 @@ export default function TradesDashboard() {
 
         const userId = match._raw.tradeRequestUserId;
         const offerType = trade.direction === "buy" ? "buyOffer" : "sellOffer";
+
+        // Sell offers: countersign the buyer's trade details, only after
+        // checking they're authentic and describe this exact trade.
+        let encryptedTradeDetailsSellerSignature;
+        if (offerType === "sellOffer") {
+          let buyerKeys = match._raw.requesterPgpPublicKeys ?? [];
+          if (buyerKeys.length === 0) {
+            const userRes = await get(`/user/${userId}`);
+            const buyer = userRes.ok ? await userRes.json().catch(() => null) : null;
+            buyerKeys = (buyer?.pgpPublicKeys ?? [])
+              .map((k) => (typeof k === "string" ? k : k?.publicKey))
+              .filter(Boolean);
+          }
+          try {
+            encryptedTradeDetailsSellerSignature =
+              await countersignEncryptedTradeDetails({
+                encryptedTradeDetails: match._raw.encryptedTradeDetails,
+                encryptedTradeDetailsBuyerSignature:
+                  match._raw.encryptedTradeDetailsBuyerSignature,
+                buyerPgpPublicKeys: buyerKeys,
+                expected: {
+                  seller: auth.peachId,
+                  buyer: userId,
+                  offerId: trade.id,
+                  amount: trade.amount,
+                  paymentMethod: match._raw.selectedPaymentMethod,
+                  currency: match._raw.selectedCurrency,
+                },
+                sellerPrivKey: auth.pgpPrivKey,
+              });
+          } catch (e) {
+            if (!(e instanceof InvalidTradeDetailsError)) throw e;
+            console.error("[Accept] refusing to countersign trade details", userId, e.message);
+            setMatchConfirm(null);
+            setMatchError(
+              "The details of this trade request could not be verified, so it can't be accepted. Please reject it or ask the buyer to send a new one.",
+            );
+            return;
+          }
+        }
+
         const v069Base = auth.baseUrl.replace(/\/v1$/, "/v069");
         const acceptUrl = `${v069Base}/${offerType}/${trade.id}/tradeRequestReceived/${userId}/accept`;
 
@@ -2141,7 +2183,13 @@ export default function TradesDashboard() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${auth.token}`,
           },
-          body: JSON.stringify({ paymentDataEncrypted, paymentDataSignature }),
+          body: JSON.stringify({
+            paymentDataEncrypted,
+            paymentDataSignature,
+            ...(encryptedTradeDetailsSellerSignature
+              ? { encryptedTradeDetailsSellerSignature }
+              : {}),
+          }),
         });
 
         if (res.ok) {

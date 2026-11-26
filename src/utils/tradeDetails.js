@@ -7,6 +7,9 @@
  * plaintext with a detached signature from their own PGP key. Mirrors mobile's
  * src/views/peach069/helpers/createEncryptedTradeDetails.ts.
  *
+ * The seller countersigns the same plaintext when accepting the request
+ * (countersignEncryptedTradeDetails).
+ *
  * Not used for instant trades or for trade requests to buy offers.
  */
 import * as openpgp from "openpgp";
@@ -90,4 +93,110 @@ export async function createEncryptedTradeDetails(details, sellerPubKeys, buyerP
   ]);
 
   return { encryptedTradeDetails, encryptedTradeDetailsBuyerSignature };
+}
+
+/** Thrown when the seller must not countersign the trade details. */
+export class InvalidTradeDetailsError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "InvalidTradeDetailsError";
+  }
+}
+
+async function isSignedByAnyKey(plaintext, armoredSignature, armoredKeys) {
+  let signature;
+  try {
+    signature = await openpgp.readSignature({ armoredSignature });
+  } catch {
+    return false;
+  }
+  for (const armoredKey of armoredKeys) {
+    try {
+      const { signatures } = await openpgp.verify({
+        message: await openpgp.createMessage({ text: plaintext }),
+        signature,
+        verificationKeys: await openpgp.readKey({ armoredKey }),
+        // tolerate a buyer device clock slightly ahead of ours
+        date: new Date(Date.now() + 60_000),
+      });
+      if (await signatures[0].verified) return true;
+    } catch {
+      // wrong key or unreadable key, try the next one
+    }
+  }
+  return false;
+}
+
+/**
+ * Seller side of a trade request to a sell offer
+ * (POST /v069/sellOffer/:id/tradeRequestReceived/:userId/accept).
+ *
+ * Decrypts the buyer's trade details, checks the buyer's signature and that
+ * the details describe this exact trade, then signs the plaintext with the
+ * seller's own PGP key. Returns the armored detached signature
+ * (`encryptedTradeDetailsSellerSignature`).
+ * Throws InvalidTradeDetailsError when anything doesn't check out, so the
+ * seller never countersigns details they didn't agree to. `price` and
+ * `premium` aren't compared: the buyer's price is only an estimate.
+ * Mirrors mobile's countersignEncryptedTradeDetails.
+ *
+ * @param {object} p
+ * @param {string} [p.encryptedTradeDetails]
+ * @param {string} [p.encryptedTradeDetailsBuyerSignature]
+ * @param {string[]} p.buyerPgpPublicKeys - armored PGP public keys of the buyer
+ * @param {{ seller: string, buyer: string, offerId: string|number, amount: number|string, paymentMethod: string, currency: string }} p.expected
+ * @param {string} p.sellerPrivKey - armored PGP private key of the logged-in seller
+ */
+export async function countersignEncryptedTradeDetails({
+  encryptedTradeDetails,
+  encryptedTradeDetailsBuyerSignature,
+  buyerPgpPublicKeys,
+  expected,
+  sellerPrivKey,
+}) {
+  if (!encryptedTradeDetails || !encryptedTradeDetailsBuyerSignature)
+    throw new InvalidTradeDetailsError("trade details missing");
+
+  const privateKey = await readUnlockedPrivateKey(sellerPrivKey);
+
+  let plaintext;
+  try {
+    const { data } = await openpgp.decrypt({
+      message: await openpgp.readMessage({ armoredMessage: encryptedTradeDetails }),
+      decryptionKeys: privateKey,
+    });
+    plaintext = data;
+  } catch {
+    throw new InvalidTradeDetailsError("could not decrypt trade details");
+  }
+
+  const buyerKeys = (buyerPgpPublicKeys ?? []).filter(Boolean);
+  if (!(await isSignedByAnyKey(plaintext, encryptedTradeDetailsBuyerSignature, buyerKeys)))
+    throw new InvalidTradeDetailsError("invalid buyer signature");
+
+  let details;
+  try {
+    details = JSON.parse(plaintext);
+  } catch {
+    throw new InvalidTradeDetailsError("trade details are not valid JSON");
+  }
+
+  const mismatches = [
+    details?.seller !== expected.seller && "seller",
+    details?.buyer !== expected.buyer && "buyer",
+    details?.offerId !== Number(expected.offerId) && "offerId",
+    details?.amount !== String(expected.amount) && "amount",
+    details?.paymentMethod !== expected.paymentMethod && "paymentMethod",
+    details?.currency !== expected.currency && "currency",
+  ].filter(Boolean);
+  if (mismatches.length)
+    throw new InvalidTradeDetailsError(`trade details mismatch: ${mismatches.join(", ")}`);
+
+  // sign the decrypted text byte for byte, not a re-serialization of it
+  return openpgp.sign({
+    message: await openpgp.createMessage({ text: plaintext }),
+    signingKeys: privateKey,
+    detached: true,
+    config: GOPENPGP_COMPAT,
+  });
 }

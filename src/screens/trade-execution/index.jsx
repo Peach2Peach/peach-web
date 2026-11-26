@@ -57,6 +57,7 @@ import {
   DisputeBanner,
 } from "./components.jsx";
 import { declareInstantTradeIfMissing } from "../../utils/instantTradeSignature.js";
+import { submitOldOfferIdSignature } from "../../utils/oldOfferIdSignature.js";
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const CSS = `
@@ -2937,8 +2938,12 @@ export default function TradeExecution() {
                                 const data = await res.json().catch(() => ({}));
                                 // The republished offer has a new id and needs its
                                 // own declaration. Not awaited, never throws.
-                                if (data.newOfferId)
+                                if (data.newOfferId) {
                                   declareInstantTradeIfMissing(data.newOfferId);
+                                  // The revived offer declares which offer it
+                                  // came from. Not awaited, never throws.
+                                  submitOldOfferIdSignature(data.newOfferId);
+                                }
                                 setLiveContract((prev) =>
                                   prev
                                     ? {
