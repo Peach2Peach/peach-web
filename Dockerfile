@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.6
 
 # ─── Build stage ────────────────────────────────────────────────────────────
-FROM node:24.22.1-alpine AS build
+FROM node:24.22.3-alpine3.24 AS build
 
 # Both env vars are inlined into the bundle by Vite at build time, so they
 # must be passed as --build-arg (not -e) when building the image. Build one
@@ -20,7 +20,7 @@ COPY . .
 RUN npm run build
 
 # ─── Serve stage ────────────────────────────────────────────────────────────
-FROM nginx:1.27-alpine AS serve
+FROM nginx:1.30.7-alpine AS serve
 
 COPY --from=build /app/dist /usr/share/nginx/html
 
