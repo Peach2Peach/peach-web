@@ -23,6 +23,7 @@ import {
   encryptSymmetric,
   signPGPMessage,
   hashPaymentFields,
+  normalizePaymentData,
   decryptPGPMessage,
   verifyDetachedSignature,
   derivePublicKeyArmored,
@@ -2102,12 +2103,14 @@ export default function TradesDashboard() {
         "country",
         "anonymous",
       ]);
-      const cleanData = {};
+      let cleanData = {};
       if (pmData) {
         for (const [k, v] of Object.entries(pmData)) {
           if (!STRUCTURAL.has(k) && typeof v !== "object") cleanData[k] = v;
         }
       }
+      // Canonical IBAN etc. — PMs saved before normalization may still have spaces.
+      cleanData = normalizePaymentData(cleanData);
 
       // ── Two different acceptance flows ──
       if (match._raw?.isTradeRequest) {

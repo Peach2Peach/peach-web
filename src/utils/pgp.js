@@ -73,8 +73,84 @@ const DO_NOT_HASH = new Set([
   "name",
   "reference",
   "ukSortCode",
+  "mpesa_name",
+  "residentialAddress",
   "mpesa_finalCurrency",
 ]);
+
+// IBANs are ASCII alphanumeric, so everything else is a separator: spaces (the
+// input groups by four), non-breaking spaces from pasted text, dashes, dots…
+const IBAN_SEPARATORS = /[^A-Za-z0-9]/gu;
+
+/**
+ * Canonical IBAN form: separator-free and uppercase. Matches the mobile app's
+ * normalizeIBAN() — the IBAN hash is its identity across users and devices, so
+ * it must be normalized everywhere payment data is saved, encrypted or hashed.
+ */
+export function normalizeIBAN(iban) {
+  return typeof iban === "string" ? iban.replace(IBAN_SEPARATORS, "").toUpperCase() : iban;
+}
+
+// ── Mobile input formatters (peach-app src/utils/format/enforce*Format.ts) ──
+// Mobile runs these on every PM form field on blur/submit, and its validators
+// only accept the canonical result, so mobile-stored values are always in this
+// form. We apply them at save/encrypt/hash time so web produces the same strings
+// (and therefore the same hashes) for the same account.
+const removeNonDigits = (v) => v.replace(/[^0-9]/gu, "");
+const enforcePhoneFormat = (v) => {
+  let out = v.replace(/[^0-9+]/gu, "");
+  if (out.length && !out.startsWith("+")) out = `+${out}`;
+  return out;
+};
+const enforceUsernameFormat = (v) => {
+  const cleaned = v.toLowerCase().replace(/[^a-z0-9_]/gu, "");
+  return cleaned.length ? `@${cleaned}` : cleaned;
+};
+const enforceWalletFormat = (v) => v.replace(/[^a-z0-9]/giu, "").toUpperCase();
+const enforceBICFormat = (v) => {
+  const f = v.toUpperCase().replace(/[^A-Z0-9]/gu, "");
+  return [f.slice(0, 4), f.slice(4, 6), f.slice(6, 8), f.slice(8, 11)]
+    .filter(Boolean)
+    .join(" ");
+};
+const trim = (v) => v.trim();
+
+const FIELD_NORMALIZERS = {
+  iban: normalizeIBAN,
+  phone: enforcePhoneFormat,
+  // mobile has no formatter for mpesa_phone, but its validator only accepts
+  // /^\+[1-9][0-9]{7,}$/ — so the phone formatter is the identity on any value
+  // mobile can store, and canonicalises what web's looser validator lets in.
+  mpesa_phone: enforcePhoneFormat,
+  userName: enforceUsernameFormat,
+  ukBankAccount: removeNonDigits,
+  ukSortCode: removeNonDigits,
+  wallet: enforceWalletFormat,
+  bic: enforceBICFormat,
+  // mobile's email regex rejects any whitespace; web's validator trims first
+  email: trim,
+  lnurlAddress: trim,
+  receiveAddress: trim,
+  receiveAddressEthereum: trim,
+  receiveAddressSolana: trim,
+  receiveAddressTron: trim,
+};
+
+/**
+ * Return a shallow copy of payment data with every field in the canonical
+ * form the mobile app stores it in (see FIELD_NORMALIZERS). Applied wherever
+ * payment data is saved, encrypted or hashed, so the encrypted payload and the
+ * published hashes are derived from the exact same value — like mobile's
+ * getPaymentDataInfoFields().
+ */
+export function normalizePaymentData(pmData) {
+  if (!pmData || typeof pmData !== "object") return pmData;
+  const out = { ...pmData };
+  for (const [field, fn] of Object.entries(FIELD_NORMALIZERS)) {
+    if (typeof out[field] === "string") out[field] = fn(out[field]);
+  }
+  return out;
+}
 
 function isPGPString(val) {
   return typeof val === "string" && val.trimStart().startsWith(PGP_HEADER);
@@ -221,7 +297,8 @@ export async function decryptSymmetric(armoredMessage, passphrase) {
 /**
  * Hash payment method fields with SHA-256.
  * Matches the mobile app's hashPaymentData() — iterates ALL_PAYMENT_FIELDS,
- * skips DO_NOT_HASH fields and empty values, lowercases before hashing.
+ * skips DO_NOT_HASH fields and empty values, normalizes the IBAN
+ * (normalizePaymentData) and lowercases before hashing.
  *
  * Returns an object like: { "sepa": { hashes: ["abc123...", "def456..."], country: "DE" } }
  *
@@ -250,9 +327,10 @@ export async function hashPaymentFields(methodType, pmData, country) {
  */
 export async function hashPaymentFieldsBreakdown(pmData) {
   const breakdown = [];
+  const normalized = normalizePaymentData(pmData);
   for (const field of ALL_PAYMENT_FIELDS) {
     if (DO_NOT_HASH.has(field)) continue;
-    const val = pmData?.[field];
+    const val = normalized?.[field];
     if (!val || typeof val !== "string") continue;
     const encoded = new TextEncoder().encode(val.toLowerCase());
     const hashBuffer = await crypto.subtle.digest("SHA-256", encoded);

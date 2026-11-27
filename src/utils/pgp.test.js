@@ -11,6 +11,8 @@ import {
   encryptForPublicKey,
   hashPaymentFields,
   verifyPaymentDataHashes,
+  normalizeIBAN,
+  normalizePaymentData,
 } from "./pgp.js";
 
 // ── Pure / sync functions ────────────────────────────────────────────────────
@@ -210,5 +212,106 @@ describe("verifyPaymentDataHashes", () => {
   it("returns null when the revealed details are missing", async () => {
     const committed = await hashPaymentFields("wise", wiseData);
     expect(await verifyPaymentDataHashes(null, committed)).toBeNull();
+  });
+});
+
+// ── IBAN normalization (mirrors peach-app normalizeIBAN / hashPaymentData specs) ──
+
+describe("normalizeIBAN", () => {
+  const CANONICAL = "IE29AIBK93115212345678";
+  it("removes whitespace, including tabs/newlines/non-breaking spaces", () => {
+    expect(normalizeIBAN("IE29 AIBK 9311 5212 3456 78")).toBe(CANONICAL);
+    expect(normalizeIBAN(" IE29\tAIBK\n9311\u00a05212 3456 78 ")).toBe(CANONICAL);
+  });
+  it("removes dashes and other separators", () => {
+    expect(normalizeIBAN("IE29-AIBK-9311-5212-3456-78")).toBe(CANONICAL);
+    expect(normalizeIBAN("IE29.AIBK/9311_5212|3456,78")).toBe(CANONICAL);
+  });
+  it("uppercases", () => {
+    expect(normalizeIBAN("ie29 aibk 9311 5212 3456 78")).toBe(CANONICAL);
+  });
+  it("leaves a canonical IBAN untouched", () => {
+    expect(normalizeIBAN(CANONICAL)).toBe(CANONICAL);
+  });
+});
+
+describe("normalizePaymentData", () => {
+  it("normalizes only the iban field and does not mutate the input", () => {
+    const input = { iban: "pt00 10da-2345 9659", email: "A B@x.com" };
+    const out = normalizePaymentData(input);
+    expect(out).toEqual({ iban: "PT0010DA23459659", email: "A B@x.com" });
+    expect(input.iban).toBe("pt00 10da-2345 9659");
+  });
+});
+
+describe("hashPaymentFields IBAN normalization", () => {
+  it("matches the mobile app's test vector", async () => {
+    const r = await hashPaymentFields("sepa", { iban: "IE29AIBK93115212345678" });
+    expect(r.sepa.hashes).toEqual([
+      "0555f1f0ae95f1bfeac56dcab60f65639dc0e2c106eeada324717594d368a4d5",
+    ]);
+  });
+  it("hashes a spaced / dashed / lowercase IBAN like the canonical one", async () => {
+    const canonical = await hashPaymentFields("sepa", { iban: "PT0010DA23459659" });
+    const messy = await hashPaymentFields("sepa", { iban: "pt00 10da-2345 9659" });
+    expect(messy).toEqual(canonical);
+    expect(canonical.sepa.hashes).toEqual([
+      "7a80fff8646a86a9a820510fd1ef51b3fbcbbc86429486a0bd7edefc217e418d",
+    ]);
+  });
+});
+
+// ── Per-field normalization parity with peach-app formatters/validators ──
+
+describe("normalizePaymentData mobile parity", () => {
+  it.each([
+    ["phone", "+351 912-345 678", "+351912345678"],
+    ["phone", "(351) 912.345.678", "+351912345678"],
+    ["mpesa_phone", "+254 712 345 678", "+254712345678"],
+    ["userName", "@Foo_Bar ", "@foo_bar"],
+    ["ukBankAccount", "1234-5678", "12345678"],
+    ["ukSortCode", "12-34-56", "123456"],
+    ["wallet", "u 1234 5678 abcd", "U12345678ABCD"],
+    ["bic", "aibkie2dxxx", "AIBK IE 2D XXX"],
+    ["bic", "AIBK IE 2D", "AIBK IE 2D"],
+    ["email", "  me@example.com ", "me@example.com"],
+    ["lnurlAddress", "me@wallet.io\n", "me@wallet.io"],
+  ])("%s: %j → %j", (field, raw, expected) => {
+    expect(normalizePaymentData({ [field]: raw })[field]).toBe(expected);
+  });
+
+  it("is the identity on values mobile can store", () => {
+    const canonical = {
+      iban: "IE29AIBK93115212345678",
+      phone: "+341234875987",
+      userName: "@foo_bar",
+      ukBankAccount: "12345678",
+      wallet: "U12345678ABCD",
+      email: "me@example.com",
+    };
+    expect(normalizePaymentData(canonical)).toEqual(canonical);
+  });
+
+  it("leaves fields without a mobile formatter untouched", () => {
+    const data = { accountNumber: "1234 5678 9", pixAlias: " x ", beneficiary: "A  B" };
+    expect(normalizePaymentData(data)).toEqual(data);
+  });
+
+  it("matches the mobile phone hash test vector from a formatted input", async () => {
+    const r = await hashPaymentFields("twint", { phone: "+34 123 487 5987" });
+    expect(r.twint.hashes).toEqual([
+      "c56ab971aeea3e5aa3d2e62e4ed7cb5488a63b0659e6db7b467e7f899cb7b418",
+    ]);
+  });
+});
+
+describe("hashPaymentFields doNotHash parity", () => {
+  it("does not hash mpesa_name or residentialAddress (mobile doNotHash)", async () => {
+    const r = await hashPaymentFields("m-pesa", {
+      mpesa_phone: "+254712345678",
+      mpesa_name: "John Doe",
+      residentialAddress: "1 Main St",
+    });
+    expect(r["m-pesa"].hashes).toHaveLength(1);
   });
 });

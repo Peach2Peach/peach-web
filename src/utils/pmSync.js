@@ -5,7 +5,7 @@
 // persists identically.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { encryptPGPMessage, signPGPMessage } from "./pgp.js";
+import { encryptPGPMessage, signPGPMessage, normalizePaymentData } from "./pgp.js";
 import { fetchWithSessionCheck } from "./sessionGuard.js";
 
 // Convert internal PM array → API object-map format.
@@ -20,10 +20,12 @@ export function serializePMs(pms) {
   const map = {};
   for (const pm of pms) {
     const details = pm.details || {};
-    const apiDetails = {};
+    let apiDetails = {};
     for (const [k, v] of Object.entries(details)) {
       if (!k.startsWith("_")) apiDetails[k] = v;
     }
+    // Canonical IBAN etc., so older locally-stored PMs are healed on next sync.
+    apiDetails = normalizePaymentData(apiDetails);
     // The wire-format `type` field must be the bare method id. Strip only the
     // long `-<Date.now()>` uniqueness suffix (13 digits) — NOT short trailing
     // numbers that are part of a cash event id (e.g. cash.es.malaga.malaga-2140,

@@ -22,7 +22,7 @@ import { deriveReturnAddress } from "../utils/escrow.js";
 import { computeReturnAddressBaseIndex } from "../utils/returnAddressIndex.js";
 import {
   generateSymmetricKey, encryptForRecipients, encryptSymmetric,
-  signPGPMessage, hashPaymentFields,
+  signPGPMessage, hashPaymentFields, normalizePaymentData,
 } from "../utils/pgp.js";
 import { fmtFiat, hasPrice, satsToFiatRaw, PRICE_PLACEHOLDER } from "../utils/format.js";
 import { createEncryptedTradeDetails, getOfferPrice } from "../utils/tradeDetails.js";
@@ -580,6 +580,8 @@ export default function OfferDetailPopup({
     for (const [k, v] of Object.entries(pmDetails)) {
       if (!STRUCTURAL.has(k) && typeof v !== "object") cleanData[k] = v;
     }
+    // Canonical IBAN etc. — PMs saved before normalization may still have spaces.
+    Object.assign(cleanData, normalizePaymentData(cleanData));
 
     try {
       const symmetricKey = generateSymmetricKey();
@@ -705,6 +707,8 @@ export default function OfferDetailPopup({
     for (const [k, v] of Object.entries(pmDetails)) {
       if (!STRUCTURAL.has(k) && typeof v !== "object") cleanData[k] = v;
     }
+    // Canonical IBAN etc. — PMs saved before normalization may still have spaces.
+    Object.assign(cleanData, normalizePaymentData(cleanData));
     console.log("[InstantTrade] cleanData:", cleanData);
 
     let symmetricKeyEncrypted = null;

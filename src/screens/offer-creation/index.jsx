@@ -13,7 +13,7 @@ import { useUserPMs } from "../../hooks/useUserPMs.js";
 import { useMeetupEvents } from "../../hooks/useMeetupEvents.js";
 import { addPendingEscrow, removePendingEscrow, addEscrowFundedNotification, markWrongAmountShown } from "../../hooks/useNotifications.js";
 import { fetchWithSessionCheck } from "../../utils/sessionGuard.js";
-import { isApiError, hashPaymentFields, encryptForPublicKey, encryptPGPMessage, signPGPMessage } from "../../utils/pgp.js";
+import { isApiError, hashPaymentFields, normalizePaymentData, encryptForPublicKey, encryptPGPMessage, signPGPMessage } from "../../utils/pgp.js";
 import { deriveEscrowPubKey, deriveReturnAddress } from "../../utils/escrow.js";
 import { computeReturnAddressBaseIndex } from "../../utils/returnAddressIndex.js";
 import { submitInstantTradeSignature } from "../../utils/instantTradeSignature.js";
@@ -884,10 +884,12 @@ export default function OfferCreation({ initialType="buy" }) {
       const methodType = (pm.methodId||"").replace(/-\d{10,}$/, "");
       if(paymentData[methodType]) continue;
       const rawDetails = pm.details || {};
-      const details = {};
+      let details = {};
       for (const [k, v] of Object.entries(rawDetails)) {
         if (!k.startsWith("_")) details[k] = v;
       }
+      // Canonical IBAN etc. — PMs saved before normalization may still have spaces.
+      details = normalizePaymentData(details);
       // Cash/meetup PMs must carry `country` in paymentData (server rejects it otherwise).
       // Older stored cash PMs may have lost it; derive from the id, e.g. cash.gr.* → "GR".
       if (methodType.startsWith("cash.") && !details.country) {

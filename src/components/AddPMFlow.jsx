@@ -9,6 +9,7 @@
 
 import { useState, useEffect } from "react";
 import { validatePhone, validatePaymentReference, isPhoneAllowed, makeBlurHandler } from "../peach-validators.js";
+import { normalizePaymentData } from "../utils/pgp.js";
 import {
   getPhonePrefix, getFieldMeta, getTabLabel, fieldsForTab, parseSections,
   normalizeApiPaymentMethods,
@@ -660,8 +661,12 @@ export function AddPMFlow({ methods, meetupEvents = [], existingPMs = [], onSave
     // before accepting the trade request. `isMpesa` rides alongside hashes so the
     // counterparty knows to treat the encrypted fields as M-Pesa-shaped.
     if (isMpesaActive) cleanDetails.isMpesa = true;
+    // Store every field in the canonical form mobile stores it in (IBAN without
+    // separators, phone as +digits, …) so hashes and the encrypted payload
+    // match across clients.
+    Object.assign(cleanDetails, normalizePaymentData(cleanDetails));
     if (cleanDetails.iban && !cleanDetails.country) {
-      const code = cleanDetails.iban.replace(/\s+/g, "").slice(0, 2).toUpperCase();
+      const code = cleanDetails.iban.slice(0, 2);
       if (/^[A-Z]{2}$/.test(code)) cleanDetails.country = code;
     }
 
