@@ -26,6 +26,7 @@ import {
 } from "../utils/pgp.js";
 import { fmtFiat, hasPrice, satsToFiatRaw, PRICE_PLACEHOLDER } from "../utils/format.js";
 import { createEncryptedTradeDetails, getOfferPrice } from "../utils/tradeDetails.js";
+import { getProvenPgpPublicKeys } from "../utils/pgpKeyProof.js";
 import { useSubmitMissingInstantTradeSignature } from "../hooks/useSubmitMissingInstantTradeSignature.js";
 import PeachRating from "./PeachRating.jsx";
 import Avatar from "./Avatar.jsx";
@@ -391,21 +392,21 @@ export default function OfferDetailPopup({
     return offer.currencies.find(c => pmWorksForCurrency(offer, pm, c)) ?? null;
   }
 
+  // only keys the counterparty proved they own: we encrypt to these
   async function resolveCounterpartyKeys(offer) {
-    const direct = (offer._raw?.user?.pgpPublicKeys ?? [])
-      .map(k => typeof k === "string" ? k : k?.publicKey)
-      .filter(Boolean);
-    if (direct.length > 0) return direct;
-
     const userId = offer._raw?.userId ?? offer._raw?.user?.id;
     if (!userId) return [];
+    const direct = getProvenPgpPublicKeys({
+      userId,
+      pgpPublicKeys: offer._raw?.user?.pgpPublicKeys,
+    });
+    if (direct.length > 0) return direct;
+
     try {
       const res = await get(`/user/${userId}`);
       if (!res.ok) return [];
       const user = await res.json().catch(() => null);
-      return (user?.pgpPublicKeys ?? [])
-        .map(k => typeof k === "string" ? k : k?.publicKey)
-        .filter(Boolean);
+      return getProvenPgpPublicKeys({ userId, pgpPublicKeys: user?.pgpPublicKeys });
     } catch {
       return [];
     }

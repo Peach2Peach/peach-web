@@ -62,6 +62,7 @@ import InfoPopup, { InfoDot, TradingLimitsInfoPopup } from "../../components/Inf
 import { canCreateOffers } from "../../utils/offerCreationGate.js";
 import { useSubmitMissingInstantTradeSignature } from "../../hooks/useSubmitMissingInstantTradeSignature.js";
 import { countersignEncryptedTradeDetails, InvalidTradeDetailsError } from "../../utils/tradeDetails.js";
+import { decryptSymmetricKey, getProvenPgpPublicKeys } from "../../utils/pgpKeyProof.js";
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const CSS = `
@@ -2117,13 +2118,37 @@ export default function TradesDashboard() {
         // ═══ v069 trade request acceptance ═══
         // Counterparty already sent their symmetricKeyEncrypted (encrypted to our PGP key).
         // We decrypt it, then encrypt our PM data with it.
+        const userId = match._raw.tradeRequestUserId;
+
+        // the requester's proven keys: they vouch for the symmetric key and,
+        // on sell offers, for the trade details we countersign
+        let requesterKeys = match._raw.requesterPgpPublicKeys ?? [];
+        if (requesterKeys.length === 0) {
+          const userRes = await get(`/user/${userId}`);
+          const requester = userRes.ok ? await userRes.json().catch(() => null) : null;
+          requesterKeys = getProvenPgpPublicKeys({
+            userId,
+            pgpPublicKeys: requester?.pgpPublicKeys,
+          });
+        }
+
         let symmetricKey = null;
         if (auth?.pgpPrivKey && match._raw?.symmetricKeyEncrypted) {
-          const raw = await decryptPGPMessage(
-            match._raw.symmetricKeyEncrypted,
-            auth.pgpPrivKey,
-          );
-          symmetricKey = raw ? raw.trim() : null;
+          // only a key the requester signed may carry our payment data
+          symmetricKey = await decryptSymmetricKey({
+            symmetricKeyEncrypted: match._raw.symmetricKeyEncrypted,
+            symmetricKeySignature: match._raw.symmetricKeySignature,
+            pgpPublicKeys: requesterKeys,
+            privKey: auth.pgpPrivKey,
+          });
+          if (!symmetricKey) {
+            console.error("[Accept] refusing an unsigned or undecryptable symmetric key", userId);
+            setMatchConfirm(null);
+            setMatchError(
+              "The encryption key of this trade request could not be verified, so it can't be accepted. Please reject it or ask the counterparty to send a new one.",
+            );
+            return;
+          }
         }
 
         let paymentDataEncrypted = null;
@@ -2134,21 +2159,13 @@ export default function TradesDashboard() {
           paymentDataSignature = await signPGPMessage(pmJson, auth.pgpPrivKey);
         }
 
-        const userId = match._raw.tradeRequestUserId;
         const offerType = trade.direction === "buy" ? "buyOffer" : "sellOffer";
 
         // Sell offers: countersign the buyer's trade details, only after
         // checking they're authentic and describe this exact trade.
         let encryptedTradeDetailsSellerSignature;
         if (offerType === "sellOffer") {
-          let buyerKeys = match._raw.requesterPgpPublicKeys ?? [];
-          if (buyerKeys.length === 0) {
-            const userRes = await get(`/user/${userId}`);
-            const buyer = userRes.ok ? await userRes.json().catch(() => null) : null;
-            buyerKeys = (buyer?.pgpPublicKeys ?? [])
-              .map((k) => (typeof k === "string" ? k : k?.publicKey))
-              .filter(Boolean);
-          }
+          const buyerKeys = requesterKeys;
           try {
             encryptedTradeDetailsSellerSignature =
               await countersignEncryptedTradeDetails({
@@ -2223,9 +2240,10 @@ export default function TradesDashboard() {
 
         if (auth?.pgpPrivKey) {
           const symmetricKey = generateSymmetricKey();
-          const counterpartyKeys = (match._raw?.pgpPublicKeys ?? [])
-            .map((k) => (typeof k === "string" ? k : k?.publicKey))
-            .filter(Boolean);
+          // already filtered to proven keys by transformMatch
+          const counterpartyKeys = (match._raw?.pgpPublicKeys ?? []).filter(
+            (k) => typeof k === "string" && k,
+          );
           const keyResult = await encryptForRecipients(
             symmetricKey,
             counterpartyKeys,

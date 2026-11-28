@@ -58,6 +58,26 @@ import {
 } from "./components.jsx";
 import { declareInstantTradeIfMissing } from "../../utils/instantTradeSignature.js";
 import { submitOldOfferIdSignature } from "../../utils/oldOfferIdSignature.js";
+import {
+  getSellOfferIdFromContract,
+  verifyContractTradeDetails,
+} from "../../utils/tradeDetails.js";
+import {
+  decryptSymmetricKey,
+  getUserProvenPgpPublicKeys,
+  isSignedByUser,
+} from "../../utils/pgpKeyProof.js";
+
+// same copy as mobile's i18n error strings
+const TRADE_VERIFICATION_ERRORS = {
+  INVALID_CONTRACT_TRADE_DETAILS:
+    "The trade details of this contract could not be verified against the buyer. Do not release the bitcoin and please contact support.",
+  INVALID_INSTANT_TRADE_DECLARATION:
+    "The instant trade declaration of your offer could not be verified. Do not release the bitcoin and please contact support.",
+};
+
+/** escrowVersion 3: buyer-only escrow of a Buy Offer contract, the seller signs nothing */
+const BUYER_ONLY_ESCROW_VERSION = 3;
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const CSS = `
@@ -581,6 +601,33 @@ export default function TradeExecution() {
   useEffect(() => {
     if (savedCustomPayout?.address) setUseCustomPayout(true);
   }, [savedCustomPayout]);
+
+  // Seller side, before asking mobile to sign the release. Fetches the contract
+  // fresh (for the server's validateEncryptedTradeDetails flag and the trade
+  // details) and its sell offer (for the instant trade declaration). Mirrors
+  // mobile's verifyContractTradeDetailsById. Throws an error code on failure.
+  async function verifyContractTradeDetailsForRelease(contractId) {
+    const contractRes = await get(`/contract/${contractId}`);
+    const c = contractRes.ok ? await contractRes.json().catch(() => null) : null;
+    if (!c) throw new Error("CONTRACT_NOT_FOUND");
+    if (c.validateEncryptedTradeDetails !== true) return;
+    // the buyer already signed the release when marking the payment as made
+    if (c.escrowVersion === BUYER_ONLY_ESCROW_VERSION) return;
+
+    const sellOfferId = getSellOfferIdFromContract(c);
+    // owner-only details route: unlike GET /offer/:id (public, online offers
+    // only) it still serves the offer once it is in a contract, and it carries
+    // the instantTradeSignature declaration
+    const offerRes = await get(`/offer/${sellOfferId}/details`);
+    const sellOffer = offerRes.ok ? await offerRes.json().catch(() => null) : null;
+    if (!sellOffer) throw new Error("SELL_OFFER_NOT_FOUND");
+
+    await verifyContractTradeDetails({
+      contract: c,
+      sellOffer: { id: sellOfferId, instantTradeSignature: sellOffer.instantTradeSignature },
+      sellerPrivKey: auth.pgpPrivKey,
+    });
+  }
 
   // Re-fetch the contract and merge the mobileAction* pending-action ids into
   // liveContract so the deep-link button picks up the new id immediately
@@ -1283,6 +1330,15 @@ export default function TradeExecution() {
         const ownEncryptedPM = isBuyer
           ? c.buyerPaymentDataEncrypted
           : c.paymentDataEncrypted;
+        // paymentDataSignature is the seller's, buyerPaymentDataSignature the buyer's
+        const counterpartyPMSignature = isBuyer
+          ? c.paymentDataSignature
+          : c.buyerPaymentDataSignature;
+        const ownPMSignature = isBuyer
+          ? c.buyerPaymentDataSignature
+          : c.paymentDataSignature;
+        const counterpartyUser = isBuyer ? c.seller : c.buyer;
+        const ownUser = isBuyer ? c.buyer : c.seller;
         // Hashes the counterparty committed to: seller's live in hashedPaymentData,
         // buyer's in buyerHashedPaymentData. We recompute from the decrypted PM
         // below and flag a mismatch (someone submitted the wrong hashes).
@@ -1291,21 +1347,30 @@ export default function TradeExecution() {
           : c.buyerHashedPaymentData;
         const symKeyEnc = c.symmetricKeyEncrypted;
 
-        // Decrypt symmetric key (needed for both PM data and chat)
+        // Decrypt symmetric key (needed for both PM data and chat). It must be
+        // signed by a proven key of the buyer or the seller, otherwise it is
+        // rejected: no chat, and payment data only via asymmetric fallback
+        // (which is signature-checked on its own).
         if (symKeyEnc && auth.pgpPrivKey) {
-          try {
-            const raw = await decryptPGPMessage(symKeyEnc, auth.pgpPrivKey);
-            symKey = raw ? raw.trim() : null;
-            if (symKey) setChatSymKey(symKey);
-          } catch (err) {
-            console.warn(
-              "[Trade] Symmetric key decryption failed:",
-              err.message,
-            );
-          }
+          symKey = await decryptSymmetricKey({
+            symmetricKeyEncrypted: symKeyEnc,
+            symmetricKeySignature: c.symmetricKeySignature,
+            pgpPublicKeys: [
+              ...getUserProvenPgpPublicKeys(c.buyer),
+              ...getUserProvenPgpPublicKeys(c.seller),
+            ],
+            privKey: auth.pgpPrivKey,
+          });
+          if (symKey) setChatSymKey(symKey);
+          else console.warn("[Trade] Symmetric key rejected (undecryptable or invalid signature)");
         }
 
-        async function decryptPM(encrypted) {
+        // `signature` must be a detached signature over the decrypted JSON by
+        // `owner` (the user whose payment data it is), made with a PGP key they
+        // proved they own. Otherwise the data is rejected like undecryptable
+        // data: anyone holding the symmetric key (or the server) could have
+        // put it there. Mirrors mobile's decryptPaymentData.
+        async function decryptPM(encrypted, signature, owner) {
           if (!encrypted) return null;
           let pmJson = null;
           if (symKey) {
@@ -1319,6 +1384,10 @@ export default function TradeExecution() {
             } catch {}
           }
           if (!pmJson) return null;
+          if (!(await isSignedByUser({ message: pmJson, signature, user: owner }))) {
+            console.error("[Trade] PAYMENT_DATA_SIGNATURE_INVALID");
+            return null;
+          }
           try {
             const pmData = JSON.parse(pmJson);
             return { ...pmData, type: pmData.type ?? c.paymentMethod ?? "" };
@@ -1330,7 +1399,11 @@ export default function TradeExecution() {
 
         // Counterparty PM (existing behavior)
         if (encryptedPM) {
-          const pmData = await decryptPM(encryptedPM);
+          const pmData = await decryptPM(
+            encryptedPM,
+            counterpartyPMSignature,
+            counterpartyUser,
+          );
           if (pmData) {
             // verifyPaymentDataHashes returns false only on a confident mismatch;
             // null (missing/unparseable hashes) must NOT raise a false alarm.
@@ -1356,7 +1429,7 @@ export default function TradeExecution() {
 
         // User's own PM — best-effort; don't surface an error if it fails
         if (ownEncryptedPM) {
-          const pmData = await decryptPM(ownEncryptedPM);
+          const pmData = await decryptPM(ownEncryptedPM, ownPMSignature, ownUser);
           if (pmData) {
             setLiveContract((prev) =>
               prev ? { ...prev, ownPaymentDetails: pmData } : prev,
@@ -3078,6 +3151,19 @@ export default function TradeExecution() {
                           } else if (action === "release_bitcoin") {
                             setActionError(null);
                             try {
+                              // a contract from a (non instant trade) sell offer
+                              // must carry trade details naming this buyer, signed
+                              // by both parties. Checked before the signing request
+                              // is created, so nothing gets signed otherwise.
+                              try {
+                                await verifyContractTradeDetailsForRelease(contract.id);
+                              } catch (e) {
+                                setActionError(
+                                  TRADE_VERIFICATION_ERRORS[e.message] ??
+                                    "Failed to verify the trade: " + e.message,
+                                );
+                                return;
+                              }
                               const res = await post(
                                 `/contract/${contract.id}/payment/createPaymentConfirmedPendingAction`,
                               );

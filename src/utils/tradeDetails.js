@@ -14,6 +14,8 @@
  */
 import * as openpgp from "openpgp";
 import { GOPENPGP_COMPAT } from "./pgp.js";
+import { getInstantTradeFromDeclaration } from "./instantTradeSignature.js";
+import { getUserProvenPgpPublicKeys, isSignedByAnyKey } from "./pgpKeyProof.js";
 
 /**
  * Price the buyer sees, in `currency`, rounded to 2 decimals. Same formula as
@@ -63,7 +65,8 @@ async function readUnlockedPrivateKey(armoredPrivKey) {
 
 /**
  * @param {object} details - see buildTradeDetailsPlaintext
- * @param {string[]} sellerPubKeys - armored PGP public keys of the seller (all of them)
+ * @param {string[]} sellerPubKeys - the seller's PROVEN armored PGP public keys
+ *   (see getProvenPgpPublicKeys)
  * @param {string} buyerPrivKey - armored PGP private key of the logged-in buyer
  * @returns {Promise<{ encryptedTradeDetails: string, encryptedTradeDetailsBuyerSignature: string }>}
  * Throws on failure: without these fields the server rejects the request.
@@ -103,30 +106,6 @@ export class InvalidTradeDetailsError extends Error {
   }
 }
 
-async function isSignedByAnyKey(plaintext, armoredSignature, armoredKeys) {
-  let signature;
-  try {
-    signature = await openpgp.readSignature({ armoredSignature });
-  } catch {
-    return false;
-  }
-  for (const armoredKey of armoredKeys) {
-    try {
-      const { signatures } = await openpgp.verify({
-        message: await openpgp.createMessage({ text: plaintext }),
-        signature,
-        verificationKeys: await openpgp.readKey({ armoredKey }),
-        // tolerate a buyer device clock slightly ahead of ours
-        date: new Date(Date.now() + 60_000),
-      });
-      if (await signatures[0].verified) return true;
-    } catch {
-      // wrong key or unreadable key, try the next one
-    }
-  }
-  return false;
-}
-
 /**
  * Seller side of a trade request to a sell offer
  * (POST /v069/sellOffer/:id/tradeRequestReceived/:userId/accept).
@@ -143,7 +122,8 @@ async function isSignedByAnyKey(plaintext, armoredSignature, armoredKeys) {
  * @param {object} p
  * @param {string} [p.encryptedTradeDetails]
  * @param {string} [p.encryptedTradeDetailsBuyerSignature]
- * @param {string[]} p.buyerPgpPublicKeys - armored PGP public keys of the buyer
+ * @param {string[]} p.buyerPgpPublicKeys - the buyer's PROVEN armored PGP public keys
+ *   (see getProvenPgpPublicKeys)
  * @param {{ seller: string, buyer: string, offerId: string|number, amount: number|string, paymentMethod: string, currency: string }} p.expected
  * @param {string} p.sellerPrivKey - armored PGP private key of the logged-in seller
  */
@@ -199,4 +179,87 @@ export async function countersignEncryptedTradeDetails({
     detached: true,
     config: GOPENPGP_COMPAT,
   });
+}
+
+/** contract ids are `${sellOfferId}-${buyOfferId}` */
+export const getSellOfferIdFromContract = ({ id }) => String(id).split("-")[0];
+
+/**
+ * Run by the seller before releasing the escrow of a contract that came from
+ * a Sell Offer. Only enforced when the server flags the contract with
+ * `validateEncryptedTradeDetails`. Unless the offer was instant trade (read
+ * from the seller's signed declaration), the contract must carry trade
+ * details that decrypt, are signed by both the buyer and the seller, and name
+ * this contract's buyer, seller, sell offer id and amount.
+ * Throws INVALID_CONTRACT_TRADE_DETAILS or INVALID_INSTANT_TRADE_DECLARATION,
+ * so nothing gets signed. Mirrors mobile's verifyContractTradeDetails.
+ *
+ * @param {object} p
+ * @param {object} p.contract - GET /contract/:id response
+ * @param {{ id: string|number, instantTradeSignature?: string|null }} p.sellOffer
+ * @param {string} p.sellerPrivKey - armored PGP private key of the logged-in seller
+ */
+export async function verifyContractTradeDetails({ contract, sellOffer, sellerPrivKey }) {
+  if (contract?.validateEncryptedTradeDetails !== true) return;
+
+  const fail = (reason) => {
+    console.error("[TradeDetails] trade details verification failed:", reason);
+    throw new Error("INVALID_CONTRACT_TRADE_DETAILS");
+  };
+
+  // only keys each party proved they own can vouch for their signatures
+  const buyerKeys = getUserProvenPgpPublicKeys(contract.buyer);
+  const sellerKeys = getUserProvenPgpPublicKeys(contract.seller);
+
+  const isInstantTrade = await getInstantTradeFromDeclaration({
+    offerId: String(sellOffer.id),
+    sellerId: contract.seller.id,
+    sellerPgpPublicKeys: sellerKeys,
+    instantTradeSignature: sellOffer.instantTradeSignature,
+  });
+  // instant trades carry no trade details
+  if (isInstantTrade) return;
+
+  const {
+    encryptedTradeDetails,
+    encryptedTradeDetailsBuyerSignature,
+    encryptedTradeDetailsSellerSignature,
+  } = contract;
+  if (
+    !encryptedTradeDetails ||
+    !encryptedTradeDetailsBuyerSignature ||
+    !encryptedTradeDetailsSellerSignature
+  )
+    fail("trade details missing");
+
+  let plaintext;
+  try {
+    const { data } = await openpgp.decrypt({
+      message: await openpgp.readMessage({ armoredMessage: encryptedTradeDetails }),
+      decryptionKeys: await readUnlockedPrivateKey(sellerPrivKey),
+    });
+    plaintext = data;
+  } catch {
+    fail("could not decrypt");
+  }
+
+  const [buyerSignatureValid, sellerSignatureValid] = await Promise.all([
+    isSignedByAnyKey(plaintext, encryptedTradeDetailsBuyerSignature, buyerKeys),
+    isSignedByAnyKey(plaintext, encryptedTradeDetailsSellerSignature, sellerKeys),
+  ]);
+  if (!buyerSignatureValid) fail("invalid buyer signature");
+  if (!sellerSignatureValid) fail("invalid seller signature");
+
+  let details;
+  try {
+    details = JSON.parse(plaintext);
+  } catch {
+    fail("not valid JSON");
+  }
+
+  if (details?.buyer !== contract.buyer.id) fail("buyer mismatch");
+  if (details?.seller !== contract.seller.id) fail("seller mismatch");
+  // the rest is compared against the contract itself (GET contract)
+  if (details?.offerId !== Number(getSellOfferIdFromContract(contract))) fail("offer mismatch");
+  if (details?.amount !== String(contract.amount)) fail("amount mismatch");
 }

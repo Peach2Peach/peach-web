@@ -14,6 +14,7 @@ import PeachRating from "../../components/PeachRating.jsx";
 import { toPeaches } from "../../utils/format.js";
 import { STATUS_CONFIG } from "../../data/statusConfig.js";
 import { methodDisplayName } from "../../data/paymentMethodMeta.js";
+import { getProvenPgpPublicKeys } from "../../utils/pgpKeyProof.js";
 import {
   decryptPGPMessage,
   decryptSymmetric,
@@ -137,7 +138,8 @@ export function transformMatch(apiMatch) {
       symmetricKeyEncrypted: apiMatch.symmetricKeyEncrypted,
       symmetricKeySignature: apiMatch.symmetricKeySignature,
       instantTrade: apiMatch.instantTrade,
-      pgpPublicKeys: u.pgpPublicKeys,
+      // only keys the counterparty proved they own: we encrypt to these
+      pgpPublicKeys: getProvenPgpPublicKeys({ userId: u.id, pgpPublicKeys: u.pgpPublicKeys }),
     },
   };
 }
@@ -197,9 +199,12 @@ export function transformTradeRequest(tr, offer, userProfile) {
       // signature, countersigned by us on accept.
       encryptedTradeDetails: tr.encryptedTradeDetails,
       encryptedTradeDetailsBuyerSignature: tr.encryptedTradeDetailsBuyerSignature,
-      requesterPgpPublicKeys: (u.pgpPublicKeys ?? [])
-        .map((k) => (typeof k === "string" ? k : k?.publicKey))
-        .filter(Boolean),
+      // only keys the requester proved they own: they vouch for the
+      // trade details signature we countersign
+      requesterPgpPublicKeys: getProvenPgpPublicKeys({
+        userId: tr.userId,
+        pgpPublicKeys: u.pgpPublicKeys,
+      }),
       isTradeRequest: true, // flag to use v069 accept endpoint
       tradeRequestUserId: peachId,
     },

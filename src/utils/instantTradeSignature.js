@@ -14,6 +14,47 @@
 import { signPGPMessage } from "./pgp.js";
 import { getSigningPeachId } from "./format.js";
 import { fetchWithSessionCheck } from "./sessionGuard.js";
+import { isSignedByAnyKey, isValidPeachUserSignature } from "./pgpKeyProof.js";
+
+/**
+ * Reads whether a sell offer was instant trade from the seller's own signed
+ * declaration. Both sentences are tried and exactly one must verify.
+ * Throws INVALID_INSTANT_TRADE_DECLARATION otherwise: the declaration is
+ * missing, belongs to another offer or user, or is corrupt.
+ *
+ * Mirrors mobile's getInstantTradeFromDeclaration, which only reads Peach ID
+ * signatures. The web also accepts the armored PGP format it signs with
+ * itself, verified against the seller's PGP public keys.
+ *
+ * @param {object} p
+ * @param {string} p.offerId - raw numeric sell offer id
+ * @param {string} p.sellerId - the seller's Peach ID public key (user id)
+ * @param {string[]} [p.sellerPgpPublicKeys] - the seller's PROVEN armored PGP public keys
+ *   (see getProvenPgpPublicKeys)
+ * @param {string|null} [p.instantTradeSignature]
+ * @returns {Promise<boolean>}
+ */
+export async function getInstantTradeFromDeclaration({
+  offerId,
+  sellerId,
+  sellerPgpPublicKeys = [],
+  instantTradeSignature,
+}) {
+  if (!instantTradeSignature) throw new Error("INVALID_INSTANT_TRADE_DECLARATION");
+
+  const isArmored = instantTradeSignature.includes("-----BEGIN PGP SIGNATURE-----");
+  const [isInstantValid, isNotInstantValid] = await Promise.all(
+    [true, false].map((isInstant) => {
+      const message = getInstantTradeDeclarationMessage(sellerId, String(offerId), isInstant);
+      return isArmored
+        ? isSignedByAnyKey(message, instantTradeSignature, sellerPgpPublicKeys.filter(Boolean))
+        : isValidPeachUserSignature(message, sellerId, instantTradeSignature);
+    }),
+  );
+
+  if (isInstantValid === isNotInstantValid) throw new Error("INVALID_INSTANT_TRADE_DECLARATION");
+  return isInstantValid;
+}
 
 const MAX_RETRIES = 4;
 const RETRY_INTERVAL = 1000;
